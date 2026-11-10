@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nook.Api/Nook.Api.csproj" />
+    <Project Path="src/Nook.AppHost/Nook.AppHost.csproj" />
+    <Project Path="src/Nook.ServiceDefaults/Nook.ServiceDefaults.csproj" />
+  </Folder>
+</Solution>

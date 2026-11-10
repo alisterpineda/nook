@@ -1,0 +1,16 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nook.Api\Nook.Api.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <UserSecretsId>569a792d-0564-49e1-9548-5232b6afb898</UserSecretsId>
+  </PropertyGroup>
+
+</Project>
