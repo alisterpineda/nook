@@ -6,8 +6,9 @@ namespace Nook.Api.Tests.Integration;
 /// <summary>Rows and catalog queries that several test classes share.</summary>
 internal static class TestData
 {
-    /// <summary>A work in the seeded library with only its required values set.</summary>
-    public static Work NewWork(string title) => new() { LibraryId = Library.DefaultId, Title = title, SortTitle = title };
+    /// <summary>A work with only its required values set, in the seeded library and sorted by its title unless told otherwise.</summary>
+    public static Work NewWork(string title, Guid? libraryId = null, string? sortTitle = null) =>
+        new() { LibraryId = libraryId ?? Library.DefaultId, Title = title, SortTitle = sortTitle ?? title };
 
     /// <summary>The definition of every index on a table, as PostgreSQL reports it.</summary>
     public static Task<List<string>> ReadIndexDefinitionsAsync(

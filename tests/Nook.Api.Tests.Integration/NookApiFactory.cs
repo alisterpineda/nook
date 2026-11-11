@@ -16,6 +16,11 @@ public sealed class NookApiFactory(PostgresFixture server) : WebApplicationFacto
 
     public ValueTask InitializeAsync() => _database.InitializeAsync();
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
         builder.UseSetting("ConnectionStrings:nookdb", ConnectionString);
+
+        // Every test client shares one address, so the real limit would refuse sign-ins once a class has a few tests.
+        builder.UseSetting("RateLimiting:Auth:PermitLimit", "100000");
+    }
 }
