@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 /// <summary>
 /// Runs the API in memory, with the app's own registrations, against a fresh database for one test class.

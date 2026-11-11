@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 using Npgsql;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 public class WorkExternalIdTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {

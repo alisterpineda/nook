@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 public class ItemAndPartTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {

@@ -5,6 +5,7 @@
     <Project Path="src/Nook.ServiceDefaults/Nook.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Nook.Api.Tests/Nook.Api.Tests.csproj" />
+    <Project Path="tests/Nook.Api.Tests.Integration/Nook.Api.Tests.Integration.csproj" />
+    <Project Path="tests/Nook.Api.Tests.Unit/Nook.Api.Tests.Unit.csproj" />
   </Folder>
 </Solution>

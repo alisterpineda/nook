@@ -1,9 +1,9 @@
 using Npgsql;
 using Testcontainers.PostgreSql;
 
-[assembly: AssemblyFixture(typeof(Nook.Api.Tests.PostgresFixture))]
+[assembly: AssemblyFixture(typeof(Nook.Api.Tests.Integration.PostgresFixture))]
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 /// <summary>
 /// Starts one PostgreSQL container for the whole test run.

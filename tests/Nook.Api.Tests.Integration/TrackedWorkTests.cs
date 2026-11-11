@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 /// <summary>Adding to a work that was loaded from the database, the way ingest adds to a work it already holds.</summary>
 public class TrackedWorkTests(NookApiFactory factory) : IClassFixture<NookApiFactory>

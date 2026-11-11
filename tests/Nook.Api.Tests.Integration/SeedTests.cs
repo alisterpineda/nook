@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 /// <summary>What the migration itself puts in the database. This class inserts nothing.</summary>
 public class SeedTests(NookApiFactory factory) : IClassFixture<NookApiFactory>

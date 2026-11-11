@@ -1,6 +1,6 @@
 using Npgsql;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 public class PostgresFixtureTests(PostgresDatabase database) : IClassFixture<PostgresDatabase>
 {

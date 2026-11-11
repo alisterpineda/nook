@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 /// <summary>Pins the whole schema and the cascade from a work.</summary>
 public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>

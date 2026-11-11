@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 /// <summary>Rows and catalog queries that several test classes share.</summary>
 internal static class TestData

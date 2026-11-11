@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Npgsql;
 
-namespace Nook.Api.Tests;
+namespace Nook.Api.Tests.Integration;
 
 public partial class StartupMigrationTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {
