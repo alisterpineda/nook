@@ -55,6 +55,7 @@ public class WorksController(NookDbContext db) : ControllerBase
 
     /// <summary>One work, with its contributors, tags, external ids and items.</summary>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType<WorkDetailResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<WorkDetailResponse>> Get(Guid id, CancellationToken cancellationToken)
     {

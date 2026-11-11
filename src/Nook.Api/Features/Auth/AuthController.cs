@@ -14,6 +14,7 @@ public class AuthController(UserManager<NookUser> users, SignInManager<NookUser>
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting(RateLimits.Auth)]
+    [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> Login(LoginRequest request)
@@ -48,6 +49,7 @@ public class AuthController(UserManager<NookUser> users, SignInManager<NookUser>
 
     /// <summary>The signed-in user.</summary>
     [HttpGet("me")]
+    [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CurrentUserResponse>> Me()
     {

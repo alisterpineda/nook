@@ -41,7 +41,7 @@ public partial class StartupMigrationTests(NookApiFactory factory) : IClassFixtu
     private async Task StartApiAsync(CancellationToken cancellationToken)
     {
         using var client = factory.CreateClient();
-        var response = await client.GetAsync("/", cancellationToken);
+        var response = await client.GetAsync("/api/setup", cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 

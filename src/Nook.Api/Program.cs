@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -15,24 +16,39 @@ builder.AddNpgsqlDbContext<NookDbContext>("nookdb", configureDbContextOptions: o
 builder.Services.AddNookAuth(builder.Configuration);
 
 // Enums travel by name, such as "epub", so a client can meet a value it does not know and still show it.
+// Numbers are numbers only: the web default also reads them from strings, and the API description
+// would then type every number as "integer or string".
 // Controllers and the API description read separate options, and both must agree.
 var enumsByName = new JsonStringEnumConverter(JsonNamingPolicy.CamelCase);
-builder.Services.AddControllers().AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(enumsByName));
-builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(enumsByName));
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(enumsByName);
+    options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+});
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(enumsByName);
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+});
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-await using (var scope = app.Services.CreateAsyncScope())
+// The build starts the app under GetDocument.Insider to write openapi.json, with no database to migrate.
+if (Assembly.GetEntryAssembly()?.GetName().Name != "GetDocument.Insider")
 {
+    await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();
 }
 
 // Errors and bare status codes, such as a 401 from the cookie, leave as problem details.
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+// The built web app is public: it holds no data, and its sign-in page must load before anyone has signed in.
+app.UseStaticFiles();
 
 app.UseRateLimiter();
 app.UseAuthentication();
@@ -45,8 +61,13 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi().AllowAnonymous();
 }
 
-app.MapGet("/", () => "Nook").AllowAnonymous().ExcludeFromDescription();
-
 app.MapControllers();
+
+// The web app routes in the browser, so any other path that is not a file gets its index.html.
+// Paths under /api are left out, so an unknown API path still answers as an API. So are the health
+// paths, which are mapped only in development: elsewhere a probe must not pass by getting the web app.
+// The regex refuses an empty path, so the root has its own fallback.
+app.MapFallbackToFile("/", "index.html").AllowAnonymous().ExcludeFromDescription();
+app.MapFallbackToFile("{*path:nonfile:regex(^(?!(api|health|alive)(/|$)))}", "index.html").AllowAnonymous().ExcludeFromDescription();
 
 app.Run();

@@ -13,12 +13,20 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.15" PrivateAssets="all" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- A build that recompiles the API rewrites openapi.json beside this file, where the web app reads it to
+       generate its types. An up-to-date build skips it, so a deleted openapi.json needs a rebuild. -->
+  <PropertyGroup>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
   </PropertyGroup>
 
 </Project>
