@@ -4,4 +4,7 @@
     <Project Path="src/Nook.AppHost/Nook.AppHost.csproj" />
     <Project Path="src/Nook.ServiceDefaults/Nook.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nook.Api.Tests/Nook.Api.Tests.csproj" />
+  </Folder>
 </Solution>
