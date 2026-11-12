@@ -4,9 +4,17 @@ var nookDb = builder.AddPostgres("postgres")
     .WithImageTag("18")
     .AddDatabase("nookdb");
 
-builder.AddProject<Projects.Nook_Api>("api")
+var api = builder.AddProject<Projects.Nook_Api>("api")
     .WithReference(nookDb)
     .WaitFor(nookDb)
     .WithHttpHealthCheck("/health");
+
+// The Angular dev server, which proxies /api to the API so the browser sees one origin. It listens on its own
+// fixed port, so the endpoint is declared as it is instead of being put behind an Aspire proxy.
+builder.AddJavaScriptApp("web", "../Nook.Web", "start")
+    .WithNpm()
+    .WithReference(api)
+    .WaitFor(api)
+    .WithHttpEndpoint(port: 4200, isProxied: false);
 
 builder.Build().Run();

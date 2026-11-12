@@ -29,4 +29,21 @@
     <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
   </PropertyGroup>
 
+  <!-- Publishing builds the web app and puts it in the output's wwwroot, so a published API is the whole app.
+       This runs only during publish: an ordinary build or test run never calls npm. -->
+  <Target Name="PublishWebApp" AfterTargets="ComputeFilesToPublish">
+    <PropertyGroup>
+      <WebAppDirectory>$(MSBuildProjectDirectory)/../Nook.Web/</WebAppDirectory>
+    </PropertyGroup>
+    <Exec WorkingDirectory="$(WebAppDirectory)" Command="npm ci" />
+    <Exec WorkingDirectory="$(WebAppDirectory)" Command="npm run build" />
+    <ItemGroup>
+      <WebAppFile Include="$(WebAppDirectory)dist/nook-web/browser/**" />
+      <ResolvedFileToPublish Include="@(WebAppFile->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
 </Project>
