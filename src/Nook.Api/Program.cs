@@ -4,16 +4,30 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
+using Nook.Api.Jobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The build starts the app under GetDocument.Insider to write openapi.json, with no database to migrate
+// and no jobs to run.
+var buildingOpenApiDocument = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+
 builder.AddServiceDefaults();
+
+// One clock for the whole app: the timestamps on saved rows and the times the job worker writes and compares.
+var timeProvider = TimeProvider.System;
+builder.Services.AddSingleton(timeProvider);
 
 builder.AddNpgsqlDbContext<NookDbContext>("nookdb", configureDbContextOptions: options =>
     options.UseSnakeCaseNamingConvention()
-        .AddInterceptors(new TimestampInterceptor(TimeProvider.System)));
+        .AddInterceptors(new TimestampInterceptor(timeProvider)));
 
 builder.Services.AddNookAuth(builder.Configuration);
+builder.Services.AddNookJobs();
+if (!buildingOpenApiDocument)
+{
+    builder.Services.AddJobWorker();
+}
 
 // Enums travel by name, such as "epub", so a client can meet a value it does not know and still show it.
 // Numbers are numbers only: the web default also reads them from strings, and the API description
@@ -36,8 +50,7 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// The build starts the app under GetDocument.Insider to write openapi.json, with no database to migrate.
-if (Assembly.GetEntryAssembly()?.GetName().Name != "GetDocument.Insider")
+if (!buildingOpenApiDocument)
 {
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();

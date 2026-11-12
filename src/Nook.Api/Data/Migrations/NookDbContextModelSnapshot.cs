@@ -104,50 +104,6 @@ namespace Nook.Api.Data.Migrations
                     b.ToTable("asp_net_user_tokens", (string)null);
                 });
 
-            modelBuilder.Entity("Nook.Api.Data.IngestRun", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("ItemId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("item_id");
-
-                    b.Property<Guid>("LibraryId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("library_id");
-
-                    b.Property<string>("SourcePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("source_path");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_ingest_runs");
-
-                    b.HasIndex("ItemId")
-                        .HasDatabaseName("ix_ingest_runs_item_id");
-
-                    b.HasIndex("LibraryId")
-                        .HasDatabaseName("ix_ingest_runs_library_id");
-
-                    b.ToTable("ingest_runs", (string)null);
-                });
-
             modelBuilder.Entity("Nook.Api.Data.Item", b =>
                 {
                     b.Property<Guid>("Id")
@@ -180,11 +136,88 @@ namespace Nook.Api.Data.Migrations
                     b.ToTable("items", (string)null);
                 });
 
-            modelBuilder.Entity("Nook.Api.Data.ItemStep", b =>
+            modelBuilder.Entity("Nook.Api.Data.Job", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<int>("AttemptsAllowed")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts_allowed");
+
+                    b.Property<int>("AttemptsMade")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts_made");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at");
+
+                    b.Property<DateTimeOffset?>("NotBefore")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("not_before");
+
+                    b.Property<Guid?>("ParentJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_job_id");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<int>("ReclaimsMade")
+                        .HasColumnType("integer")
+                        .HasColumnName("reclaims_made");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_jobs");
+
+                    b.HasIndex("ParentJobId")
+                        .HasDatabaseName("ix_jobs_parent_job_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_jobs_status_created_at");
+
+                    b.ToTable("jobs", (string)null);
+                });
+
+            modelBuilder.Entity("Nook.Api.Data.JobStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -198,11 +231,20 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("finished_at");
 
-                    b.Property<Guid>("ItemId")
+                    b.Property<Guid>("JobId")
                         .HasColumnType("uuid")
-                        .HasColumnName("item_id");
+                        .HasColumnName("job_id");
 
-                    b.Property<DateTimeOffset?>("StartedAt")
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
 
@@ -211,27 +253,17 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("status");
 
-                    b.Property<string>("StepName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("step_name");
-
-                    b.Property<int>("StepVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("step_version");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
-                        .HasName("pk_item_steps");
+                        .HasName("pk_job_steps");
 
-                    b.HasIndex("ItemId", "StepName")
-                        .IsUnique()
-                        .HasDatabaseName("ix_item_steps_item_id_step_name");
+                    b.HasIndex("JobId")
+                        .HasDatabaseName("ix_job_steps_job_id");
 
-                    b.ToTable("item_steps", (string)null);
+                    b.ToTable("job_steps", (string)null);
                 });
 
             modelBuilder.Entity("Nook.Api.Data.Library", b =>
@@ -710,22 +742,6 @@ namespace Nook.Api.Data.Migrations
                         .HasConstraintName("fk_asp_net_user_tokens_asp_net_users_user_id");
                 });
 
-            modelBuilder.Entity("Nook.Api.Data.IngestRun", b =>
-                {
-                    b.HasOne("Nook.Api.Data.Item", null)
-                        .WithMany()
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_ingest_runs_items_item_id");
-
-                    b.HasOne("Nook.Api.Data.Library", null)
-                        .WithMany()
-                        .HasForeignKey("LibraryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_ingest_runs_libraries_library_id");
-                });
-
             modelBuilder.Entity("Nook.Api.Data.Item", b =>
                 {
                     b.HasOne("Nook.Api.Data.Work", null)
@@ -736,14 +752,23 @@ namespace Nook.Api.Data.Migrations
                         .HasConstraintName("fk_items_works_work_id");
                 });
 
-            modelBuilder.Entity("Nook.Api.Data.ItemStep", b =>
+            modelBuilder.Entity("Nook.Api.Data.Job", b =>
                 {
-                    b.HasOne("Nook.Api.Data.Item", null)
+                    b.HasOne("Nook.Api.Data.Job", null)
                         .WithMany()
-                        .HasForeignKey("ItemId")
+                        .HasForeignKey("ParentJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_jobs_jobs_parent_job_id");
+                });
+
+            modelBuilder.Entity("Nook.Api.Data.JobStep", b =>
+                {
+                    b.HasOne("Nook.Api.Data.Job", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_item_steps_items_item_id");
+                        .HasConstraintName("fk_job_steps_jobs_job_id");
                 });
 
             modelBuilder.Entity("Nook.Api.Data.Part", b =>

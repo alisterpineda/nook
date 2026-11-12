@@ -26,9 +26,9 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
 
     public DbSet<Part> Parts => Set<Part>();
 
-    public DbSet<IngestRun> IngestRuns => Set<IngestRun>();
+    public DbSet<Job> Jobs => Set<Job>();
 
-    public DbSet<ItemStep> ItemSteps => Set<ItemStep>();
+    public DbSet<JobStep> JobSteps => Set<JobStep>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -94,18 +94,23 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
             part.HasIndex(p => p.Sha256);
         });
 
-        builder.Entity<IngestRun>(run =>
+        builder.Entity<Job>(job =>
         {
-            // A library that still has runs cannot be deleted; a run outlives the item it produced or duplicated.
-            run.HasOne<Library>().WithMany().HasForeignKey(r => r.LibraryId).OnDelete(DeleteBehavior.Restrict);
-            run.HasOne<Item>().WithMany().HasForeignKey(r => r.ItemId).OnDelete(DeleteBehavior.SetNull);
+            // Payload and result are stored as given; only the job's type reads them.
+            job.Property(j => j.Payload).HasColumnType("jsonb");
+            job.Property(j => j.Result).HasColumnType("jsonb");
+
+            // A job that still has children cannot be deleted.
+            job.HasOne<Job>().WithMany().HasForeignKey(j => j.ParentJobId).OnDelete(DeleteBehavior.Restrict);
+
+            // Workers look for the oldest job in a status.
+            job.HasIndex(j => new { j.Status, j.CreatedAt });
         });
 
-        builder.Entity<ItemStep>(step =>
+        builder.Entity<JobStep>(step =>
         {
-            // Steps go with their item, which holds each step name once.
-            step.HasOne<Item>().WithMany().HasForeignKey(s => s.ItemId).OnDelete(DeleteBehavior.Cascade);
-            step.HasIndex(s => new { s.ItemId, s.StepName }).IsUnique();
+            // Steps go with their job.
+            step.HasOne<Job>().WithMany().HasForeignKey(s => s.JobId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<WorkExternalId>(externalId =>

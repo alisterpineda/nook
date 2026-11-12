@@ -4,7 +4,7 @@ using Nook.Api.Data;
 
 namespace Nook.Api.Tests.Integration;
 
-/// <summary>Pins the whole schema and the cascade from a work.</summary>
+/// <summary>Pins the whole schema, the cascade from a work and the cascade from a job.</summary>
 public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {
     private static readonly string[] IdentityChildTables =
@@ -13,7 +13,7 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     private static readonly string[] NookTables =
     [
         "asp_net_users", "libraries", "works", "items", "parts", "people", "work_contributors", "series", "tags",
-        "work_external_ids", "ingest_runs", "item_steps",
+        "work_external_ids", "jobs", "job_steps",
     ];
 
     [Fact]
@@ -85,7 +85,6 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
                 Size = 1024,
                 Sha256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
             });
-            db.ItemSteps.Add(new ItemStep { ItemId = item.Id, StepName = "extract-metadata", StepVersion = 1 });
             await db.SaveChangesAsync(cancellationToken);
         }
 
@@ -107,7 +106,6 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             Assert.False(await db.Works.AnyAsync(w => w.Id == work.Id, cancellationToken));
             Assert.False(await db.Items.AnyAsync(i => i.WorkId == work.Id, cancellationToken));
             Assert.False(await db.Parts.AnyAsync(p => p.ItemId == item.Id, cancellationToken));
-            Assert.False(await db.ItemSteps.AnyAsync(s => s.ItemId == item.Id, cancellationToken));
             Assert.False(await db.WorkContributors.AnyAsync(c => c.WorkId == work.Id, cancellationToken));
             Assert.False(await db.WorkExternalIds.AnyAsync(e => e.WorkId == work.Id, cancellationToken));
             Assert.Equal(0, await db.CountTagLinksAsync(work.Id, cancellationToken));
@@ -115,6 +113,66 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             Assert.True(await db.People.AnyAsync(p => p.Id == person.Id, cancellationToken));
             Assert.True(await db.Series.AnyAsync(s => s.Id == series.Id, cancellationToken));
             Assert.True(await db.Tags.AnyAsync(t => t.Id == tag.Id, cancellationToken));
+        }
+    }
+
+    [Fact]
+    public async Task Job_tables_hold_only_generic_columns()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+
+        var columns = await db.Database
+            .SqlQuery<string>($"SELECT (table_name || '.' || column_name)::text AS \"Value\" FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('jobs', 'job_steps')")
+            .ToListAsync(cancellationToken);
+
+        string[] expected =
+        [
+            "jobs.id", "jobs.created_at", "jobs.updated_at", "jobs.type", "jobs.status", "jobs.payload", "jobs.result",
+            "jobs.parent_job_id", "jobs.not_before", "jobs.attempts_made", "jobs.attempts_allowed", "jobs.reclaims_made",
+            "jobs.lease_expires_at", "jobs.error",
+            "job_steps.id", "job_steps.created_at", "job_steps.updated_at", "job_steps.job_id", "job_steps.name",
+            "job_steps.order", "job_steps.attempt", "job_steps.status", "job_steps.error", "job_steps.started_at",
+            "job_steps.finished_at",
+        ];
+        Assert.Equal(expected.Order(), columns.Order());
+    }
+
+    [Fact]
+    public async Task Deleting_a_job_removes_its_steps()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var job = new Job { Type = "test", Payload = "{}" };
+        var startedAt = DateTimeOffset.UtcNow;
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            db.Jobs.Add(job);
+            db.JobSteps.AddRange(
+                new JobStep { JobId = job.Id, Name = "first", Order = 1, Attempt = 1, StartedAt = startedAt },
+                new JobStep { JobId = job.Id, Name = "second", Order = 2, Attempt = 1, StartedAt = startedAt });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            Assert.Equal(2, await db.JobSteps.CountAsync(s => s.JobId == job.Id, cancellationToken));
+
+            // Deleted without loading its steps, so the database's own delete rule does the work.
+            var tracked = await db.Jobs.SingleAsync(j => j.Id == job.Id, cancellationToken);
+            db.Jobs.Remove(tracked);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+
+            Assert.False(await db.Jobs.AnyAsync(j => j.Id == job.Id, cancellationToken));
+            Assert.False(await db.JobSteps.AnyAsync(s => s.JobId == job.Id, cancellationToken));
         }
     }
 

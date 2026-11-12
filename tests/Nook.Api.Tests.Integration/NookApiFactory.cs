@@ -22,5 +22,9 @@ public sealed class NookApiFactory(PostgresFixture server) : WebApplicationFacto
 
         // Every test client shares one address, so the real limit would refuse sign-ins once a class has a few tests.
         builder.UseSetting("RateLimiting:Auth:PermitLimit", "100000");
+
+        // An idle worker looks for jobs this often, so a job no wake announces, such as one a test writes straight
+        // to the database, is picked up quickly.
+        builder.UseSetting("Nook:Jobs:PollSeconds", "0.2");
     }
 }
