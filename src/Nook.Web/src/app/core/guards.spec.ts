@@ -11,6 +11,7 @@ import { components } from '../api/schema';
 import { routes } from '../app.routes';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
+type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 
 describe('route guards', () => {
   const ada: CurrentUserResponse = {
@@ -56,6 +57,35 @@ describe('route guards', () => {
     (await nextRequest('/api/libraries')).flush([]);
   }
 
+  /** Answers the works list's request, which it makes once it is shown. */
+  async function answerWorks(): Promise<void> {
+    (
+      await vi.waitFor(() => httpTesting.expectOne((request) => request.url === '/api/works'))
+    ).flush({ items: [], total: 0, offset: 0, limit: 50 });
+  }
+
+  /** Answers the work detail page's request for work 42, which it makes once it is shown. */
+  async function answerWork(): Promise<void> {
+    (await nextRequest('/api/works/42')).flush({
+      id: '42',
+      libraryId: '0198a1b2-0000-7000-8000-00000000000a',
+      title: 'Dune',
+      sortTitle: 'Dune',
+      description: null,
+      language: null,
+      publicationDate: null,
+      publisher: null,
+      series: null,
+      coverHash: null,
+      contributors: [],
+      tags: [],
+      externalIds: [],
+      items: [],
+      addedAt: '2026-11-01T12:00:00Z',
+      updatedAt: '2026-11-01T12:00:00Z',
+    } satisfies WorkDetailResponse);
+  }
+
   function heading(): string | undefined {
     return harness.routeNativeElement?.querySelector('h1')?.textContent?.trim();
   }
@@ -86,6 +116,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/works');
     await answerSignedIn();
     await answerLibraries();
+    await answerWorks();
     await navigating;
 
     expect(router.url).toBe('/works');
@@ -96,16 +127,18 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/works/42');
     await answerSignedIn();
     await answerLibraries();
+    await answerWork();
     await navigating;
 
     expect(router.url).toBe('/works/42');
-    expect(heading()).toBe('Work');
+    await vi.waitFor(() => expect(heading()).toBe('Dune'));
   });
 
   it('a signed-in user who opens /sign-in lands on /works', async () => {
     const navigating = harness.navigateByUrl('/sign-in');
     await answerSignedIn();
     await answerLibraries();
+    await answerWorks();
     await navigating;
 
     expect(router.url).toBe('/works');
@@ -115,6 +148,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/setup');
     await answerSignedIn();
     await answerLibraries();
+    await answerWorks();
     await navigating;
 
     expect(router.url).toBe('/works');
@@ -151,9 +185,12 @@ describe('route guards', () => {
     const first = harness.navigateByUrl('/works');
     await answerSignedIn();
     await answerLibraries();
+    await answerWorks();
     await first;
 
-    await harness.navigateByUrl('/works/42');
+    const second = harness.navigateByUrl('/works/42');
+    await answerWork();
+    await second;
 
     httpTesting.expectNone('/api/auth/me');
     expect(router.url).toBe('/works/42');
@@ -163,6 +200,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/no/such/page');
     await answerSignedIn();
     await answerLibraries();
+    await answerWorks();
     await navigating;
 
     expect(router.url).toBe('/works');
@@ -172,6 +210,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/');
     await answerSignedIn();
     await answerLibraries();
+    await answerWorks();
     await navigating;
 
     expect(router.url).toBe('/works');

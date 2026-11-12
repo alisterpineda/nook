@@ -1,7 +1,225 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
+import { HlmBadgeImports } from '@spartan-ng/helm/badge';
+import { HlmButtonImports } from '@spartan-ng/helm/button';
+import { HlmTableImports } from '@spartan-ng/helm/table';
+import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
+import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
+import { components } from '../../api/schema';
+import { WorksApi } from '../../api/works-api';
+import { somethingWentWrong } from '../../core/messages';
+import { formatLabel, seriesText } from './work-labels';
 
+type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
+type WorkSort = components['schemas']['WorkSort'];
+
+/** What the URL asks the list to show. */
+interface ListQuery {
+  libraryId: string | null;
+  sort: WorkSort;
+  /** Counts from 1. */
+  page: number;
+}
+
+/** Where the list stands for the query the URL names. */
+type Listing =
+  | { status: 'loading' }
+  | { status: 'loaded'; page: PageOfWorkSummaryResponse }
+  | { status: 'failed' };
+
+const pageSize = 50;
+
+const defaultSort: WorkSort = 'title';
+
+/** The sort orders the list offers, in the order the control shows them. */
+const sortOptions: readonly { value: WorkSort; label: string }[] = [
+  { value: 'title', label: 'Title' },
+  { value: 'added', label: 'Recently added' },
+];
+
+/**
+ * One page of the works in the library the URL names, or in every library the user can see when it names none, in
+ * the sort order and at the page the URL names.
+ */
 @Component({
   selector: 'app-works-list-page',
-  template: '<h1>Works</h1>',
+  imports: [RouterLink, HlmBadgeImports, HlmButtonImports, HlmTableImports, HlmToggleGroupImports],
+  template: `
+    @let shownQuery = query();
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <h1 class="text-lg font-semibold">Works</h1>
+      <div
+        hlmToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Sort by"
+        [nullable]="false"
+        [value]="shownQuery.sort"
+        (valueChange)="sortBy($event)"
+      >
+        @for (option of sortOptions; track option.value) {
+          <button hlmToggleGroupItem type="button" [value]="option.value">
+            {{ option.label }}
+          </button>
+        }
+      </div>
+    </div>
+    @let current = listing();
+    @if (current.status === 'failed') {
+      <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
+    } @else if (current.status === 'loaded') {
+      @if (current.page.total === 0) {
+        <p class="text-muted-foreground text-sm">No works yet</p>
+      } @else {
+        <div hlmTableContainer>
+          <table hlmTable>
+            <thead hlmTHead>
+              <tr hlmTr>
+                <th hlmTh scope="col">Title</th>
+                <th hlmTh scope="col">Authors</th>
+                <th hlmTh scope="col">Series</th>
+                <th hlmTh scope="col">Formats</th>
+              </tr>
+            </thead>
+            <tbody hlmTBody>
+              @for (work of current.page.items; track work.id) {
+                <tr hlmTr>
+                  <td hlmTd>
+                    <a class="font-medium hover:underline" [routerLink]="['/works', work.id]">{{
+                      work.title
+                    }}</a>
+                  </td>
+                  <td hlmTd>{{ work.authors.join(', ') }}</td>
+                  <td hlmTd>{{ seriesText(work.series) }}</td>
+                  <td hlmTd>
+                    <span class="flex gap-1">
+                      @for (format of work.formats; track $index) {
+                        <span hlmBadge variant="secondary">{{ formatLabel(format) }}</span>
+                      }
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @let pageCount = pageCountOf(current.page.total);
+        <nav class="mt-4 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
+          <p class="text-muted-foreground text-sm">{{ totalText(current.page.total) }}</p>
+          <div class="flex items-center gap-2">
+            <span class="text-muted-foreground text-sm"
+              >Page {{ shownQuery.page }} of {{ pageCount }}</span
+            >
+            <button
+              hlmBtn
+              variant="outline"
+              size="sm"
+              type="button"
+              [disabled]="shownQuery.page <= 1"
+              (click)="goToPage(shownQuery.page - 1)"
+            >
+              Previous
+            </button>
+            <button
+              hlmBtn
+              variant="outline"
+              size="sm"
+              type="button"
+              [disabled]="shownQuery.page >= pageCount"
+              (click)="goToPage(shownQuery.page + 1)"
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+      }
+    }
+  `,
 })
-export class WorksListPage {}
+export class WorksListPage {
+  private readonly worksApi = inject(WorksApi);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  protected readonly somethingWentWrong = somethingWentWrong;
+  protected readonly sortOptions = sortOptions;
+  protected readonly seriesText = seriesText;
+  protected readonly formatLabel = formatLabel;
+
+  // The sidebar, the sort control and the pager all change the URL without recreating the page, so the list follows
+  // the URL rather than reading it once, and an answer for a query the user has already left is dropped.
+  private readonly query$ = this.route.queryParamMap.pipe(
+    map(toListQuery),
+    distinctUntilChanged(
+      (previous, next) =>
+        previous.libraryId === next.libraryId &&
+        previous.sort === next.sort &&
+        previous.page === next.page,
+    ),
+  );
+
+  protected readonly query = toSignal(this.query$, { requireSync: true });
+
+  protected readonly listing = toSignal(
+    this.query$.pipe(
+      switchMap((query) => from(this.load(query)).pipe(startWith<Listing>({ status: 'loading' }))),
+    ),
+    { requireSync: true },
+  );
+
+  /** Shows the first page in the chosen sort order. */
+  protected sortBy(value: unknown): void {
+    const sort = sortOptions.find((option) => option.value === value)?.value;
+    if (sort) {
+      this.show({ sort, page: 1 });
+    }
+  }
+
+  protected goToPage(page: number): void {
+    this.show({ sort: this.query().sort, page });
+  }
+
+  protected pageCountOf(total: number): number {
+    return Math.max(1, Math.ceil(total / pageSize));
+  }
+
+  protected totalText(total: number): string {
+    return total === 1 ? '1 work' : `${total} works`;
+  }
+
+  /** Puts the sort and page in the URL, keeping its library, and leaves out each one that is at its default. */
+  private show({ sort, page }: Omit<ListQuery, 'libraryId'>): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { sort: sort === defaultSort ? null : sort, page: page === 1 ? null : page },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private async load({ libraryId, sort, page }: ListQuery): Promise<Listing> {
+    try {
+      const response = await this.worksApi.list({
+        LibraryId: libraryId ?? undefined,
+        Sort: sort,
+        Offset: (page - 1) * pageSize,
+        Limit: pageSize,
+      });
+      return { status: 'loaded', page: response };
+    } catch {
+      return { status: 'failed' };
+    }
+  }
+}
+
+/** Reads the list's query from the URL, taking the default for a sort or page it does not recognise. */
+function toListQuery(params: ParamMap): ListQuery {
+  const sortParam = params.get('sort');
+  const pageParam = params.get('page');
+  return {
+    libraryId: params.get('library'),
+    sort: sortOptions.find((option) => option.value === sortParam)?.value ?? defaultSort,
+    page: pageParam !== null && /^[1-9][0-9]*$/.test(pageParam) ? Number(pageParam) : 1,
+  };
+}
