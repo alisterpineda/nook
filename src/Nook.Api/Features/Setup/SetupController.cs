@@ -31,6 +31,7 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
     [HttpPost]
     [EnableRateLimiting(RateLimits.Auth)]
     [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> CreateFirstAdmin(SetupRequest request, CancellationToken cancellationToken)

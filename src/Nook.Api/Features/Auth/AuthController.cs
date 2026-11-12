@@ -15,6 +15,7 @@ public class AuthController(UserManager<NookUser> users, SignInManager<NookUser>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimits.Auth)]
     [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> Login(LoginRequest request)
