@@ -13,7 +13,16 @@
     "module": "preserve",
     "paths": {
       "@spartan-ng/helm/button": ["./libs/spartan/button/src/index.ts"],
-      "@spartan-ng/helm/utils": ["./libs/spartan/utils/src/index.ts"]
+      "@spartan-ng/helm/utils": ["./libs/spartan/utils/src/index.ts"],
+      "@spartan-ng/helm/input": ["./libs/spartan/input/src/index.ts"],
+      "@spartan-ng/helm/label": ["./libs/spartan/label/src/index.ts"],
+      "@spartan-ng/helm/card": ["./libs/spartan/card/src/index.ts"],
+      "@spartan-ng/helm/sidebar": ["./libs/spartan/sidebar/src/index.ts"],
+      "@spartan-ng/helm/separator": ["./libs/spartan/separator/src/index.ts"],
+      "@spartan-ng/helm/sheet": ["./libs/spartan/sheet/src/index.ts"],
+      "@spartan-ng/helm/skeleton": ["./libs/spartan/skeleton/src/index.ts"],
+      "@spartan-ng/helm/tooltip": ["./libs/spartan/tooltip/src/index.ts"],
+      "@spartan-ng/helm/dropdown-menu": ["./libs/spartan/dropdown-menu/src/index.ts"]
     }
   },
   "angularCompilerOptions": {
