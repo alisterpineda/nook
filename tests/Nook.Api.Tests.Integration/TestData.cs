@@ -1,4 +1,7 @@
+using System.Text;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 
 namespace Nook.Api.Tests.Integration;
@@ -9,6 +12,23 @@ internal static class TestData
     /// <summary>A work with only its required values set, in the seeded library and sorted by its title unless told otherwise.</summary>
     public static Work NewWork(string title, Guid? libraryId = null, string? sortTitle = null) =>
         new() { LibraryId = libraryId ?? Library.DefaultId, Title = title, SortTitle = sortTitle ?? title };
+
+    /// <summary>A file that is no book format at all.</summary>
+    public static readonly byte[] NotABook = Encoding.UTF8.GetBytes("This is a plain text file, not a book.");
+
+    /// <summary>A stand-in for a PNG cover: the PNG signature and a few bytes. Nothing decodes it.</summary>
+    public static readonly byte[] PngCover = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4];
+
+    /// <summary>Adds a library of its own for one test, so rows from other tests stay out of it.</summary>
+    public static async Task<Library> AddLibraryAsync(this WebApplicationFactory<Program> factory)
+    {
+        var library = new Library { Name = "Test", FolderName = $"Test-{Guid.NewGuid():N}" };
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        db.Libraries.Add(library);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return library;
+    }
 
     /// <summary>The definition of every index on a table, as PostgreSQL reports it.</summary>
     public static Task<List<string>> ReadIndexDefinitionsAsync(

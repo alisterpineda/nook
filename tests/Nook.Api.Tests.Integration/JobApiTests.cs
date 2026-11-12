@@ -50,7 +50,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Jobs_list_comes_newest_first_in_pages()
     {
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
-        var before = (await client.GetAsync<Page<JobSummaryResponse>>("/api/jobs?limit=1")).Total;
+        var before = await client.CountJobsAsync();
         var first = await EnqueueAsync("first");
         var second = await EnqueueAsync("second");
         var third = await EnqueueAsync("third");

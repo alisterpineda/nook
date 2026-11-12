@@ -4,12 +4,15 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
+using Nook.Api.Features.Uploads;
+using Nook.Api.Ingest;
 using Nook.Api.Jobs;
+using Nook.Api.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// The build starts the app under GetDocument.Insider to write openapi.json, with no database to migrate
-// and no jobs to run.
+// The build starts the app under GetDocument.Insider to write openapi.json, with no database to migrate,
+// no jobs to run and no data folder.
 var buildingOpenApiDocument = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
 
 builder.AddServiceDefaults();
@@ -22,8 +25,22 @@ builder.AddNpgsqlDbContext<NookDbContext>("nookdb", configureDbContextOptions: o
     options.UseSnakeCaseNamingConvention()
         .AddInterceptors(new TimestampInterceptor(timeProvider)));
 
+// The data root is required: the API refuses to start without it.
+var storageOptions = builder.Services.AddOptions<StorageOptions>().BindConfiguration(StorageOptions.Section);
+if (!buildingOpenApiDocument)
+{
+    storageOptions.ValidateDataAnnotations().ValidateOnStart();
+}
+builder.Services.AddSingleton<NookStorage>();
+
+builder.Services.AddOptions<UploadOptions>()
+    .BindConfiguration(UploadOptions.Section)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddNookAuth(builder.Configuration);
 builder.Services.AddNookJobs();
+builder.Services.AddNookIngest();
 if (!buildingOpenApiDocument)
 {
     builder.Services.AddJobWorker();
@@ -52,6 +69,9 @@ var app = builder.Build();
 
 if (!buildingOpenApiDocument)
 {
+    // Checked before migrating, so a missing data root stops the API before it touches the database.
+    app.Services.GetRequiredService<NookStorage>().CreateFolders();
+
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();
 }

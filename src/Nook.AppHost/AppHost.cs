@@ -4,9 +4,13 @@ var nookDb = builder.AddPostgres("postgres")
     .WithImageTag("18")
     .AddDatabase("nookdb");
 
+// The API keeps its files in .data at the repository root, which git ignores.
+var dataPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", ".data"));
+
 var api = builder.AddProject<Projects.Nook_Api>("api")
     .WithReference(nookDb)
     .WaitFor(nookDb)
+    .WithEnvironment("Nook__DataPath", dataPath)
     .WithHttpHealthCheck("/health");
 
 // The Angular dev server, which proxies /api to the API so the browser sees one origin. It listens on its own

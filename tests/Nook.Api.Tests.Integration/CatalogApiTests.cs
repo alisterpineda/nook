@@ -216,8 +216,8 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     /// <summary>Adds a library of its own for one test, so works from other tests stay out of its lists.</summary>
     private async Task<Guid> AddLibraryAsync(Func<Guid, object[]> rows)
     {
-        var library = new Library { Name = "Test", FolderName = $"Test-{Guid.NewGuid():N}" };
-        await AddAsync([library, .. rows(library.Id)]);
+        var library = await factory.AddLibraryAsync();
+        await AddAsync(rows(library.Id));
         return library.Id;
     }
 

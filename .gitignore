@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # Local scratch space
 .scratch/
+
+# The files the API keeps when run from the AppHost
+.data/

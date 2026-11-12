@@ -1,0 +1,18 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace Nook.Api.Features.Uploads;
+
+/// <summary>A file to ingest into a library, sent as a multipart form.</summary>
+public class UploadRequest
+{
+    /// <summary>The library the file goes into.</summary>
+    [Required]
+    public Guid? LibraryId { get; set; }
+
+    /// <summary>The file. Any file is accepted here; its job decides whether Nook can read it.</summary>
+    [Required]
+    public IFormFile? File { get; set; }
+}
+
+/// <summary>The job that ingests the uploaded file, to watch through the jobs endpoints.</summary>
+public record UploadResponse(Guid JobId);
