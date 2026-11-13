@@ -120,6 +120,15 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
             externalId.HasIndex(e => new { e.Scheme, e.Value });
         });
 
+        // Ingest finds people, series and tags by name key. Rows can share a key, so the indexes are not unique.
+        var named = builder.Model.GetEntityTypes()
+            .Where(type => typeof(INamed).IsAssignableFrom(type.ClrType))
+            .ToList();
+        foreach (var type in named)
+        {
+            builder.Entity(type.ClrType).HasIndex(nameof(INamed.NameKey));
+        }
+
         builder.Entity<WorkContributor>(contributor =>
         {
             // A person who still contributes to a work cannot be deleted.

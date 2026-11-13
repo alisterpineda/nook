@@ -243,7 +243,7 @@ public sealed partial class JobWorker(
 
             if (run.IsCompleted || order == run.Steps.Count - 1)
             {
-                await RecordAsync(lease, (stepId, null), job => EndInSuccess(job, run.ResultJson));
+                await SucceedAsync(type, claimed, lease, stepId, run.ResultJson);
                 return;
             }
 
@@ -256,7 +256,32 @@ public sealed partial class JobWorker(
         }
 
         // A run with no steps has nothing left to do.
-        await RecordAsync(lease, step: null, job => EndInSuccess(job, run.ResultJson));
+        await SucceedAsync(type, claimed, lease, stepId: null, run.ResultJson);
+    }
+
+    /// <summary>
+    /// Records the job as succeeded, finishing its last step with it, and once that has committed runs the type's
+    /// success hook in a scope of its own. The hook runs only when this worker's write is the one that ended the job.
+    /// An exception from it is logged and changes nothing on the job, which stays succeeded.
+    /// </summary>
+    private async Task SucceedAsync(JobType type, ClaimedJob claimed, HeldLease lease, Guid? stepId, string? resultJson)
+    {
+        var ended = await RecordAsync(
+            lease, stepId is { } id ? (id, null) : null, job => EndInSuccess(job, resultJson));
+        if (!ended)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            await type.OnSucceededAsync(claimed.Payload, scope.ServiceProvider);
+        }
+        catch (Exception exception)
+        {
+            LogSuccessHookFailed(logger, exception, claimed.Id, claimed.Type);
+        }
     }
 
     /// <summary>The number for a new run's step rows: one more than the highest any earlier run used.</summary>
@@ -292,7 +317,8 @@ public sealed partial class JobWorker(
     /// run is ended only while the worker still holds its lease; once another worker has taken the job, the run it
     /// started is the one that ends it.
     /// </summary>
-    private async Task RecordAsync(HeldLease lease, (Guid Id, string? Error)? step, Action<Job>? endRun)
+    /// <returns>True when <paramref name="endRun"/> was given and the job's run was ended with it.</returns>
+    private async Task<bool> RecordAsync(HeldLease lease, (Guid Id, string? Error)? step, Action<Job>? endRun)
     {
         if (endRun is not null)
         {
@@ -303,9 +329,24 @@ public sealed partial class JobWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
 
-        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        // The job's updated time as a pass wrote it with the run's end, since that pass's commit can land and still
+        // report an error. No other write gives the job this time, so it tells this run's ending from another's.
+        DateTimeOffset? endWrittenAt = null;
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             db.ChangeTracker.Clear();
+
+            // The earlier pass's commit landed when the job still carries the time that pass gave it: its step is
+            // finished too, and this worker's write is the one that ended the run. Any other job, still running or
+            // since taken and ended by another worker, is handled below as on a first pass.
+            if (endWrittenAt is { } writtenAt && await db.Jobs.AnyAsync(
+                    j => j.Id == lease.JobId && j.Status != JobStatus.Running && j.LeaseExpiresAt == null
+                        && j.UpdatedAt == writtenAt,
+                    CancellationToken.None))
+            {
+                return true;
+            }
+
             await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
 
             if (step is var (stepId, error))
@@ -316,14 +357,18 @@ public sealed partial class JobWorker(
                 row.FinishedAt = UtcNow();
             }
 
+            Job? ended = null;
             if (endRun is not null && await LockHeldJobAsync(db, lease) is { } job)
             {
                 endRun(job);
                 job.LeaseExpiresAt = null;
+                ended = job;
             }
 
             await db.SaveChangesAsync(CancellationToken.None);
+            endWrittenAt = ended?.UpdatedAt ?? endWrittenAt;
             await transaction.CommitAsync(CancellationToken.None);
+            return ended is not null;
         });
     }
 
@@ -546,6 +591,9 @@ public sealed partial class JobWorker(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Job {JobId} of type {JobType} failed at step {StepName}.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, Guid jobId, string jobType, string? stepName);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Job {JobId} of type {JobType} succeeded, but its success hook failed.")]
+    private static partial void LogSuccessHookFailed(ILogger logger, Exception exception, Guid jobId, string jobType);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Job {JobId} of type {JobType} outlived its worker's lease and is run again.")]
     private static partial void LogJobReclaimed(ILogger logger, Guid jobId, string jobType);

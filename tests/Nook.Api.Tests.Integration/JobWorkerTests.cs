@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -11,6 +13,9 @@ namespace Nook.Api.Tests.Integration;
 
 public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
 {
+    // A job whose payload holds this loses the answer to the commit that records it as succeeded, once.
+    private const string LostCommitAnswer = "[lose the commit's answer]";
+
     private readonly NookApiFactory _factory;
 
     // The class runs jobs only on this app, so no second worker shares its database.
@@ -19,7 +24,13 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     public JobWorkerTests(NookApiFactory factory)
     {
         _factory = factory;
-        _app = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services => services.AddTestJobs()));
+        _app = factory.WithWebHostBuilder(builder => builder
+            .ConfigureServices(services => services.AddTestJobs())
+            .ConfigureTestServices(services => services.ConfigureDbContext<NookDbContext>(options =>
+                options.AddInterceptors(new LostCommitAnswerInterceptor(context =>
+                    context.ChangeTracker.Entries<Job>().Select(e => e.Entity).FirstOrDefault(job =>
+                        job.Status == JobStatus.Succeeded
+                        && job.Payload.Contains(LostCommitAnswer, StringComparison.Ordinal))?.Id)))));
     }
 
     [Fact]
@@ -105,6 +116,76 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
         var step = Assert.Single(job.Steps);
         Assert.Equal(("check", 0, 1, JobStepStatus.Succeeded), (step.Name, step.Order, step.Attempt, step.Status));
         Assert.DoesNotContain(note, _app.Services.GetRequiredService<JobRecorder>().SkippedStepsRun);
+    }
+
+    [Fact]
+    public async Task Succeeded_job_runs_its_success_hook_after_success_is_recorded()
+    {
+        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        var note = Guid.NewGuid().ToString();
+
+        var id = await EnqueueAsync(RecordingJob.TypeName, note);
+        var job = await client.WaitForJobAsync(id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var hooks = await WaitForSuccessHooksAsync(note);
+        var hook = Assert.Single(hooks);
+        Assert.Equal(JobStatus.Succeeded, hook.Status);
+    }
+
+    [Fact]
+    public async Task Success_hook_runs_when_the_commit_that_recorded_success_lost_its_answer()
+    {
+        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        var note = $"{LostCommitAnswer} {Guid.NewGuid()}";
+
+        var id = await EnqueueAsync(RecordingJob.TypeName, note);
+        var job = await client.WaitForJobAsync(id);
+
+        // The write is tried again, finds its first try landed, and still counts as the one that ended the job.
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        Assert.Equal(1, job.AttemptsMade);
+        var hook = Assert.Single(await WaitForSuccessHooksAsync(note));
+        Assert.Equal(JobStatus.Succeeded, hook.Status);
+    }
+
+    [Fact]
+    public async Task Failed_job_does_not_run_its_success_hook()
+    {
+        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        var note = Guid.NewGuid().ToString();
+
+        var id = await EnqueueAsync(FailingJob.TypeName, note);
+        var job = await client.WaitForJobAsync(id);
+
+        Assert.Equal(JobStatus.Failed, job.Status);
+
+        // The one worker runs a job's success hook before it takes the next job, so once a later job's hook has run,
+        // the failed job's would have too.
+        var later = Guid.NewGuid().ToString();
+        await client.WaitForJobAsync(await EnqueueAsync(RecordingJob.TypeName, later));
+        await WaitForSuccessHooksAsync(later);
+        Assert.DoesNotContain(_app.Services.GetRequiredService<JobRecorder>().SuccessHooks, h => h.Note == note);
+    }
+
+    [Fact]
+    public async Task Success_hook_that_throws_leaves_the_job_succeeded()
+    {
+        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+
+        var id = await EnqueueAsync(ThrowingSuccessHookJob.TypeName, "throws");
+        await client.WaitForJobAsync(id);
+
+        // A later job's hook has run once the throwing hook is behind the worker, which is still running jobs.
+        var later = Guid.NewGuid().ToString();
+        var laterJob = await client.WaitForJobAsync(await EnqueueAsync(RecordingJob.TypeName, later));
+        await WaitForSuccessHooksAsync(later);
+        var job = await client.GetAsync<JobDetailResponse>($"/api/jobs/{id}");
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        Assert.Null(job.Error);
+        Assert.Equal(1, job.AttemptsMade);
+        Assert.All(job.Steps, s => Assert.Equal(JobStepStatus.Succeeded, s.Status));
+        Assert.Equal(JobStatus.Succeeded, laterJob.Status);
     }
 
     [Fact]
@@ -215,6 +296,27 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     public void Dispose() => _app.Dispose();
 
     private Task<Guid> EnqueueAsync(string type, string note) => EnqueueAsync(type, new RecordingPayload(note));
+
+    /// <summary>
+    /// Waits until the success hook has run for the note, which happens just after its job is recorded as succeeded,
+    /// and returns every run of the hook for it. Fails the test after a timeout.
+    /// </summary>
+    private async Task<List<(string Note, JobStatus? Status)>> WaitForSuccessHooksAsync(string note)
+    {
+        var recorder = _app.Services.GetRequiredService<JobRecorder>();
+        var giveUpAt = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (true)
+        {
+            var hooks = recorder.SuccessHooks.Where(h => h.Note == note).ToList();
+            if (hooks.Count > 0)
+            {
+                return hooks;
+            }
+
+            Assert.True(DateTimeOffset.UtcNow < giveUpAt, $"The success hook for '{note}' did not run within 30 seconds.");
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+    }
 
     private Task<Guid> EnqueueAsync(string type, object payload, DateTimeOffset? notBefore = null) =>
         _app.EnqueueJobAsync(type, payload, notBefore: notBefore);

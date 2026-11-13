@@ -8,25 +8,39 @@ public static class ExternalIdRegistry
 {
     public const string Isbn = "isbn";
 
-    private static readonly Dictionary<string, Func<string, string?>> Rules = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, Func<string, string?>> Rules = new()
     {
         [Isbn] = NormaliseIsbn,
     };
 
     /// <summary>
     /// The value in the form Nook stores for its scheme, or null when the scheme's rule rejects it. The scheme is
-    /// matched whatever its case.
+    /// matched exactly, so it is given lowercased, as <see cref="BookIdentifier"/> keeps it.
     /// </summary>
     public static string? Normalise(string scheme, string value) =>
         Rules.TryGetValue(scheme, out var rule) ? rule(value) : value;
 
     /// <summary>
     /// An ISBN-10 or ISBN-13 as 13 digits, without hyphens or spaces, or null when it is neither or its check digit
-    /// is wrong. An ISBN-10 takes the <c>978</c> prefix.
+    /// is wrong. An ISBN-10 takes the <c>978</c> prefix. A value that is not a book number is null too: ten of one
+    /// digit, a placeholder whose check digit happens to hold, or 13 digits outside the <c>978</c> and <c>979</c>
+    /// book prefixes, such as another product's barcode. Refusing a real ISBN only loses a join by ISBN, while
+    /// accepting a false one would join two different books into one Work.
     /// </summary>
     private static string? NormaliseIsbn(string value)
     {
         var isbn = value.Replace("-", "").Replace(" ", "");
+        if (isbn.Length == 10 && isbn.All(c => c == isbn[0]) && char.IsAsciiDigit(isbn[0]))
+        {
+            return null;
+        }
+
+        if (isbn.Length == 13 && !isbn.StartsWith("978", StringComparison.Ordinal)
+            && !isbn.StartsWith("979", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
         return isbn.Length switch
         {
             10 when IsValidIsbn10(isbn) => Isbn13From("978" + isbn[..9]),

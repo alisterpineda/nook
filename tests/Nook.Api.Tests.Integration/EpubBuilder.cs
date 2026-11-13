@@ -105,12 +105,19 @@ internal sealed class EpubBuilder
         AddMetadata(
             $"<meta{Attribute("id", id)}{Attribute("refines", refines is null ? null : "#" + refines)} property=\"{Escape(property)}\">{Escape(value)}</meta>");
 
-    /// <summary>Adds an EPUB 3 <c>belongs-to-collection</c> of type series with, when given, its <c>group-position</c>.</summary>
-    public EpubBuilder WithCollection(string name, string? position = null)
+    /// <summary>
+    /// Adds an EPUB 3 <c>belongs-to-collection</c> with, when given, its <c>collection-type</c> and its
+    /// <c>group-position</c>.
+    /// </summary>
+    public EpubBuilder WithCollection(string name, string? position = null, string? type = null)
     {
         var id = NextId("collection");
         WithProperty("belongs-to-collection", name, id: id);
-        WithProperty("collection-type", "series", refines: id);
+        if (type is not null)
+        {
+            WithProperty("collection-type", type, refines: id);
+        }
+
         return position is null ? this : WithProperty("group-position", position, refines: id);
     }
 

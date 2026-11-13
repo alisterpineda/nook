@@ -4,4 +4,7 @@ namespace Nook.Api.Data;
 public interface INamed
 {
     string Name { get; }
+
+    /// <summary>The name's <see cref="Data.NameKey"/>, kept in step with the name by its setter.</summary>
+    string NameKey { get; }
 }

@@ -78,6 +78,29 @@ internal static class JobTestExtensions
     public static int CountStagedFiles(this NookApiFactory factory) =>
         Directory.GetFiles(Path.Combine(factory.DataPath, "staging")).Length;
 
+    /// <summary>
+    /// Waits until the app's staging folder holds this many files. A succeeded job's staged file goes a moment after
+    /// the job reads as succeeded, so a count after success is waited for rather than read once. Fails the test after
+    /// a timeout.
+    /// </summary>
+    public static async Task WaitForStagedFilesAsync(this NookApiFactory factory, int count)
+    {
+        var giveUpAt = DateTimeOffset.UtcNow + Timeout;
+        while (true)
+        {
+            var staged = factory.CountStagedFiles();
+            if (staged == count)
+            {
+                return;
+            }
+
+            Assert.True(
+                DateTimeOffset.UtcNow < giveUpAt,
+                $"Staging held {staged} files after {Timeout.TotalSeconds} seconds, not {count}.");
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+    }
+
     /// <summary>Reads the job until it has succeeded or failed, and returns it then. Fails the test after a timeout.</summary>
     public static async Task<JobDetailResponse> WaitForJobAsync(this HttpClient client, Guid id)
     {

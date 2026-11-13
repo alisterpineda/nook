@@ -1,15 +1,18 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Nook.Api.Data;
-using Nook.Api.Ingest.ExternalIds;
 using Nook.Api.Jobs;
 using Nook.Api.Storage;
 
 namespace Nook.Api.Ingest;
 
 /// <summary>
-/// Ingests one staged file into a library. The staged file stays where it is while the job can still be retried, and
-/// every row the job makes is saved at once in its last step, after the file is filed.
+/// Ingests one staged file into a library. The staged file is the run's input and outlives the run: filing copies
+/// it into the library, and it is deleted only once the job is recorded as succeeded, so a run that fails or whose
+/// worker dies at any point can run again from the top. The last step finds or makes the rows, files a copy and
+/// saves every row at once, all under <see cref="IngestLock"/>, so ingests running side by side take turns there and
+/// see each other's rows.
 /// </summary>
 public sealed class IngestJob : JobType
 {
@@ -23,6 +26,7 @@ public sealed class IngestJob : JobType
         var storage = services.GetRequiredService<NookStorage>();
         var handlers = services.GetServices<IFormatHandler>().ToList();
         var db = services.GetRequiredService<NookDbContext>();
+        var matcher = new WorkMatcher(db);
         var logger = services.GetRequiredService<ILogger<IngestJob>>();
         var stagedFile = storage.StagedFile(payload.StagedName);
         var run = new JobRun();
@@ -34,9 +38,11 @@ public sealed class IngestJob : JobType
         BookMetadata? metadata = null;
         BookCover? cover = null;
         Library? library = null;
-        Work? work = null;
-        var joined = false;
-        string? filingAuthor = null;
+        WorkDraft? draft = null;
+
+        // The item the last step built and went on to save. It outlives a pass of the retry strategy, so a pass after
+        // a commit that landed but reported a failure finds the item saved instead of filing the book again.
+        Guid? builtItemId = null;
 
         return run
             .AddStep("identify-format", async cancellationToken =>
@@ -64,19 +70,11 @@ public sealed class IngestJob : JobType
                 sha256 = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
                 size = stream.Length;
 
-                // The same bytes already in this library: the oldest item holding them stands for the upload.
-                var hash = sha256;
-                var existing = await (
-                    from part in db.Parts
-                    join item in db.Items on part.ItemId equals item.Id
-                    join existingWork in db.Works on item.WorkId equals existingWork.Id
-                    where part.Sha256 == hash && existingWork.LibraryId == payload.LibraryId
-                    orderby item.CreatedAt, item.Id
-                    select (Guid?)item.Id).FirstOrDefaultAsync(cancellationToken);
-                if (existing is { } itemId)
+                // The same bytes already in this library: the oldest item holding them stands for the upload. A copy
+                // being filed at the same moment is caught again under the lock in the last step. A run whose worker
+                // died after saving ends here too, as a duplicate of the item it made.
+                if (await matcher.FindItemWithHashAsync(payload.LibraryId, sha256, cancellationToken) is { } itemId)
                 {
-                    stream.Close();
-                    File.Delete(stagedFile);
                     run.Complete(new IngestResult(IngestOutcome.Duplicate, itemId));
                 }
             })
@@ -90,69 +88,177 @@ public sealed class IngestJob : JobType
             })
             .AddStep("match-work", async cancellationToken =>
             {
+                // What the file says the work is. Finding or making its rows waits for the lock in the next step.
                 library = await db.Libraries.SingleOrDefaultAsync(l => l.Id == payload.LibraryId, cancellationToken)
                     ?? throw new InvalidOperationException("The library the file was uploaded to no longer exists.");
-                work = await FindWorkByIsbnAsync(db, library, metadata!, cancellationToken);
-                joined = work is not null;
-                if (work is null)
-                {
-                    (work, filingAuthor) = await BuildWorkAsync(db, library, metadata!, payload.FileName, cancellationToken);
-                }
+                draft = WorkDraft.From(metadata!, payload.FileName);
             })
-            .AddStep("file-item", async cancellationToken =>
-            {
-                // A copy of a work already here goes beside its other files, under the work's own title, and takes a
-                // numbered name rather than replace a file of the same name. A new work gets a folder of its own,
-                // numbered when another work already has the one its author and title make.
-                var book = new Filing.StagedBook(stagedFile, work!.Title, handler!.Extension, library!, storage);
-                var filed = joined
-                    ? Filing.MoveBesideOthers(book, await FindWorkFolderAsync(db, work, cancellationToken))
-                    : Filing.MoveIntoNewFolder(book, Filing.WorkFolder(filingAuthor, work.Title));
-
-                string? coverPath = null;
-                try
+            .AddStep("file-item", cancellationToken =>
+                // The database is set to retry, so the transaction has to run inside its retry strategy, and the
+                // whole step is one pass of it.
+                db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
                 {
-                    // A work keeps the cover it has; only one without a cover takes the file's.
-                    if (cover is not null && string.IsNullOrEmpty(work.CoverHash))
+                    // A retry starts from what the database holds, not from what a failed pass loaded or added.
+                    db.ChangeTracker.Clear();
+                    if (builtItemId is { } savedId && await IsItemSavedAsync(db, savedId, cancellationToken))
                     {
-                        var folder = Path.GetDirectoryName(filed.FullPath)!;
-                        var path = Path.Combine(folder, "cover" + cover.Extension);
-                        await using (var stream = NookStorage.CreateFile(path))
-                        {
-                            coverPath = path;
-                            await stream.WriteAsync(cover.Bytes, cancellationToken);
-                        }
-
-                        work.CoverHash = Convert.ToHexStringLower(SHA256.HashData(cover.Bytes));
+                        run.SetResult(new IngestResult(IngestOutcome.Created, savedId));
+                        return;
                     }
 
-                    var item = new Item { WorkId = work.Id, Format = handler.Format };
-                    db.Items.Add(item);
-                    db.Parts.Add(new Part
-                    {
-                        ItemId = item.Id,
-                        Order = 0,
-                        Path = filed.RelativePath,
-                        MediaType = handler.MediaType,
-                        Size = size,
-                        Sha256 = sha256!,
-                    });
+                    await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                    await IngestLock.TakeAsync(db, cancellationToken);
+                    await FileUnderLockAsync(transaction, cancellationToken);
+                }));
 
-                    await db.SaveChangesAsync(cancellationToken);
-                    run.SetResult(new IngestResult(IngestOutcome.Created, item.Id));
-                }
-                catch
+        // Runs with the lock held, so no other ingest matches or saves until this one commits or rolls back.
+        async Task FileUnderLockAsync(IDbContextTransaction transaction, CancellationToken cancellationToken)
+        {
+            // Two copies of one file uploaded together both pass check-duplicate, so it is asked again here.
+            if (await matcher.FindItemWithHashAsync(library!.Id, sha256!, cancellationToken) is { } existingId)
+            {
+                await transaction.CommitAsync(CancellationToken.None);
+                run.Complete(new IngestResult(IngestOutcome.Duplicate, existingId));
+                return;
+            }
+
+            var work = await matcher.FindByIsbnAsync(library, draft!, cancellationToken);
+            var joined = work is not null;
+            string? filingAuthor = null;
+            if (work is null)
+            {
+                (work, filingAuthor) = await matcher.BuildAsync(library, draft!, cancellationToken);
+            }
+
+            // A copy of a work already here goes beside its other files, under the work's own title, and takes a
+            // numbered name rather than replace a file a part points at. A new work gets a folder of its own,
+            // numbered when a part of another work is already in the one its author and title make. A file or folder
+            // no part points at, such as one a run that died left, is free. The parts are read from the author folder
+            // down, which holds the work folder and its numbered siblings.
+            var workFolder = joined
+                ? await matcher.FindFolderAsync(work, cancellationToken)
+                : Filing.WorkFolder(filingAuthor, work.Title);
+            var claimedPaths = await matcher.ClaimedPathsAsync(library, Filing.FolderOf(workFolder), cancellationToken);
+            var book = new Filing.StagedBook(stagedFile, work.Title, handler!.Extension, library, storage, claimedPaths);
+            var filed = joined ? Filing.CopyBesideOthers(book, workFolder) : Filing.CopyIntoNewFolder(book, workFolder);
+
+            var item = new Item { WorkId = work.Id, Format = handler.Format };
+            string? coverPath = null;
+            var saving = false;
+            try
+            {
+                // A work keeps the cover it has; only one without a cover, as read under the lock, takes the file's,
+                // over any cover of the same name a run that died left there.
+                if (cover is not null && string.IsNullOrEmpty(work.CoverHash))
                 {
-                    // Nothing was saved, so the file goes back to staging for a retry, and neither a cover nor the
-                    // work's own folder, when this run made it, is left unclaimed.
-                    Undo(filed, stagedFile, coverPath, logger);
-                    throw;
+                    var folder = Path.GetDirectoryName(filed.FullPath)!;
+                    var path = Path.Combine(folder, "cover" + cover.Extension);
+                    await using (var stream = NookStorage.ReplaceFile(path))
+                    {
+                        coverPath = path;
+                        await stream.WriteAsync(cover.Bytes, cancellationToken);
+                    }
+
+                    work.CoverHash = Convert.ToHexStringLower(SHA256.HashData(cover.Bytes));
                 }
-            });
+
+                db.Items.Add(item);
+                db.Parts.Add(new Part
+                {
+                    ItemId = item.Id,
+                    Order = 0,
+                    Path = filed.RelativePath,
+                    MediaType = handler.MediaType,
+                    Size = size,
+                    Sha256 = sha256!,
+                });
+
+                builtItemId = item.Id;
+                saving = true;
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(CancellationToken.None);
+                run.SetResult(new IngestResult(IngestOutcome.Created, item.Id));
+            }
+            catch
+            {
+                // The staged file is still there for a retry or the strategy's next pass, so only the copy is at
+                // stake. A failure before the save leaves the lock held, and the copy goes at once.
+                if (saving)
+                {
+                    await UndoUnlessSavedAsync(transaction, item.Id, filed, coverPath);
+                }
+                else
+                {
+                    Undo(filed, coverPath, logger);
+                }
+
+                throw;
+            }
+        }
+
+        // A save or commit that throws may still have landed, and a connection that broke has already let go of the
+        // lock, so another ingest may have filed over the copy and claimed its path. The lock is given up for good
+        // and taken again on a connection of its own; under it the copy goes only when this run's item is absent and
+        // no part points at the path. When nothing says, the copy stays, unclaimed, for a later run to file over.
+        async Task UndoUnlessSavedAsync(
+            IDbContextTransaction transaction, Guid itemId, Filing.FiledBook filed, string? coverPath)
+        {
+            try
+            {
+                try
+                {
+                    await transaction.RollbackAsync(CancellationToken.None);
+                }
+                catch (Exception exception)
+                {
+                    // A transaction that has ended, by a commit that landed or a lost connection, holds no lock.
+                    logger.LogDebug(exception, "The failed ingest transaction had already ended.");
+                }
+
+                await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
+                var fresh = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+                await fresh.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                {
+                    await using var check = await fresh.Database.BeginTransactionAsync(CancellationToken.None);
+                    await IngestLock.TakeAsync(fresh, CancellationToken.None);
+                    if (await IsItemSavedAsync(fresh, itemId, CancellationToken.None))
+                    {
+                        return;
+                    }
+
+                    var claimedPaths = await new WorkMatcher(fresh).ClaimedPathsAsync(
+                        library!, Filing.FolderOf(filed.RelativePath), CancellationToken.None);
+                    if (!Filing.IsClaimed(claimedPaths, filed.RelativePath))
+                    {
+                        Undo(filed, coverPath, logger);
+                    }
+                });
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    exception,
+                    "Could not tell whether item {ItemId} was saved, so its filed copy is left in place.",
+                    itemId);
+            }
+        }
+
+        static Task<bool> IsItemSavedAsync(NookDbContext context, Guid itemId, CancellationToken cancellationToken) =>
+            context.Items.AnyAsync(i => i.Id == itemId, cancellationToken);
     }
 
+    /// <summary>
+    /// Deletes the staged file once the job is recorded as succeeded, whether it made an item or found a duplicate:
+    /// the job can no longer run again, so nothing needs the file.
+    /// </summary>
+    public override Task OnSucceededAsync(string payloadJson, IServiceProvider services) =>
+        DeleteStagedFileAsync(payloadJson, services);
+
     /// <summary>Deletes the staged file, which only this job used.</summary>
-    public override Task OnDeletedAsync(string payloadJson, IServiceProvider services)
+    public override Task OnDeletedAsync(string payloadJson, IServiceProvider services) =>
+        DeleteStagedFileAsync(payloadJson, services);
+
+    private static Task DeleteStagedFileAsync(string payloadJson, IServiceProvider services)
     {
         var payload = JobJson.Deserialize<IngestPayload>(payloadJson);
         File.Delete(services.GetRequiredService<NookStorage>().StagedFile(payload.StagedName));
@@ -160,233 +266,19 @@ public sealed class IngestJob : JobType
     }
 
     /// <summary>
-    /// The oldest work in the library that holds one of the file's ISBNs, tracked so filing can give it a cover it
-    /// lacks, or null when none does or the file gives no valid ISBN.
+    /// Deletes the copy this run filed and the cover it wrote, and removes the work's folder when this run made it and
+    /// that leaves it empty; an author folder made on the way stays. The staged file is not touched. A failure here is
+    /// logged, so the error that caused the undo is the one reported.
     /// </summary>
-    private static async Task<Work?> FindWorkByIsbnAsync(
-        NookDbContext db, Library library, BookMetadata metadata, CancellationToken cancellationToken)
-    {
-        var isbns = metadata.Identifiers
-            .Where(i => i.Scheme == ExternalIdRegistry.Isbn)
-            .Select(i => ExternalIdRegistry.Normalise(ExternalIdRegistry.Isbn, i.Value))
-            .OfType<string>()
-            .Distinct()
-            .ToList();
-        if (isbns.Count == 0)
-        {
-            return null;
-        }
-
-        return await db.Works
-            .Where(w => w.LibraryId == library.Id
-                && w.ExternalIds.Any(e => e.Scheme == ExternalIdRegistry.Isbn && isbns.Contains(e.Value)))
-            .OrderBy(w => w.CreatedAt)
-            .ThenBy(w => w.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// The <c>/</c>-separated folder, relative to the library's folder, that holds the work's earliest part. A work
-    /// with no part yet gets the folder its own title and first author make.
-    /// </summary>
-    private static async Task<string> FindWorkFolderAsync(NookDbContext db, Work work, CancellationToken cancellationToken)
-    {
-        var earliest = await (
-            from part in db.Parts
-            join item in db.Items on part.ItemId equals item.Id
-            where item.WorkId == work.Id
-            orderby part.CreatedAt, part.Id
-            select part.Path).FirstOrDefaultAsync(cancellationToken);
-        if (earliest is not null)
-        {
-            return Filing.FolderOf(earliest);
-        }
-
-        var author = await (
-            from contributor in db.WorkContributors
-            join person in db.People on contributor.PersonId equals person.Id
-            where contributor.WorkId == work.Id && contributor.Role == ContributorRole.Author
-            orderby contributor.Order, contributor.Id
-            select person.Name).FirstOrDefaultAsync(cancellationToken);
-        return Filing.WorkFolder(author, work.Title);
-    }
-
-    /// <summary>
-    /// Builds a new work in the library from what the file says, with its people, series, tags and external ids, and
-    /// adds it all to the context unsaved. A person, series or tag whose name differs from one already stored only in
-    /// case or spacing is that one, left as it is; any other is new, stored under its name tidied.
-    /// </summary>
-    private static async Task<(Work Work, string? FilingAuthor)> BuildWorkAsync(
-        NookDbContext db, Library library, BookMetadata metadata, string fileName, CancellationToken cancellationToken)
-    {
-        var title = metadata.Title ?? TitleFromFileName(fileName);
-        var work = new Work
-        {
-            LibraryId = library.Id,
-            Title = title,
-            SortTitle = metadata.SortTitle ?? title,
-            Description = metadata.Description,
-            Publisher = metadata.Publisher,
-            Language = metadata.Language,
-            PublicationDate = metadata.PublicationDate,
-        };
-
-        // Creators in a role Nook does not keep are left out, and those kept are numbered in file order without gaps.
-        // A creator the file names more than once is one person, who takes each role on the work once. A new person
-        // takes the sort name of the creator's first appearance.
-        var contributors = Contributors(metadata).ToList();
-        var people = await FindOrAddByNameAsync(
-            db.People,
-            contributors.Select(c => c.Creator.Name),
-            name => new Person
-            {
-                Name = NameKey.Tidy(name),
-                SortName = contributors.First(c => c.Creator.Name == name).Creator.SortName ?? NameKey.Tidy(name),
-            },
-            cancellationToken);
-        var roles = new HashSet<(Guid PersonId, ContributorRole Role)>();
-        string? filingAuthor = null;
-        var order = 0;
-        foreach (var (creator, role) in contributors)
-        {
-            var person = people[NameKey.Of(creator.Name)];
-            if (!roles.Add((person.Id, role)))
-            {
-                continue;
-            }
-
-            // The folder takes the first author's name as the person row has it, so one person has one folder.
-            if (role == ContributorRole.Author)
-            {
-                filingAuthor ??= person.Name;
-            }
-
-            work.Contributors.Add(new WorkContributor
-            {
-                WorkId = work.Id,
-                PersonId = person.Id,
-                Role = role,
-                Order = order++,
-            });
-        }
-
-        if (metadata.Series is { } bookSeries)
-        {
-            var series = await FindOrAddByNameAsync(
-                db.Series, [bookSeries.Name], name => new Series { Name = NameKey.Tidy(name) },
-                cancellationToken);
-            work.SeriesId = series[NameKey.Of(bookSeries.Name)].Id;
-            work.SeriesPosition = bookSeries.Position;
-        }
-
-        // A file that lists a subject more than once gets one tag for it.
-        var tags = await FindOrAddByNameAsync(
-            db.Tags, metadata.Subjects, name => new Tag { Name = NameKey.Tidy(name) }, cancellationToken);
-        foreach (var subject in metadata.Subjects.Select(NameKey.Of).Distinct())
-        {
-            work.Tags.Add(tags[subject]);
-        }
-
-        // An ISBN the registry rejects is left out, and an identifier the file repeats is stored once.
-        var externalIds = new HashSet<(string Scheme, string Value)>();
-        foreach (var identifier in metadata.Identifiers)
-        {
-            if (ExternalIdRegistry.Normalise(identifier.Scheme, identifier.Value) is { } value
-                && externalIds.Add((identifier.Scheme, value)))
-            {
-                work.ExternalIds.Add(new WorkExternalId { WorkId = work.Id, Scheme = identifier.Scheme, Value = value });
-            }
-        }
-
-        db.Works.Add(work);
-        return (work, filingAuthor);
-    }
-
-    /// <summary>
-    /// The row for each of the names, by name key: the oldest row whose name has that key, or a new one, made from
-    /// the first of the names with the key and added unsaved. The database narrows the rows by its own lowercasing
-    /// of their names, which can differ from the key's for a few letters, so the key is worked out again here and
-    /// decides.
-    /// </summary>
-    private static async Task<Dictionary<string, T>> FindOrAddByNameAsync<T>(
-        DbSet<T> rows, IEnumerable<string> names, Func<string, T> create, CancellationToken cancellationToken)
-        where T : Entity, INamed
-    {
-        var firstNames = new Dictionary<string, string>();
-        foreach (var name in names)
-        {
-            firstNames.TryAdd(NameKey.Of(name), name);
-        }
-
-        var keys = firstNames.Keys.ToList();
-        var candidates = keys.Count == 0
-            ? []
-            : await rows
-                .Where(row => keys.Contains(row.Name.ToLower()))
-                .ToListAsync(cancellationToken);
-        var byKey = candidates
-            .GroupBy(row => NameKey.Of(row.Name))
-            .ToDictionary(group => group.Key, group => group.MinBy(row => (row.CreatedAt, row.Id))!);
-        foreach (var (key, name) in firstNames)
-        {
-            if (!byKey.ContainsKey(key))
-            {
-                var row = create(name);
-                rows.Add(row);
-                byKey[key] = row;
-            }
-        }
-
-        return byKey;
-    }
-
-    /// <summary>The file's creators whose role Nook keeps, in file order, each with that role.</summary>
-    private static IEnumerable<(BookCreator Creator, ContributorRole Role)> Contributors(BookMetadata metadata) =>
-        from creator in metadata.Creators
-        let role = RoleOf(creator.Role)
-        where role is not null
-        select (creator, role.Value);
-
-    /// <summary>
-    /// The contributor role a MARC relator code stands for, compared ignoring case and surrounding spaces. No code
-    /// means an author; a code for a role Nook does not keep gives null.
-    /// </summary>
-    private static ContributorRole? RoleOf(string? code) =>
-        code?.Trim().ToLowerInvariant() switch
-        {
-            null or "" or "aut" => ContributorRole.Author,
-            "trl" => ContributorRole.Translator,
-            "edt" => ContributorRole.Editor,
-            "nrt" => ContributorRole.Narrator,
-            _ => null,
-        };
-
-    /// <summary>
-    /// The title of a book whose file gives none: the uploaded name without any folder or extension, or
-    /// <c>Untitled</c> when nothing is left. The name comes from the client, so a folder in it, written with either
-    /// kind of slash, is dropped whatever the server's own separator.
-    /// </summary>
-    private static string TitleFromFileName(string fileName)
-    {
-        var name = fileName[(fileName.LastIndexOfAny(['/', '\\']) + 1)..];
-        var title = Path.GetFileNameWithoutExtension(name).Trim();
-        return title.Length == 0 ? Filing.Untitled : title;
-    }
-
-    /// <summary>
-    /// Moves the filed book back to staging, deletes the cover this run wrote, and removes the work's folder when this
-    /// run made it and that leaves it empty; an author folder made on the way stays. A failure here is logged, so the error that caused the undo is the one reported.
-    /// </summary>
-    private static void Undo(Filing.FiledBook filed, string stagedFile, string? coverPath, ILogger logger)
+    private static void Undo(Filing.FiledBook filed, string? coverPath, ILogger logger)
     {
         try
         {
-            File.Move(filed.FullPath, stagedFile);
+            File.Delete(filed.FullPath);
         }
         catch (Exception exception)
         {
-            logger.LogError(
-                exception, "Could not move {BookPath} back to staging at {StagedFile}.", filed.FullPath, stagedFile);
+            logger.LogError(exception, "Could not delete the filed copy {BookPath}.", filed.FullPath);
         }
 
         if (coverPath is not null)

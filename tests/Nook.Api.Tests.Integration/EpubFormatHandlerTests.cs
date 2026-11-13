@@ -132,7 +132,8 @@ public sealed class EpubFormatHandlerTests : IDisposable
             .WithTitle("The Left Hand of Darkness")
             .WithMeta("calibre:title_sort", "Left Hand of Darkness, The")
             .WithCreator("Ursula K. Le Guin", role: "aut", fileAs: "Le Guin, Ursula K.")
-            .WithCreator("Jane Translator", role: " TRL ", fileAs: "   ")
+            .WithCreator("Jane Translator", role: "trl", fileAs: "   ")
+            .WithCreator("Some Illustrator", role: "ill")
             .WithCreator("No Role")
             .Build());
 
@@ -141,9 +142,10 @@ public sealed class EpubFormatHandlerTests : IDisposable
         Assert.Equal("Left Hand of Darkness, The", metadata.SortTitle);
         Assert.Equal(
             [
-                new BookCreator("Ursula K. Le Guin", "aut", "Le Guin, Ursula K."),
-                new BookCreator("Jane Translator", "TRL", null),
-                new BookCreator("No Role", null, null),
+                new BookCreator("Ursula K. Le Guin", ContributorRole.Author, "Le Guin, Ursula K."),
+                new BookCreator("Jane Translator", ContributorRole.Translator, null),
+                new BookCreator("Some Illustrator", null, null),
+                new BookCreator("No Role", ContributorRole.Author, null),
             ],
             metadata.Creators);
     }
@@ -156,6 +158,7 @@ public sealed class EpubFormatHandlerTests : IDisposable
             .WithProperty("file-as", "Dispossessed, The", refines: "main-title")
             .WithCreator("Ursula K. Le Guin", role: "aut", fileAs: "Le Guin, Ursula K.")
             .WithCreator("Someone Reading", role: "nrt")
+            .WithCreator("Some Illustrator", role: "ill")
             .WithCreator("No Role", fileAs: "Role, No")
             .Build());
 
@@ -164,11 +167,29 @@ public sealed class EpubFormatHandlerTests : IDisposable
         Assert.Equal("Dispossessed, The", metadata.SortTitle);
         Assert.Equal(
             [
-                new BookCreator("Ursula K. Le Guin", "aut", "Le Guin, Ursula K."),
-                new BookCreator("Someone Reading", "nrt", null),
-                new BookCreator("No Role", null, "Role, No"),
+                new BookCreator("Ursula K. Le Guin", ContributorRole.Author, "Le Guin, Ursula K."),
+                new BookCreator("Someone Reading", ContributorRole.Narrator, null),
+                new BookCreator("Some Illustrator", null, null),
+                new BookCreator("No Role", ContributorRole.Author, "Role, No"),
             ],
             metadata.Creators);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task Role_code_is_read_ignoring_case_and_spaces(int version)
+    {
+        var path = await WriteAsync(new EpubBuilder(version)
+            .WithCreator("Jane Translator", role: " TRL ")
+            .WithCreator("Ed Itor", role: "Edt")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(
+            [ContributorRole.Translator, ContributorRole.Editor],
+            metadata.Creators.Select(creator => creator.Role));
     }
 
     [Fact]
@@ -232,6 +253,45 @@ public sealed class EpubFormatHandlerTests : IDisposable
     }
 
     [Theory]
+    [InlineData("0101-01-01T00:00:00+00:00")]
+    [InlineData("0101-01-01")]
+    public async Task Calibre_undefined_date_is_left_empty(string date)
+    {
+        var path = await WriteAsync(new EpubBuilder().WithTitle("Book").WithDate(date).Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Null(metadata.PublicationDate);
+    }
+
+    [Fact]
+    public async Task Early_real_date_is_kept()
+    {
+        var path = await WriteAsync(new EpubBuilder().WithTitle("Book").WithDate("0868-05-11").Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(new DateOnly(868, 5, 11), metadata.PublicationDate);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task Identifier_scheme_is_lowercased_whatever_its_case_in_the_file(int version)
+    {
+        var path = await WriteAsync(new EpubBuilder(version)
+            .WithIdentifier("9780441478125", scheme: "ISBN")
+            .WithIdentifier("URN:ISBN:0441478123")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(
+            [new BookIdentifier("isbn", "9780441478125"), new BookIdentifier("isbn", "0441478123")],
+            metadata.Identifiers);
+    }
+
+    [Theory]
     [InlineData(2)]
     [InlineData(3)]
     public async Task Identifiers_are_read_with_their_scheme_and_without_a_prefix_naming_it(int version)
@@ -280,6 +340,46 @@ public sealed class EpubFormatHandlerTests : IDisposable
         var path = await WriteAsync(new EpubBuilder(version: 3)
             .WithTitle("The Fifth Season")
             .WithCollection("The Broken Earth", "1")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(new BookSeries("The Broken Earth", 1m), metadata.Series);
+    }
+
+    [Fact]
+    public async Task Collection_typed_as_a_set_is_not_a_series()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithTitle("The Fifth Season")
+            .WithCollection("Hugo Award Winners", "3", type: "set")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Null(metadata.Series);
+    }
+
+    [Fact]
+    public async Task Collection_typed_as_a_series_is_one()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithTitle("The Fifth Season")
+            .WithCollection("The Broken Earth", "1", type: " Series ")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(new BookSeries("The Broken Earth", 1m), metadata.Series);
+    }
+
+    [Fact]
+    public async Task Series_collection_is_found_after_a_set()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithTitle("The Fifth Season")
+            .WithCollection("Hugo Award Winners", "3", type: "set")
+            .WithCollection("The Broken Earth", "1", type: "series")
             .Build());
 
         var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
@@ -410,6 +510,141 @@ public sealed class EpubFormatHandlerTests : IDisposable
         await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadMetadataAsync(path, CancellationToken));
         await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadCoverAsync(path, CancellationToken));
     }
+
+    [Fact]
+    public async Task Cover_over_the_size_cap_reads_as_no_cover()
+    {
+        // Zero bytes compress to almost nothing, so the archive stays small while the cover inflates past the cap.
+        var path = await WriteAsync(new EpubBuilder()
+            .WithTitle("Book")
+            .WithCover(new byte[21 * Mebibyte])
+            .Build());
+
+        Assert.Null(await _handler.ReadCoverAsync(path, CancellationToken));
+        Assert.Equal("Book", (await _handler.ReadMetadataAsync(path, CancellationToken)).Title);
+    }
+
+    [Fact]
+    public async Task Cover_at_the_size_cap_is_read()
+    {
+        var path = await WriteAsync(new EpubBuilder()
+            .WithTitle("Book")
+            .WithCover(new byte[20 * Mebibyte])
+            .Build());
+
+        var cover = await _handler.ReadCoverAsync(path, CancellationToken);
+
+        Assert.NotNull(cover);
+        Assert.Equal(20 * Mebibyte, cover.Bytes.Length);
+        Assert.True(cover.Bytes.AsSpan().IndexOfAnyExcept((byte)0) < 0, "Expected the cover's bytes as written.");
+    }
+
+    [Fact]
+    public async Task Oversized_encryption_file_is_unreadable()
+    {
+        // Only font obfuscation, which is not DRM: the size alone makes the book unreadable.
+        var path = await WriteAsync(new EpubBuilder()
+            .WithTitle("Book")
+            .WithFile("META-INF/encryption.xml", $"""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+                  <!--{Padding(Mebibyte)}-->
+                  <enc:EncryptedData>
+                    <enc:EncryptionMethod Algorithm="{EpubBuilder.IdpfFontObfuscation}"/>
+                    <enc:CipherData><enc:CipherReference URI="OEBPS/chapter.xhtml"/></enc:CipherData>
+                  </enc:EncryptedData>
+                </encryption>
+                """)
+            .Build());
+
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadMetadataAsync(path, CancellationToken));
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadCoverAsync(path, CancellationToken));
+    }
+
+    [Fact]
+    public async Task Oversized_container_file_is_unreadable()
+    {
+        var path = await WriteAsync(PadEntry(new EpubBuilder().WithTitle("Book"), "META-INF/container.xml", Mebibyte));
+
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadMetadataAsync(path, CancellationToken));
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadCoverAsync(path, CancellationToken));
+    }
+
+    [Fact]
+    public async Task Oversized_package_file_is_unreadable()
+    {
+        var path = await WriteAsync(PadEntry(new EpubBuilder().WithTitle("Book"), "OEBPS/content.opf", 10 * Mebibyte));
+
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadMetadataAsync(path, CancellationToken));
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadCoverAsync(path, CancellationToken));
+    }
+
+    [Fact]
+    public async Task Oversized_package_file_under_another_extension_is_unreadable()
+    {
+        // The container names the package file, so its extension is the book's to choose.
+        var builder = new EpubBuilder().WithTitle("Book");
+        string package, container;
+        using (var archive = new ZipArchive(new MemoryStream(builder.Build()), ZipArchiveMode.Read))
+        {
+            using var packageReader = new StreamReader(archive.GetEntry("OEBPS/content.opf")!.Open(), Encoding.UTF8);
+            using var containerReader = new StreamReader(archive.GetEntry("META-INF/container.xml")!.Open(), Encoding.UTF8);
+            package = packageReader.ReadToEnd();
+            container = containerReader.ReadToEnd();
+        }
+
+        var path = await WriteAsync(builder
+            .WithFile("META-INF/container.xml", container.Replace("content.opf", "content.pkg"))
+            .WithFile("OEBPS/content.pkg", $"{package}\n<!--{Padding(10 * Mebibyte)}-->\n")
+            .Build());
+
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadMetadataAsync(path, CancellationToken));
+    }
+
+    [Fact]
+    public async Task Package_file_under_another_extension_is_read()
+    {
+        var builder = new EpubBuilder().WithTitle("Book");
+        string package, container;
+        using (var archive = new ZipArchive(new MemoryStream(builder.Build()), ZipArchiveMode.Read))
+        {
+            using var packageReader = new StreamReader(archive.GetEntry("OEBPS/content.opf")!.Open(), Encoding.UTF8);
+            using var containerReader = new StreamReader(archive.GetEntry("META-INF/container.xml")!.Open(), Encoding.UTF8);
+            package = packageReader.ReadToEnd();
+            container = containerReader.ReadToEnd();
+        }
+
+        var path = await WriteAsync(builder
+            .WithFile("META-INF/container.xml", container.Replace("content.opf", "content.pkg"))
+            .WithFile("OEBPS/content.pkg", package)
+            .Build());
+
+        Assert.Equal("Book", (await _handler.ReadMetadataAsync(path, CancellationToken)).Title);
+    }
+
+    [Theory]
+    [InlineData(2, "OEBPS/toc.ncx")]
+    [InlineData(3, "OEBPS/nav.xhtml")]
+    public async Task Oversized_navigation_file_is_unreadable(int version, string entry)
+    {
+        var path = await WriteAsync(PadEntry(new EpubBuilder(version).WithTitle("Book"), entry, 10 * Mebibyte));
+
+        await Assert.ThrowsAsync<UnreadableBookException>(() => _handler.ReadMetadataAsync(path, CancellationToken));
+    }
+
+    private const int Mebibyte = 1024 * 1024;
+
+    /// <summary>The builder's EPUB with an XML comment appended to one of its entries, taking it past the size given.</summary>
+    private static byte[] PadEntry(EpubBuilder builder, string entry, int size)
+    {
+        using var archive = new ZipArchive(new MemoryStream(builder.Build()), ZipArchiveMode.Read);
+        using var reader = new StreamReader(archive.GetEntry(entry)!.Open(), Encoding.UTF8);
+        var content = reader.ReadToEnd();
+        return builder.WithFile(entry, $"{content}\n<!--{Padding(size)}-->\n").Build();
+    }
+
+    /// <summary>Spaces enough on their own to exceed the size given, which compress to almost nothing.</summary>
+    private static string Padding(int size) => new(' ', size + 1);
 
     private async Task<string> WriteAsync(byte[] bytes, string fileName = "book.epub")
     {

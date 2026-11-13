@@ -28,11 +28,26 @@ public class ExternalIdRegistryTests
         Assert.Null(ExternalIdRegistry.Normalise("isbn", value));
     }
 
-    [Fact]
-    public void Scheme_is_matched_whatever_its_case()
+    [Theory]
+    [InlineData("0000000000")]
+    [InlineData("1111111111")]
+    [InlineData("0-000-00000-0")]
+    [InlineData("0000000000000")]
+    public void Placeholder_isbn_is_rejected(string value)
     {
-        Assert.Equal("9780441478125", ExternalIdRegistry.Normalise("ISBN", "0441478123"));
-        Assert.Null(ExternalIdRegistry.Normalise("Isbn", "9780441478126"));
+        Assert.Null(ExternalIdRegistry.Normalise("isbn", value));
+    }
+
+    [Fact]
+    public void Thirteen_digits_that_are_not_a_book_number_are_rejected()
+    {
+        Assert.Null(ExternalIdRegistry.Normalise("isbn", "4006381333931"));
+    }
+
+    [Fact]
+    public void Isbn_with_a_979_prefix_is_kept()
+    {
+        Assert.Equal("9791032305690", ExternalIdRegistry.Normalise("isbn", "979-10-323-0569-0"));
     }
 
     [Theory]

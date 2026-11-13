@@ -34,11 +34,9 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var job = await client.IngestAsync(epub, "ancillary.epub", library.Id);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
-        Assert.Equal(
-            ["identify-format", "check-duplicate", "extract-metadata", "extract-cover", "match-work", "file-item"],
-            job.Steps.Select(s => s.Name));
+        Assert.Equal(IngestTestExtensions.StepNames, job.Steps.Select(s => s.Name));
         Assert.All(job.Steps, s => Assert.Equal(JobStepStatus.Succeeded, s.Status));
-        var result = ReadResult(job);
+        var result = job.ReadIngestResult();
         Assert.Equal(IngestOutcome.Created, result.Outcome);
 
         var work = await GetOnlyWorkAsync(client, library);
@@ -155,12 +153,12 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var secondJob = await client.IngestAsync(second, "neuromancer-reissue.epub", library.Id);
 
         Assert.Equal(JobStatus.Succeeded, secondJob.Status);
-        var result = ReadResult(secondJob);
+        var result = secondJob.ReadIngestResult();
         Assert.Equal(IngestOutcome.Created, result.Outcome);
         var work = await GetOnlyWorkAsync(client, library);
-        Assert.Equal([ReadResult(firstJob).ItemId, result.ItemId], work.Items.Select(i => i.Id));
+        Assert.Equal([firstJob.ReadIngestResult().ItemId, result.ItemId], work.Items.Select(i => i.Id));
         Assert.Equal([first.Length, second.Length], work.Items.Select(i => Assert.Single(i.Parts).Size));
-        Assert.Equal((1, 2, 2), await CountRowsAsync(library));
+        Assert.Equal((1, 2, 2), await factory.CountRowsAsync(library));
     }
 
     [Fact]
@@ -194,7 +192,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
                 "Books/William Gibson/Count Zero/Count Zero (2).epub",
                 "Books/William Gibson/Count Zero/Count Zero (3).epub",
             ],
-            await ReadPartPathsAsync(library));
+            await factory.ReadPartPathsAsync(library));
     }
 
     [Fact]
@@ -210,10 +208,10 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var first = await client.IngestAsync(epub, "mona-lisa.epub", one.Id);
         var second = await client.IngestAsync(epub, "mona-lisa.epub", other.Id);
 
-        Assert.Equal(IngestOutcome.Created, ReadResult(first).Outcome);
-        Assert.Equal(IngestOutcome.Created, ReadResult(second).Outcome);
-        Assert.Equal((1, 1, 1), await CountRowsAsync(one));
-        Assert.Equal((1, 1, 1), await CountRowsAsync(other));
+        Assert.Equal(IngestOutcome.Created, first.ReadIngestResult().Outcome);
+        Assert.Equal(IngestOutcome.Created, second.ReadIngestResult().Outcome);
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(one));
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(other));
         var inOne = await GetOnlyWorkAsync(client, one);
         var inOther = await GetOnlyWorkAsync(client, other);
         Assert.NotEqual(inOne.Id, inOther.Id);
@@ -341,8 +339,8 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var job = await client.IngestAsync(epub, "solaris.epub", library.Id);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
-        Assert.Equal((1, 1, 1), await CountRowsAsync(library));
-        Assert.Equal(["Books/Stanisław Lem/Solaris/Solaris.epub"], await ReadPartPathsAsync(library));
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(library));
+        Assert.Equal(["Books/Stanisław Lem/Solaris/Solaris.epub"], await factory.ReadPartPathsAsync(library));
         Assert.Equal(epub, await File.ReadAllBytesAsync(
             factory.LibraryPath(library, "Books", "Stanisław Lem", "Solaris", "Solaris.epub"),
             TestContext.Current.CancellationToken));
@@ -368,23 +366,23 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var secondJob = await client.IngestAsync(second, "peripheral-other.epub", library.Id);
 
         Assert.Equal(JobStatus.Succeeded, secondJob.Status);
-        Assert.Equal(IngestOutcome.Created, ReadResult(secondJob).Outcome);
+        Assert.Equal(IngestOutcome.Created, secondJob.ReadIngestResult().Outcome);
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-            var itemIds = new[] { ReadResult(firstJob).ItemId, ReadResult(secondJob).ItemId };
+            var itemIds = new[] { firstJob.ReadIngestResult().ItemId, secondJob.ReadIngestResult().ItemId };
             var workIds = await db.Items.Where(i => itemIds.Contains(i.Id)).Select(i => i.WorkId)
                 .Distinct().CountAsync(TestContext.Current.CancellationToken);
             Assert.Equal(2, workIds);
         }
 
-        Assert.Equal((2, 2, 2), await CountRowsAsync(library));
+        Assert.Equal((2, 2, 2), await factory.CountRowsAsync(library));
         Assert.Equal(
             [
                 "Books/William Gibson/The Peripheral/The Peripheral.epub",
                 "Books/William Gibson/The Peripheral (2)/The Peripheral.epub",
             ],
-            await ReadPartPathsAsync(library));
+            await factory.ReadPartPathsAsync(library));
         var cancellationToken = TestContext.Current.CancellationToken;
         var firstFolder = factory.LibraryPath(library, "Books", "William Gibson", "The Peripheral");
         var secondFolder = factory.LibraryPath(library, "Books", "William Gibson", "The Peripheral (2)");
@@ -393,6 +391,27 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(second, await File.ReadAllBytesAsync(Path.Combine(secondFolder, "The Peripheral.epub"), cancellationToken));
         Assert.Equal(otherCover, await File.ReadAllBytesAsync(Path.Combine(secondFolder, "cover.png"), cancellationToken));
         Assert.Equal(["The Peripheral.epub", "cover.png"], Directory.GetFiles(firstFolder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Two_epubs_sharing_a_placeholder_isbn_become_two_works()
+    {
+        var library = await factory.AddLibraryAsync();
+        var first = new EpubBuilder().WithTitle("Burning Chrome").WithCreator("William Gibson")
+            .WithIdentifier("0000000000", scheme: "isbn")
+            .Build();
+        var second = new EpubBuilder().WithTitle("Zero History").WithCreator("William Gibson")
+            .WithIdentifier("0000000000", scheme: "isbn")
+            .Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "burning-chrome.epub", library.Id)).Status);
+        Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "zero-history.epub", library.Id)).Status);
+
+        var works = await GetWorksAsync(client, library);
+        Assert.Equal(["Burning Chrome", "Zero History"], works.Select(w => w.Title).Order(StringComparer.Ordinal));
+        Assert.All(works, w => Assert.DoesNotContain(w.ExternalIds, e => e.Scheme == "isbn"));
+        Assert.Equal((2, 2, 2), await factory.CountRowsAsync(library));
     }
 
     [Fact]
@@ -411,7 +430,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var work = await GetOnlyWorkAsync(client, library);
         Assert.Equal(title, work.Title);
         Assert.Equal(author, Assert.Single(work.Contributors).Name);
-        var path = Assert.Single(await ReadPartPathsAsync(library));
+        var path = Assert.Single(await factory.ReadPartPathsAsync(library));
         var segments = path.Split('/');
         Assert.Equal(4, segments.Length);
         Assert.Equal("Books", segments[0]);
@@ -440,7 +459,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var work = await GetOnlyWorkAsync(client, library);
         Assert.Equal("mystery-book", work.Title);
         Assert.Empty(work.Contributors);
-        Assert.Equal(["Books/Unknown Author/mystery-book/mystery-book.epub"], await ReadPartPathsAsync(library));
+        Assert.Equal(["Books/Unknown Author/mystery-book/mystery-book.epub"], await factory.ReadPartPathsAsync(library));
         Assert.True(File.Exists(factory.LibraryPath(library, "Books", "Unknown Author", "mystery-book", "mystery-book.epub")));
     }
 
@@ -457,14 +476,14 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
         Assert.Equal("stray-book", (await GetOnlyWorkAsync(client, library)).Title);
-        Assert.Equal(["Books/Unknown Author/stray-book/stray-book.epub"], await ReadPartPathsAsync(library));
+        Assert.Equal(["Books/Unknown Author/stray-book/stray-book.epub"], await factory.ReadPartPathsAsync(library));
     }
 
     [Fact]
     public async Task Sort_title_and_sort_name_come_from_the_file_when_it_has_them()
     {
         var library = await factory.AddLibraryAsync();
-        var author = $"Ursula K. Le Guin {UniqueSuffix()}";
+        var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder(version: 2)
             .WithTitle("The Left Hand of Darkness")
             .WithMeta("calibre:title_sort", "Left Hand of Darkness, The")
@@ -487,7 +506,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     public async Task Sort_title_and_sort_name_fall_back_to_the_display_values()
     {
         var library = await factory.AddLibraryAsync();
-        var author = $"Ursula K. Le Guin {UniqueSuffix()}";
+        var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder(version: 3)
             .WithTitle("The Dispossessed")
             .WithCreator(author, role: "aut")
@@ -523,15 +542,8 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(
             [("Bill Johnston", ContributorRole.Translator), ("Stanisław Lem", ContributorRole.Author)],
             work.Contributors.Select(c => (c.Name, c.Role)));
-        await using (var scope = factory.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-            var orders = await db.WorkContributors.Where(c => c.WorkId == work.Id).OrderBy(c => c.Order)
-                .Select(c => c.Order).ToListAsync(TestContext.Current.CancellationToken);
-            Assert.Equal([0, 1], orders);
-        }
-
-        Assert.Equal(["Books/Stanisław Lem/Solaris/Solaris.epub"], await ReadPartPathsAsync(library));
+        Assert.Equal([0, 1], await ReadContributorOrdersAsync(work.Id));
+        Assert.Equal(["Books/Stanisław Lem/Solaris/Solaris.epub"], await factory.ReadPartPathsAsync(library));
     }
 
     [Theory]
@@ -570,14 +582,14 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(JobStatus.Succeeded, job.Status);
         var work = await GetOnlyWorkAsync(client, library);
         Assert.Equal([("Ed Itor", ContributorRole.Editor)], work.Contributors.Select(c => (c.Name, c.Role)));
-        Assert.Equal(["Books/Unknown Author/Anthology/Anthology.epub"], await ReadPartPathsAsync(library));
+        Assert.Equal(["Books/Unknown Author/Anthology/Anthology.epub"], await factory.ReadPartPathsAsync(library));
     }
 
     [Fact]
     public async Task Authors_differing_only_in_case_or_spacing_share_one_person()
     {
         var library = await factory.AddLibraryAsync();
-        var suffix = UniqueSuffix();
+        var suffix = IngestTestExtensions.UniqueSuffix();
         var first = new EpubBuilder().WithTitle("The Word for World Is Forest")
             .WithCreator($"Ursula K. Le Guin {suffix}", fileAs: "Le Guin, Ursula K.")
             .Build();
@@ -595,16 +607,14 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(
             [($"Ursula K. Le Guin {suffix}", "Le Guin, Ursula K.")],
             await ReadPeopleAsync([personId]));
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        Assert.Equal(1, await db.People.CountAsync(p => p.Name.EndsWith(suffix), TestContext.Current.CancellationToken));
+        Assert.Equal(1, await factory.CountNamedAsync<Person>(suffix));
     }
 
     [Fact]
     public async Task Book_by_a_person_already_here_is_filed_under_that_persons_stored_name()
     {
         var library = await factory.AddLibraryAsync();
-        var suffix = UniqueSuffix();
+        var suffix = IngestTestExtensions.UniqueSuffix();
         var first = new EpubBuilder().WithTitle("Rocannon's World").WithCreator($"Ursula K. Le Guin {suffix}").Build();
         var second = new EpubBuilder().WithTitle("Planet of Exile").WithCreator($"ursula  k. le guin {suffix} ").Build();
         using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
@@ -617,14 +627,14 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
                 $"Books/Ursula K. Le Guin {suffix}/Rocannon's World/Rocannon's World.epub",
                 $"Books/Ursula K. Le Guin {suffix}/Planet of Exile/Planet of Exile.epub",
             ],
-            await ReadPartPathsAsync(library));
+            await factory.ReadPartPathsAsync(library));
     }
 
     [Fact]
     public async Task Series_differing_only_in_case_or_spacing_share_one_row()
     {
         var library = await factory.AddLibraryAsync();
-        var suffix = UniqueSuffix();
+        var suffix = IngestTestExtensions.UniqueSuffix();
         var first = new EpubBuilder().WithTitle("Rocannon's World").WithCalibreSeries($"Hainish Cycle {suffix}", "1").Build();
         var second = new EpubBuilder(version: 3).WithTitle("Planet of Exile")
             .WithCollection($" HAINISH   cycle {suffix}", "2")
@@ -640,16 +650,14 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             works.Select(w => (w.Title, w.Series!.Position)).Order());
         var series = Assert.Single(works.Select(w => (w.Series!.Id, w.Series.Name)).Distinct());
         Assert.Equal($"Hainish Cycle {suffix}", series.Name);
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        Assert.Equal(1, await db.Series.CountAsync(s => s.Name.EndsWith(suffix), TestContext.Current.CancellationToken));
+        Assert.Equal(1, await factory.CountNamedAsync<Series>(suffix));
     }
 
     [Fact]
     public async Task Tags_differing_only_in_case_or_spacing_share_one_row()
     {
         var library = await factory.AddLibraryAsync();
-        var suffix = UniqueSuffix();
+        var suffix = IngestTestExtensions.UniqueSuffix();
         var first = new EpubBuilder().WithTitle("The Lathe of Heaven").WithSubject($"Science Fiction {suffix}").Build();
         var second = new EpubBuilder().WithTitle("City of Illusions").WithSubject($"science\tFICTION  {suffix}").Build();
         using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
@@ -661,16 +669,86 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(2, works.Count);
         var tag = Assert.Single(works.Select(w => Assert.Single(w.Tags)).Distinct());
         Assert.Equal($"Science Fiction {suffix}", tag.Name);
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        Assert.Equal(1, await db.Tags.CountAsync(t => t.Name.EndsWith(suffix), TestContext.Current.CancellationToken));
+        Assert.Equal(1, await factory.CountNamedAsync<Tag>(suffix));
+    }
+
+    [Fact]
+    public async Task Author_stored_with_irregular_spacing_is_reused()
+    {
+        var library = await factory.AddLibraryAsync();
+        var suffix = IngestTestExtensions.UniqueSuffix();
+        var stored = new Person { Name = $"Ursula  K.  Le Guin {suffix}", SortName = "Le Guin, Ursula K." };
+        await SaveAsync(stored);
+        var epub = new EpubBuilder().WithTitle("The Telling").WithCreator($"ursula k. le guin {suffix}").Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "telling.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var work = await GetOnlyWorkAsync(client, library);
+        Assert.Equal(stored.Id, Assert.Single(work.Contributors).PersonId);
+        Assert.Equal(1, await factory.CountNamedAsync<Person>(suffix));
+    }
+
+    [Fact]
+    public async Task Author_with_letters_the_database_lowercases_differently_is_reused()
+    {
+        var library = await factory.AddLibraryAsync();
+        var suffix = IngestTestExtensions.UniqueSuffix();
+        var name = $"İhsan Oktay Anar {suffix}";
+        var first = new EpubBuilder().WithTitle("Puslu Kıtalar Atlası").WithCreator(name).Build();
+        var second = new EpubBuilder().WithTitle("Kitab-ül Hiyel").WithCreator(NameKey.Of(name)).Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "atlas.epub", library.Id)).Status);
+        Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "hiyel.epub", library.Id)).Status);
+
+        var works = await GetWorksAsync(client, library);
+        Assert.Single(works.Select(w => Assert.Single(w.Contributors).PersonId).Distinct());
+        Assert.Equal(1, await factory.CountNamedAsync<Person>(suffix));
+    }
+
+    [Fact]
+    public async Task Series_stored_with_irregular_spacing_is_reused()
+    {
+        var library = await factory.AddLibraryAsync();
+        var suffix = IngestTestExtensions.UniqueSuffix();
+        var stored = new Series { Name = $"Hainish  Cycle  {suffix}" };
+        await SaveAsync(stored);
+        var epub = new EpubBuilder().WithTitle("The Telling").WithCalibreSeries($"hainish cycle {suffix}", "8").Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "telling.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var work = await GetOnlyWorkAsync(client, library);
+        Assert.Equal(stored.Id, work.Series!.Id);
+        Assert.Equal(1, await factory.CountNamedAsync<Series>(suffix));
+    }
+
+    [Fact]
+    public async Task Tag_stored_with_irregular_spacing_is_reused()
+    {
+        var library = await factory.AddLibraryAsync();
+        var suffix = IngestTestExtensions.UniqueSuffix();
+        var stored = new Tag { Name = $"Science  Fiction  {suffix}" };
+        await SaveAsync(stored);
+        var epub = new EpubBuilder().WithTitle("The Telling").WithSubject($"science fiction {suffix}").Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "telling.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var work = await GetOnlyWorkAsync(client, library);
+        Assert.Equal(stored.Id, Assert.Single(work.Tags).Id);
+        Assert.Equal(1, await factory.CountNamedAsync<Tag>(suffix));
     }
 
     [Fact]
     public async Task Subject_repeated_in_one_file_is_one_tag()
     {
         var library = await factory.AddLibraryAsync();
-        var suffix = UniqueSuffix();
+        var suffix = IngestTestExtensions.UniqueSuffix();
         var epub = new EpubBuilder().WithTitle("The Eye of the Heron")
             .WithSubject($"  Space   Opera {suffix}")
             .WithSubject($"space opera {suffix}")
@@ -683,16 +761,14 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(JobStatus.Succeeded, job.Status);
         var work = await GetOnlyWorkAsync(client, library);
         Assert.Equal([$"Space Opera {suffix}", $"Utopia {suffix}"], work.Tags.Select(t => t.Name));
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        Assert.Equal(2, await db.Tags.CountAsync(t => t.Name.EndsWith(suffix), TestContext.Current.CancellationToken));
+        Assert.Equal(2, await factory.CountNamedAsync<Tag>(suffix));
     }
 
     [Fact]
     public async Task Creator_repeated_in_one_file_is_one_person_who_keeps_each_role_once()
     {
         var library = await factory.AddLibraryAsync();
-        var suffix = UniqueSuffix();
+        var suffix = IngestTestExtensions.UniqueSuffix();
         var epub = new EpubBuilder(version: 3).WithTitle("Self-Translated")
             .WithCreator($"Pat Writer {suffix}", role: "aut")
             .WithCreator($"PAT  writer {suffix}", role: "aut")
@@ -708,12 +784,8 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             [($"Pat Writer {suffix}", ContributorRole.Author), ($"Pat Writer {suffix}", ContributorRole.Translator)],
             work.Contributors.Select(c => (c.Name, c.Role)));
         Assert.Single(work.Contributors.Select(c => c.PersonId).Distinct());
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        Assert.Equal(1, await db.People.CountAsync(p => p.Name.EndsWith(suffix), TestContext.Current.CancellationToken));
-        var orders = await db.WorkContributors.Where(c => c.WorkId == work.Id).OrderBy(c => c.Order)
-            .Select(c => c.Order).ToListAsync(TestContext.Current.CancellationToken);
-        Assert.Equal([0, 1], orders);
+        Assert.Equal(1, await factory.CountNamedAsync<Person>(suffix));
+        Assert.Equal([0, 1], await ReadContributorOrdersAsync(work.Id));
     }
 
     [Fact]
@@ -732,7 +804,32 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             "The Left Hand of Darkness.epub");
         Assert.True(File.Exists(path), $"Expected the book at {path}.");
         Assert.Equal(epub, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
-        Assert.Equal(stagedBefore, factory.CountStagedFiles());
+        await factory.WaitForStagedFilesAsync(stagedBefore);
+    }
+
+    [Fact]
+    public async Task Book_is_filed_over_a_partial_file_left_by_a_dead_run()
+    {
+        var library = await factory.AddLibraryAsync();
+        var epub = new EpubBuilder().WithTitle("Dawn").WithCreator("Octavia E. Butler").WithCover(TestData.PngCover).Build();
+        var folder = factory.LibraryPath(library, "Books", "Octavia E. Butler", "Dawn");
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // What a run that died while copying leaves: part of the book and a cover, with no rows pointing at them.
+        Directory.CreateDirectory(folder);
+        await File.WriteAllBytesAsync(Path.Combine(folder, "Dawn.epub"), epub[..(epub.Length / 2)], cancellationToken);
+        await File.WriteAllBytesAsync(Path.Combine(folder, "cover.png"), [1, 2, 3], cancellationToken);
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "dawn.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        Assert.Equal(["Books/Octavia E. Butler/Dawn/Dawn.epub"], await factory.ReadPartPathsAsync(library));
+        Assert.Equal(epub, await File.ReadAllBytesAsync(Path.Combine(folder, "Dawn.epub"), cancellationToken));
+        Assert.Equal(TestData.PngCover, await File.ReadAllBytesAsync(Path.Combine(folder, "cover.png"), cancellationToken));
+        Assert.Equal(["Dawn.epub", "cover.png"], Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        var work = await GetOnlyWorkAsync(client, library);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(TestData.PngCover)), work.CoverHash);
     }
 
     [Fact]
@@ -751,6 +848,26 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(TestData.PngCover, await File.ReadAllBytesAsync(cover, TestContext.Current.CancellationToken));
         var work = await GetOnlyWorkAsync(client, library);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(TestData.PngCover)), work.CoverHash);
+    }
+
+    [Fact]
+    public async Task Epub_with_an_oversized_cover_is_ingested_without_one()
+    {
+        var library = await factory.AddLibraryAsync();
+        // Zero bytes compress to almost nothing, so the upload stays small while the cover inflates past 20 MiB.
+        var epub = new EpubBuilder()
+            .WithTitle("Wild Seed")
+            .WithCreator("Octavia E. Butler")
+            .WithCover(new byte[21 * 1024 * 1024])
+            .Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "wild-seed.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        Assert.Null((await GetOnlyWorkAsync(client, library)).CoverHash);
+        var folder = factory.LibraryPath(library, "Books", "Octavia E. Butler", "Wild Seed");
+        Assert.Equal(["Wild Seed.epub"], Directory.GetFiles(folder).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -775,19 +892,22 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var library = await factory.AddLibraryAsync();
         var epub = new EpubBuilder().WithTitle("The Dispossessed").WithCreator("Ursula K. Le Guin").Build();
         using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        // Read before the first upload: a succeeded job's staged file goes a moment after the job reads as succeeded,
+        // so a count read between the two uploads could still hold the first one's.
+        var stagedBefore = factory.CountStagedFiles();
         var first = await client.IngestAsync(epub, "dispossessed.epub", library.Id);
         Assert.Equal(JobStatus.Succeeded, first.Status);
-        var stagedBefore = factory.CountStagedFiles();
 
         var second = await client.IngestAsync(epub, "dispossessed-again.epub", library.Id);
 
         Assert.Equal(JobStatus.Succeeded, second.Status);
-        var result = ReadResult(second);
+        var result = second.ReadIngestResult();
         Assert.Equal(IngestOutcome.Duplicate, result.Outcome);
-        Assert.Equal(ReadResult(first).ItemId, result.ItemId);
+        Assert.Equal(first.ReadIngestResult().ItemId, result.ItemId);
         Assert.Equal(["identify-format", "check-duplicate"], second.Steps.Select(s => s.Name));
-        Assert.Equal((1, 1, 1), await CountRowsAsync(library));
-        Assert.Equal(stagedBefore, factory.CountStagedFiles());
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(library));
+        await factory.WaitForStagedFilesAsync(stagedBefore);
     }
 
     [Fact]
@@ -801,11 +921,11 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var first = await client.IngestAsync(epub, "lathe.epub", one.Id);
         var second = await client.IngestAsync(epub, "lathe.epub", other.Id);
 
-        Assert.Equal(IngestOutcome.Created, ReadResult(first).Outcome);
-        Assert.Equal(IngestOutcome.Created, ReadResult(second).Outcome);
-        Assert.NotEqual(ReadResult(first).ItemId, ReadResult(second).ItemId);
-        Assert.Equal((1, 1, 1), await CountRowsAsync(one));
-        Assert.Equal((1, 1, 1), await CountRowsAsync(other));
+        Assert.Equal(IngestOutcome.Created, first.ReadIngestResult().Outcome);
+        Assert.Equal(IngestOutcome.Created, second.ReadIngestResult().Outcome);
+        Assert.NotEqual(first.ReadIngestResult().ItemId, second.ReadIngestResult().ItemId);
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(one));
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(other));
     }
 
     [Fact]
@@ -892,7 +1012,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var path = factory.LibraryPath(
             library, "Books", "Octavia E. Butler", "Fledgling", "Fledgling.epub");
         Assert.Equal(epub, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
-        Assert.Equal((1, 1, 1), await CountRowsAsync(library));
+        Assert.Equal((1, 1, 1), await factory.CountRowsAsync(library));
     }
 
     /// <summary>Ingests the file into a library of its own and checks the job failed reading it, leaving the library empty in the database and on disk.</summary>
@@ -908,7 +1028,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var failed = Assert.Single(job.Steps, s => s.Status == JobStepStatus.Failed);
         Assert.Equal("extract-metadata", failed.Name);
         Assert.Equal("extract-metadata", job.Steps[^1].Name);
-        Assert.Equal((0, 0, 0), await CountRowsAsync(library));
+        Assert.Equal((0, 0, 0), await factory.CountRowsAsync(library));
         Assert.False(Directory.Exists(factory.LibraryPath(library, "Books")));
     }
 
@@ -929,12 +1049,6 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         return details;
     }
 
-    /// <summary>
-    /// A tail for names that no other test's people, series or tags can match, since they are shared across
-    /// libraries and matched by name.
-    /// </summary>
-    private static string UniqueSuffix() => Guid.NewGuid().ToString("N")[..12];
-
     /// <summary>The work's detail as JSON with its items left out, for comparing everything else about it.</summary>
     private static string WithoutItems(WorkDetailResponse work) =>
         JsonSerializer.Serialize(work with { Items = [] }, ApiTestExtensions.Json);
@@ -950,40 +1064,21 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         return ids.Select(id => (people[id].Name, people[id].SortName)).ToList();
     }
 
-    /// <summary>The paths of the library's parts, oldest first.</summary>
-    private async Task<List<string>> ReadPartPathsAsync(Library library)
+    /// <summary>The order of each of the work's contributors, lowest first.</summary>
+    private async Task<List<int>> ReadContributorOrdersAsync(Guid workId)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        return await (
-            from part in db.Parts
-            join item in db.Items on part.ItemId equals item.Id
-            join work in db.Works on item.WorkId equals work.Id
-            where work.LibraryId == library.Id
-            orderby part.CreatedAt, part.Id
-            select part.Path).ToListAsync(TestContext.Current.CancellationToken);
+        return await db.WorkContributors.Where(c => c.WorkId == workId).OrderBy(c => c.Order)
+            .Select(c => c.Order).ToListAsync(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>How many works, items and parts the library holds.</summary>
-    private async Task<(int Works, int Items, int Parts)> CountRowsAsync(Library library)
+    /// <summary>Saves the row straight to the database, as one stored before ingest tidied names would be.</summary>
+    private async Task SaveAsync(Entity row)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var works = db.Works.Where(w => w.LibraryId == library.Id);
-        var items = db.Items.Where(i => works.Any(w => w.Id == i.WorkId));
-        var parts = db.Parts.Where(p => items.Any(i => i.Id == p.ItemId));
-        return (
-            await works.CountAsync(cancellationToken),
-            await items.CountAsync(cancellationToken),
-            await parts.CountAsync(cancellationToken));
-    }
-
-    private static IngestResult ReadResult(JobDetailResponse job)
-    {
-        Assert.NotNull(job.Result);
-        var result = job.Result.Value.Deserialize<IngestResult>(ApiTestExtensions.Json);
-        Assert.NotNull(result);
-        return result;
+        db.Add(row);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

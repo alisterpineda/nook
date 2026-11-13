@@ -467,6 +467,11 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name_key");
+
                     b.Property<string>("SortName")
                         .IsRequired()
                         .HasColumnType("text")
@@ -478,6 +483,9 @@ namespace Nook.Api.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_people");
+
+                    b.HasIndex("NameKey")
+                        .HasDatabaseName("ix_people_name_key");
 
                     b.ToTable("people", (string)null);
                 });
@@ -497,12 +505,20 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name_key");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
                         .HasName("pk_series");
+
+                    b.HasIndex("NameKey")
+                        .HasDatabaseName("ix_series_name_key");
 
                     b.ToTable("series", (string)null);
                 });
@@ -522,12 +538,20 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name_key");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
                         .HasName("pk_tags");
+
+                    b.HasIndex("NameKey")
+                        .HasDatabaseName("ix_tags_name_key");
 
                     b.ToTable("tags", (string)null);
                 });

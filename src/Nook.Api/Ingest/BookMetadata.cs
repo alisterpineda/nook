@@ -1,3 +1,5 @@
+using Nook.Api.Data;
+
 namespace Nook.Api.Ingest;
 
 /// <summary>What a book file says about itself. Text values are trimmed, and a blank value counts as missing.</summary>
@@ -25,9 +27,9 @@ public sealed record BookMetadata(
 
 /// <summary>Someone a book file names as one of its makers.</summary>
 /// <param name="Name">The name people see.</param>
-/// <param name="Role">The role code the file gives, such as <c>aut</c> or <c>trl</c>, in the case the file writes it, or null when it gives none.</param>
+/// <param name="Role">The role the file gives, or null when it is one Nook does not keep. A creator with no role is an author.</param>
 /// <param name="SortName">The name the file gives for sorting, such as "Le Guin, Ursula K.", or null when it gives none.</param>
-public sealed record BookCreator(string Name, string? Role, string? SortName);
+public sealed record BookCreator(string Name, ContributorRole? Role, string? SortName);
 
 /// <summary>A series a book file names.</summary>
 /// <param name="Name">The series' name.</param>
@@ -35,7 +37,7 @@ public sealed record BookCreator(string Name, string? Role, string? SortName);
 public sealed record BookSeries(string Name, decimal? Position);
 
 /// <summary>An identifier a book file gives, such as an ISBN.</summary>
-/// <param name="Scheme">The kind of identifier, lowercased.</param>
+/// <param name="Scheme">The kind of identifier, in any case; the record keeps it lowercased.</param>
 /// <param name="Value">The identifier as the file gives it, without a prefix naming its scheme.</param>
 public sealed record BookIdentifier(string Scheme, string Value)
 {

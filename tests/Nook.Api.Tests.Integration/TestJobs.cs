@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Nook.Api.Data;
 using Nook.Api.Jobs;
 
 namespace Nook.Api.Tests.Integration;
@@ -16,6 +18,7 @@ internal static class TestJobs
         services.AddJobType<FailingTwiceJob>();
         services.AddJobType<FlakyJob>();
         services.AddJobType<EarlyExitJob>();
+        services.AddJobType<ThrowingSuccessHookJob>();
         services.AddSingleton<JobCounter>();
         services.AddJobType<CountingJob>();
         return services;
@@ -34,6 +37,12 @@ internal sealed class JobRecorder
     /// <summary>The note of each deleted <see cref="RecordingJob"/>, in the order their cleanups ran.</summary>
     public ConcurrentQueue<string> Cleanups { get; } = new();
 
+    /// <summary>
+    /// The note of each job whose success hook ran, in the order they ran, with the job's status as the hook read it
+    /// from the database.
+    /// </summary>
+    public ConcurrentQueue<(string Note, JobStatus? Status)> SuccessHooks { get; } = new();
+
     /// <summary>The note of each payload whose job ran a step that should never run.</summary>
     public ConcurrentQueue<string> SkippedStepsRun { get; } = new();
 
@@ -48,8 +57,8 @@ internal sealed record RecordingPayload(string Note);
 internal sealed record RecordingResult(int NoteLength);
 
 /// <summary>
-/// A job whose first step records its payload's note and whose second sets a result. Deleting it records the note
-/// among the cleanups.
+/// A job whose first step records its payload's note and whose second sets a result. Its success hook records the
+/// note with the job's status as the database holds it then, and deleting it records the note among the cleanups.
 /// </summary>
 internal sealed class RecordingJob : JobType
 {
@@ -76,11 +85,26 @@ internal sealed class RecordingJob : JobType
         return run;
     }
 
+    public override async Task OnSucceededAsync(string payloadJson, IServiceProvider services)
+    {
+        var note = JobJson.Deserialize<RecordingPayload>(payloadJson).Note;
+        var status = await ReadStatusAsync(TypeName, note, services);
+        services.GetRequiredService<JobRecorder>().SuccessHooks.Enqueue((note, status));
+    }
+
     public override Task OnDeletedAsync(string payloadJson, IServiceProvider services)
     {
         var payload = JobJson.Deserialize<RecordingPayload>(payloadJson);
         services.GetRequiredService<JobRecorder>().Cleanups.Enqueue(payload.Note);
         return Task.CompletedTask;
+    }
+
+    /// <summary>The status of the job of this type whose payload holds the note, read from the database.</summary>
+    internal static async Task<JobStatus?> ReadStatusAsync(string type, string note, IServiceProvider services)
+    {
+        var db = services.GetRequiredService<NookDbContext>();
+        var jobs = await db.Jobs.AsNoTracking().Where(j => j.Type == type).ToListAsync();
+        return jobs.SingleOrDefault(j => JobJson.Deserialize<RecordingPayload>(j.Payload).Note == note)?.Status;
     }
 }
 
@@ -106,6 +130,14 @@ internal class FailingJob : JobType
             return Task.CompletedTask;
         });
         return run;
+    }
+
+    /// <summary>Records the note, as <see cref="RecordingJob"/> does, should the hook ever run for a failed job.</summary>
+    public override async Task OnSucceededAsync(string payloadJson, IServiceProvider services)
+    {
+        var note = JobJson.Deserialize<RecordingPayload>(payloadJson).Note;
+        var status = await RecordingJob.ReadStatusAsync(Name, note, services);
+        services.GetRequiredService<JobRecorder>().SuccessHooks.Enqueue((note, status));
     }
 }
 
@@ -169,6 +201,21 @@ internal sealed class EarlyExitJob : JobType
         });
         return run;
     }
+}
+
+/// <summary>A job with one step that passes, whose success hook throws.</summary>
+internal sealed class ThrowingSuccessHookJob : JobType
+{
+    public const string TypeName = "test-throwing-success-hook";
+    public const string ErrorMessage = "The test success hook failed on purpose.";
+
+    public override string Name => TypeName;
+
+    public override JobRun CreateRun(string payloadJson, IServiceProvider services) =>
+        new JobRun().AddStep("pass", _ => Task.CompletedTask);
+
+    public override Task OnSucceededAsync(string payloadJson, IServiceProvider services) =>
+        throw new InvalidOperationException(ErrorMessage);
 }
 
 /// <summary>What a <see cref="CountingJob"/> works on: a key of the test's choosing that names the job to its <see cref="JobCounter"/>.</summary>

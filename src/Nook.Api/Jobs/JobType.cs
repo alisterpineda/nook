@@ -21,6 +21,14 @@ public abstract class JobType
     /// </summary>
     public abstract JobRun CreateRun(string payloadJson, IServiceProvider services);
 
+    /// <summary>
+    /// Runs once a job of this type is recorded as succeeded, in a scope of its own, for work that must wait until
+    /// the job can no longer run again, such as removing an input the job kept while it might. The job reads as
+    /// succeeded a moment before this runs, and this runs at most once: an exception from it is logged and changes
+    /// nothing on the job, and a process that stops in between never runs it.
+    /// </summary>
+    public virtual Task OnSucceededAsync(string payloadJson, IServiceProvider services) => Task.CompletedTask;
+
     /// <summary>Cleans up what the job's payload points at, once the job has been deleted.</summary>
     public virtual Task OnDeletedAsync(string payloadJson, IServiceProvider services) => Task.CompletedTask;
 }

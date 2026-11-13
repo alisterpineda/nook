@@ -176,6 +176,49 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         }
     }
 
+    [Theory]
+    [InlineData("people")]
+    [InlineData("series")]
+    [InlineData("tags")]
+    public async Task Named_tables_hold_an_indexed_name_key(string table)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+
+        var column = await db.Database
+            .SqlQuery<string>($"SELECT (column_name || ' ' || udt_name || ' ' || is_nullable)::text AS \"Value\" FROM information_schema.columns WHERE table_schema = 'public' AND table_name = {table} AND column_name = 'name_key'")
+            .SingleAsync(cancellationToken);
+        var indexes = await db.ReadIndexDefinitionsAsync(table, cancellationToken);
+
+        Assert.Equal("name_key text NO", column);
+        Assert.Contains(indexes, i => i.EndsWith("USING btree (name_key)") && !i.Contains("UNIQUE"));
+    }
+
+    [Fact]
+    public async Task Changing_a_name_changes_its_key()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var tag = new Tag { Name = "  Science   Fiction " };
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            db.Tags.Add(tag);
+            await db.SaveChangesAsync(cancellationToken);
+            Assert.Equal("science fiction", await ReadNameKeyAsync(db, tag.Id, cancellationToken));
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            var tracked = await db.Tags.SingleAsync(t => t.Id == tag.Id, cancellationToken);
+            tracked.Name = "Space Opera";
+            await db.SaveChangesAsync(cancellationToken);
+            Assert.Equal("space opera", await ReadNameKeyAsync(db, tag.Id, cancellationToken));
+        }
+    }
+
     [Fact]
     public async Task Migrations_match_the_model()
     {
@@ -184,4 +227,10 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 
         Assert.False(db.Database.HasPendingModelChanges());
     }
+
+    /// <summary>The tag's name key as the database holds it.</summary>
+    private static Task<string> ReadNameKeyAsync(NookDbContext db, Guid tagId, CancellationToken cancellationToken) =>
+        db.Database
+            .SqlQuery<string>($"SELECT name_key AS \"Value\" FROM tags WHERE id = {tagId}")
+            .SingleAsync(cancellationToken);
 }

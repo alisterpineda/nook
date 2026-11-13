@@ -48,6 +48,10 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
     public static FileStream CreateFile(string path) =>
         new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize, useAsync: true);
 
+    /// <summary>Opens a file for writing, emptying any file already there.</summary>
+    public static FileStream ReplaceFile(string path) =>
+        new(path, FileMode.Create, FileAccess.Write, FileShare.None, CopyBufferSize, useAsync: true);
+
     /// <summary>Opens a file for reading.</summary>
     public static FileStream OpenFile(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, useAsync: true);
