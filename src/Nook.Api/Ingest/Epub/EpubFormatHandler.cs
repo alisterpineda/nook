@@ -58,6 +58,12 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         ["image/svg+xml"] = ".svg",
     };
 
+    /// <summary>
+    /// The extensions a cover keeps from its file name inside the EPUB: the ones the image media types stand for, and
+    /// the other spelling of JPEG's.
+    /// </summary>
+    private static readonly HashSet<string> CoverFileExtensions = [.. ImageExtensions.Values, ".jpeg"];
+
     /// <summary>The MARC relator codes of the roles Nook keeps.</summary>
     private static readonly Dictionary<string, ContributorRole> Roles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -196,21 +202,14 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     }
 
     /// <summary>
-    /// Refuses a container file the zip declares over <see cref="MaxOcfFileBytes"/>, and a package file or any other
-    /// markup file it declares over <see cref="MaxMarkupBytes"/>. The library reads these itself, so only the
-    /// declared size can be checked. The package file is the one the container names, whatever its extension.
+    /// Refuses a package file or any other markup file the zip declares over <see cref="MaxMarkupBytes"/>. The library
+    /// reads these itself, so only the declared size can be checked. The package file is the one the container
+    /// names, whatever its extension, and reading the container for it refuses one over <see cref="MaxOcfFileBytes"/>.
     /// </summary>
     private static async Task CheckDeclaredSizesAsync(ZipArchive archive, CancellationToken cancellationToken)
     {
         foreach (var entry in archive.Entries)
         {
-            if (string.Equals(entry.FullName, ContainerEntry, StringComparison.OrdinalIgnoreCase)
-                && entry.Length > MaxOcfFileBytes)
-            {
-                throw new UnreadableBookException(
-                    $"The EPUB cannot be read: its container file is larger than {MaxOcfFileBytes / 1024 / 1024} MiB.");
-            }
-
             if (MarkupExtensions.Contains(Path.GetExtension(entry.FullName)))
             {
                 RefuseOversizedMarkup(entry);
@@ -226,12 +225,14 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         }
     }
 
+    private static UnreadableBookException TooLarge(string what, long maxBytes) =>
+        new($"The EPUB cannot be read: {what} is larger than {maxBytes / 1024 / 1024} MiB.");
+
     private static void RefuseOversizedMarkup(ZipArchiveEntry entry)
     {
         if (entry.Length > MaxMarkupBytes)
         {
-            throw new UnreadableBookException(
-                $"The EPUB cannot be read: {entry.FullName} is larger than {MaxMarkupBytes / 1024 / 1024} MiB.");
+            throw TooLarge(entry.FullName, MaxMarkupBytes);
         }
     }
 
@@ -270,8 +271,7 @@ public sealed partial class EpubFormatHandler : IFormatHandler
 
         if (content is null)
         {
-            throw new UnreadableBookException(
-                $"The EPUB cannot be read: its {what} file is larger than {MaxOcfFileBytes / 1024 / 1024} MiB.");
+            throw TooLarge($"its {what} file", MaxOcfFileBytes);
         }
 
         using var reader = XmlReader.Create(new MemoryStream(content), new XmlReaderSettings
@@ -477,16 +477,15 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     private static decimal? Position(string? value) =>
         decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var position) ? position : null;
 
-    /// <summary>The cover's extension from its file name inside the EPUB, lowercased, else from its media type.</summary>
+    /// <summary>
+    /// The cover's extension: the one its file name inside the EPUB has, lowercased, when that is an image's, else the
+    /// one its media type stands for, else null. Only an image's extension is given, so a cover is never written
+    /// under a book's own name.
+    /// </summary>
     private static string? CoverExtension(string filePath, string mediaType)
     {
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
-        if (SafeExtension().IsMatch(extension))
-        {
-            return extension;
-        }
-
-        return ImageExtensions.GetValueOrDefault(mediaType.Trim());
+        return CoverFileExtensions.Contains(extension) ? extension : ImageExtensions.GetValueOrDefault(mediaType.Trim());
     }
 
     private static string? FirstValue(IEnumerable<string?> values) => Values(values).FirstOrDefault();
@@ -496,9 +495,6 @@ public sealed partial class EpubFormatHandler : IFormatHandler
 
     [GeneratedRegex(@"^(\d{4}-\d{2}-\d{2})(?:$|T)")]
     private static partial Regex CompleteDate();
-
-    [GeneratedRegex(@"^\.[a-z0-9]{1,10}$")]
-    private static partial Regex SafeExtension();
 
     /// <summary>A <c>urn:&lt;scheme&gt;:</c> or <c>&lt;scheme&gt;:</c> prefix and the value after it. A colon followed by <c>//</c> starts a URL, which names no scheme.</summary>
     [GeneratedRegex(@"^(?:urn:)?(?<scheme>[a-z][a-z0-9._+-]*):(?!//)(?<value>.+)$", RegexOptions.IgnoreCase | RegexOptions.Singleline)]

@@ -34,6 +34,40 @@ public sealed class ConcurrentIngestTests : IClassFixture<NookApiFactory>, IDisp
     }
 
     [Fact]
+    public async Task Waiting_for_the_ingest_lock_outlasts_the_command_timeout()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var holderScope = _app.Services.CreateAsyncScope();
+        var holder = holderScope.ServiceProvider.GetRequiredService<NookDbContext>();
+        await using var waiterScope = _app.Services.CreateAsyncScope();
+        var waiter = waiterScope.ServiceProvider.GetRequiredService<NookDbContext>();
+        waiter.Database.SetCommandTimeout(1);
+        var passes = 0;
+
+        await holder.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var held = await holder.Database.BeginTransactionAsync(cancellationToken);
+            await IngestLock.TakeAsync(holder, cancellationToken);
+            var waiting = waiter.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                passes++;
+                await using var transaction = await waiter.Database.BeginTransactionAsync(cancellationToken);
+                await IngestLock.TakeAsync(waiter, cancellationToken);
+            });
+
+            // The lock is held for longer than the waiter's one-second command timeout.
+            await Task.Delay(TimeSpan.FromSeconds(2.5), cancellationToken);
+            Assert.False(waiting.IsCompleted);
+            await held.CommitAsync(cancellationToken);
+            await waiting;
+        });
+
+        // The wait neither timed out and was tried again, nor changed the context's own timeout.
+        Assert.Equal(1, passes);
+        Assert.Equal(1, waiter.Database.GetCommandTimeout());
+    }
+
+    [Fact]
     public async Task Files_sharing_an_isbn_uploaded_together_become_one_work()
     {
         var library = await _app.AddLibraryAsync();

@@ -18,6 +18,9 @@ public sealed class IngestJob : JobType
 {
     public const string TypeName = "ingest";
 
+    /// <summary>How long a run that failed its save waits for the ingest lock before it leaves its copy in place.</summary>
+    private static readonly TimeSpan UndoLockWait = TimeSpan.FromSeconds(30);
+
     public override string Name => TypeName;
 
     public override JobRun CreateRun(string payloadJson, IServiceProvider services)
@@ -220,7 +223,11 @@ public sealed class IngestJob : JobType
                 await fresh.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
                 {
                     await using var check = await fresh.Database.BeginTransactionAsync(CancellationToken.None);
-                    await IngestLock.TakeAsync(fresh, CancellationToken.None);
+
+                    // The run is already failing, so it does not wait for the lock without end as a run that is
+                    // filing does: when the wait runs out, the copy stays as when nothing says.
+                    using var waited = new CancellationTokenSource(UndoLockWait);
+                    await IngestLock.TakeAsync(fresh, waited.Token);
                     if (await IsItemSavedAsync(fresh, itemId, CancellationToken.None))
                     {
                         return;

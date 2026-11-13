@@ -12,7 +12,7 @@ public static class NamedRows
     /// </summary>
     public static async Task<Dictionary<string, T>> FindOrAddAsync<T>(
         DbSet<T> rows, IEnumerable<string> names, Func<string, T> create, CancellationToken cancellationToken)
-        where T : Entity, INamed
+        where T : NamedEntity
     {
         var firstNames = new Dictionary<string, string>();
         foreach (var name in names)

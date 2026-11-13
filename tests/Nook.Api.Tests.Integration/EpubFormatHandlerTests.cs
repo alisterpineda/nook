@@ -432,6 +432,20 @@ public sealed class EpubFormatHandlerTests : IDisposable
         Assert.Equal(".jpeg", cover.Extension);
     }
 
+    [Fact]
+    public async Task Cover_named_like_a_book_takes_its_extension_from_its_media_type()
+    {
+        var path = await WriteAsync(new EpubBuilder()
+            .WithTitle("Book")
+            .WithCover(TestData.PngCover, "x.epub", "image/png")
+            .Build());
+
+        var cover = await _handler.ReadCoverAsync(path, CancellationToken);
+
+        Assert.NotNull(cover);
+        Assert.Equal(".png", cover.Extension);
+    }
+
     [Theory]
     [InlineData("image/jpeg", ".jpg")]
     [InlineData("image/png", ".png")]

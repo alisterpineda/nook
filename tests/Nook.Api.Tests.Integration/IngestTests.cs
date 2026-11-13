@@ -727,6 +727,27 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Fact]
+    public async Task Cover_named_like_a_book_does_not_replace_the_book()
+    {
+        var library = await factory.AddLibraryAsync();
+        var author = $"Cover Author {IngestTestExtensions.UniqueSuffix()}";
+        var epub = new EpubBuilder().WithTitle("cover").WithCreator(author)
+            .WithCover(TestData.PngCover, "x.epub", "image/png")
+            .Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "cover.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        Assert.Equal([$"Books/{author}/cover/cover.epub"], await factory.ReadPartPathsAsync(library));
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.Equal(epub, await File.ReadAllBytesAsync(
+            factory.LibraryPath(library, "Books", author, "cover", "cover.epub"), cancellationToken));
+        Assert.Equal(TestData.PngCover, await File.ReadAllBytesAsync(
+            factory.LibraryPath(library, "Books", author, "cover", "cover.png"), cancellationToken));
+    }
+
+    [Fact]
     public async Task Tag_stored_with_irregular_spacing_is_reused()
     {
         var library = await factory.AddLibraryAsync();

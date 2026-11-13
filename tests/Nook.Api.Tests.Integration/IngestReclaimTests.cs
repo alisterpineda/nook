@@ -16,9 +16,6 @@ namespace Nook.Api.Tests.Integration;
 /// </summary>
 public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposable
 {
-    // About a second, so the lease of a job left running by a dead worker runs out within a test.
-    private const string LeaseMinutes = "0.02";
-
     private readonly NookApiFactory _factory;
 
     // The class runs jobs only on this app, so no second app's workers share its database.
@@ -27,7 +24,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
     public IngestReclaimTests(NookApiFactory factory)
     {
         _factory = factory;
-        _app = factory.WithWebHostBuilder(builder => builder.UseSetting("Nook:Jobs:LeaseMinutes", LeaseMinutes));
+        _app = factory.WithWebHostBuilder(builder => builder.UseSetting("Nook:Jobs:LeaseMinutes", JobTestExtensions.ShortLeaseMinutes));
     }
 
     [Fact]

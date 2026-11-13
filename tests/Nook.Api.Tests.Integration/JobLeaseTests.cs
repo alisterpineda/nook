@@ -10,9 +10,6 @@ namespace Nook.Api.Tests.Integration;
 
 public sealed class JobLeaseTests : IClassFixture<NookApiFactory>, IDisposable
 {
-    // About a second, so a lease that is not renewed runs out within a test.
-    private const string LeaseMinutes = "0.02";
-
     private const string WorkerStoppedError = "The worker stopped before this step finished.";
 
     // The class runs jobs only on this app, so no second app's workers share its database. Two workers, so one
@@ -22,7 +19,7 @@ public sealed class JobLeaseTests : IClassFixture<NookApiFactory>, IDisposable
     public JobLeaseTests(NookApiFactory factory)
     {
         _app = factory.WithWebHostBuilder(builder => builder
-            .UseSetting("Nook:Jobs:LeaseMinutes", LeaseMinutes)
+            .UseSetting("Nook:Jobs:LeaseMinutes", JobTestExtensions.ShortLeaseMinutes)
             .UseSetting("Nook:Jobs:WorkerCount", "2")
             .ConfigureServices(services => services.AddTestJobs()));
     }

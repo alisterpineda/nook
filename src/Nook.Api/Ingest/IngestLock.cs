@@ -14,8 +14,20 @@ public static class IngestLock
 
     /// <summary>
     /// Waits for the lock and holds it to the end of the context's current transaction, which releases it on commit,
-    /// rollback or a dropped connection. Call it only inside a transaction.
+    /// rollback or a dropped connection. Call it only inside a transaction. The wait has no time limit of its own,
+    /// since the ingest ahead may hold the lock while it copies a large file; cancelling the token ends it.
     /// </summary>
-    public static async Task TakeAsync(NookDbContext db, CancellationToken cancellationToken) =>
-        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({Key})", cancellationToken);
+    public static async Task TakeAsync(NookDbContext db, CancellationToken cancellationToken)
+    {
+        var commandTimeout = db.Database.GetCommandTimeout();
+        db.Database.SetCommandTimeout(0);
+        try
+        {
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({Key})", cancellationToken);
+        }
+        finally
+        {
+            db.Database.SetCommandTimeout(commandTimeout);
+        }
+    }
 }

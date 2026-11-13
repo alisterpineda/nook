@@ -12,6 +12,12 @@ namespace Nook.Api.Tests.Integration;
 /// <summary>What tests of background jobs share.</summary>
 internal static class JobTestExtensions
 {
+    /// <summary>
+    /// A <c>Nook:Jobs:LeaseMinutes</c> of about a second, so the lease of a job left running by a dead worker runs out
+    /// within a test.
+    /// </summary>
+    public const string ShortLeaseMinutes = "0.02";
+
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
     /// <summary>Enqueues a job on the app, as code inside the API would, and returns its id.</summary>

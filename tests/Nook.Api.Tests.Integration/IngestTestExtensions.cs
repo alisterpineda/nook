@@ -37,8 +37,8 @@ internal static class IngestTestExtensions
             await parts.CountAsync(cancellationToken));
     }
 
-    /// <summary>The paths of the library's parts, oldest first.</summary>
-    public static async Task<List<string>> ReadPartPathsAsync(this WebApplicationFactory<Program> app, Library library)
+    /// <summary>The library's parts, oldest first.</summary>
+    public static async Task<List<Part>> ReadPartsAsync(this WebApplicationFactory<Program> app, Library library)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
@@ -48,12 +48,16 @@ internal static class IngestTestExtensions
             join work in db.Works on item.WorkId equals work.Id
             where work.LibraryId == library.Id
             orderby part.CreatedAt, part.Id
-            select part.Path).ToListAsync(TestContext.Current.CancellationToken);
+            select part).AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
     }
+
+    /// <summary>The paths of the library's parts, oldest first.</summary>
+    public static async Task<List<string>> ReadPartPathsAsync(this WebApplicationFactory<Program> app, Library library) =>
+        (await app.ReadPartsAsync(library)).Select(part => part.Path).ToList();
 
     /// <summary>How many people, series or tags have a name ending in the suffix.</summary>
     public static async Task<int> CountNamedAsync<T>(this WebApplicationFactory<Program> app, string suffix)
-        where T : class, INamed
+        where T : NamedEntity
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();

@@ -122,11 +122,11 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
 
         // Ingest finds people, series and tags by name key. Rows can share a key, so the indexes are not unique.
         var named = builder.Model.GetEntityTypes()
-            .Where(type => typeof(INamed).IsAssignableFrom(type.ClrType))
+            .Where(type => typeof(NamedEntity).IsAssignableFrom(type.ClrType))
             .ToList();
         foreach (var type in named)
         {
-            builder.Entity(type.ClrType).HasIndex(nameof(INamed.NameKey));
+            builder.Entity(type.ClrType).HasIndex(nameof(NamedEntity.NameKey));
         }
 
         builder.Entity<WorkContributor>(contributor =>

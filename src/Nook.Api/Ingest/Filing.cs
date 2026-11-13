@@ -212,20 +212,22 @@ public static class Filing
         claimedPaths.Any(claimed => IsInside(claimed, relativeFolder));
 
     /// <summary>
-    /// The text in Unicode form C, or as it is when it holds something that has no such form, as a path stored
+    /// The text in the Unicode form, or as it is when it holds something that has no such form, as a path stored
     /// before names were made safe for it can.
     /// </summary>
-    private static string FormC(string text)
+    public static string InForm(string text, NormalizationForm form)
     {
         try
         {
-            return text.Normalize(NormalizationForm.FormC);
+            return text.Normalize(form);
         }
         catch (ArgumentException)
         {
             return text;
         }
     }
+
+    private static string FormC(string text) => InForm(text, NormalizationForm.FormC);
 
     /// <summary>The first result an attempt gives, trying the numbers from 1 up until one is free.</summary>
     private static FiledBook FirstFree(Func<int, FiledBook?> attempt)

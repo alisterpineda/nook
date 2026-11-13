@@ -121,14 +121,7 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
     /// </summary>
     private async Task<Guid> AssertBookIsAtItsPartPathAsync(Library library, byte[] bytes)
     {
-        await using var scope = _app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        var part = await (
-            from p in db.Parts
-            join item in db.Items on p.ItemId equals item.Id
-            join work in db.Works on item.WorkId equals work.Id
-            where work.LibraryId == library.Id
-            select p).SingleAsync(TestContext.Current.CancellationToken);
+        var part = Assert.Single(await _app.ReadPartsAsync(library));
         Assert.Equal(bytes, await File.ReadAllBytesAsync(
             _factory.LibraryPath(library, part.Path.Split('/')), TestContext.Current.CancellationToken));
         Assert.Equal([part.Path], LibraryFiles(library).Where(path => path.EndsWith(".epub", StringComparison.Ordinal)));

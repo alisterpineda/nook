@@ -137,8 +137,8 @@ public sealed class WorkMatcher(NookDbContext db)
         // own rule then decides. A path in a mix of forms, or with letters the database lowercases otherwise than
         // .NET, could still be missed.
         var prefix = folder.Length == 0 ? "" : folder + "/";
-        var composed = EscapeLike(Normalised(prefix, NormalizationForm.FormC)) + "%";
-        var decomposed = EscapeLike(Normalised(prefix, NormalizationForm.FormD)) + "%";
+        var composed = EscapeLike(Filing.InForm(prefix, NormalizationForm.FormC)) + "%";
+        var decomposed = EscapeLike(Filing.InForm(prefix, NormalizationForm.FormD)) + "%";
         var paths = await (
             from part in db.Parts
             join item in db.Items on part.ItemId equals item.Id
@@ -148,19 +148,6 @@ public sealed class WorkMatcher(NookDbContext db)
                     || EF.Functions.ILike(part.Path, decomposed, LikeEscape))
             select part.Path).ToListAsync(cancellationToken);
         return paths.Where(path => Filing.IsInside(path, folder)).ToList();
-    }
-
-    /// <summary>The text in the Unicode form, or as it is when it holds something that has no such form.</summary>
-    private static string Normalised(string text, NormalizationForm form)
-    {
-        try
-        {
-            return text.Normalize(form);
-        }
-        catch (ArgumentException)
-        {
-            return text;
-        }
     }
 
     /// <summary>The text as a LIKE pattern that matches only itself, with <see cref="LikeEscape"/> as its escape.</summary>

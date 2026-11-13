@@ -1,10 +1,10 @@
 namespace Nook.Api.Data;
 
 /// <summary>
-/// The one way a row keeps the name and key <see cref="INamed"/> asks for: the setter of the name writes the key, so
-/// no writer can forget it.
+/// A row known by its name and found by that name's key, such as a person, a series or a tag. The setter of the name
+/// writes the key, so no writer can forget it.
 /// </summary>
-public abstract class NamedEntity : Entity, INamed
+public abstract class NamedEntity : Entity
 {
     /// <summary>The name people see. Not unique: matching rows by name belongs to ingest.</summary>
     public required string Name
