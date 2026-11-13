@@ -76,16 +76,19 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     {
         using var book = await OpenAsync(path, cancellationToken);
         var metadata = book.Schema.Package.Metadata;
+        var title = metadata.Titles.FirstOrDefault(title => !string.IsNullOrWhiteSpace(title.Title));
 
         return new BookMetadata(
-            Title: FirstValue(metadata.Titles.Select(title => title.Title)),
-            Creators: Values(metadata.Creators.Select(creator => creator.Creator)),
+            Title: title?.Title.Trim(),
+            SortTitle: ReadSortTitle(title, metadata.MetaItems),
+            Creators: ReadCreators(metadata.Creators, metadata.MetaItems),
             Subjects: Values(metadata.Subjects.Select(subject => subject.Subject)),
             Description: FirstValue(metadata.Descriptions.Select(description => description.Description)),
             Publisher: FirstValue(metadata.Publishers.Select(publisher => publisher.Publisher)),
             Language: FirstValue(metadata.Languages.Select(language => language.Language)),
             PublicationDate: ReadPublicationDate(metadata.Dates),
-            Series: ReadSeries(metadata.MetaItems));
+            Series: ReadSeries(metadata.MetaItems),
+            Identifiers: ReadIdentifiers(metadata.Identifiers));
     }
 
     public async Task<BookCover?> ReadCoverAsync(string path, CancellationToken cancellationToken = default)
@@ -167,6 +170,43 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     }
 
     /// <summary>
+    /// Calibre's title sort, else an EPUB 3 <c>file-as</c> meta refining the title read. A book with no title has no
+    /// sort title.
+    /// </summary>
+    private static string? ReadSortTitle(EpubMetadataTitle? title, IReadOnlyList<EpubMetadataMeta> metas)
+    {
+        if (title is null)
+        {
+            return null;
+        }
+
+        return FirstValue(metas.Where(meta => meta.Name == "calibre:title_sort").Select(meta => meta.Content))
+            ?? Refining(metas, title.Id, "file-as");
+    }
+
+    /// <summary>
+    /// The creators with a name, each with its role and sort name from the EPUB 2 <c>opf:role</c> and
+    /// <c>opf:file-as</c> attributes, else from EPUB 3 <c>role</c> and <c>file-as</c> metas refining it.
+    /// </summary>
+    private static List<BookCreator> ReadCreators(
+        IEnumerable<EpubMetadataCreator> creators, IReadOnlyList<EpubMetadataMeta> metas) =>
+        creators
+            .Where(creator => !string.IsNullOrWhiteSpace(creator.Creator))
+            .Select(creator => new BookCreator(
+                creator.Creator.Trim(),
+                FirstValue([creator.Role]) ?? Refining(metas, creator.Id, "role"),
+                FirstValue([creator.FileAs]) ?? Refining(metas, creator.Id, "file-as")))
+            .ToList();
+
+    /// <summary>The first value of an EPUB 3 meta with the property that refines the element with the id, if it has one.</summary>
+    private static string? Refining(IReadOnlyList<EpubMetadataMeta> metas, string? id, string property) =>
+        string.IsNullOrWhiteSpace(id)
+            ? null
+            : FirstValue(metas
+                .Where(meta => meta.Refines == "#" + id && meta.Property == property)
+                .Select(meta => meta.Content));
+
+    /// <summary>
     /// The first date marked as the publication date or, failing that, the first date with no event, when it is a
     /// complete date. EPUB 3 gives one date with no event, the publication date.
     /// </summary>
@@ -215,6 +255,52 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         return new BookSeries(collection.Content.Trim(), Position(position));
     }
 
+    /// <summary>
+    /// The identifiers that name their scheme, by an <c>opf:scheme</c> attribute or else by a <c>urn:&lt;scheme&gt;:</c>
+    /// or <c>&lt;scheme&gt;:</c> prefix, with the scheme lowercased and the prefix naming it removed. A URL names no
+    /// scheme, and an identifier that names none is left out.
+    /// </summary>
+    private static List<BookIdentifier> ReadIdentifiers(IEnumerable<EpubMetadataIdentifier> identifiers)
+    {
+        var result = new List<BookIdentifier>();
+        foreach (var identifier in identifiers)
+        {
+            var value = identifier.Identifier?.Trim();
+            if (string.IsNullOrEmpty(value))
+            {
+                continue;
+            }
+
+            string scheme;
+            if (!string.IsNullOrWhiteSpace(identifier.Scheme))
+            {
+                scheme = identifier.Scheme.Trim().ToLowerInvariant();
+                var prefix = new[] { $"urn:{scheme}:", $"{scheme}:" }
+                    .FirstOrDefault(candidate => value.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+                if (prefix is not null)
+                {
+                    value = value[prefix.Length..].Trim();
+                }
+            }
+            else if (SchemePrefix().Match(value) is { Success: true } match)
+            {
+                scheme = match.Groups["scheme"].Value.ToLowerInvariant();
+                value = match.Groups["value"].Value.Trim();
+            }
+            else
+            {
+                continue;
+            }
+
+            if (value.Length > 0)
+            {
+                result.Add(new BookIdentifier(scheme, value));
+            }
+        }
+
+        return result;
+    }
+
     private static decimal? Position(string? value) =>
         decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var position) ? position : null;
 
@@ -240,4 +326,8 @@ public sealed partial class EpubFormatHandler : IFormatHandler
 
     [GeneratedRegex(@"^\.[a-z0-9]{1,10}$")]
     private static partial Regex SafeExtension();
+
+    /// <summary>A <c>urn:&lt;scheme&gt;:</c> or <c>&lt;scheme&gt;:</c> prefix and the value after it. A colon followed by <c>//</c> starts a URL, which names no scheme.</summary>
+    [GeneratedRegex(@"^(?:urn:)?(?<scheme>[a-z][a-z0-9._+-]*):(?!//)(?<value>.+)$", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex SchemePrefix();
 }

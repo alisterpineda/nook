@@ -86,7 +86,7 @@ public sealed class EpubFormatHandlerTests : IDisposable
         var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
 
         Assert.Equal("The Colour of Magic", metadata.Title);
-        Assert.Equal(["Terry Pratchett", "Josh Kirby"], metadata.Creators);
+        Assert.Equal(["Terry Pratchett", "Josh Kirby"], metadata.Creators.Select(creator => creator.Name));
         Assert.Equal(["Fantasy", "Humour"], metadata.Subjects);
         Assert.Equal("A tourist comes to the Discworld.", metadata.Description);
         Assert.Equal("Colin Smythe", metadata.Publisher);
@@ -117,12 +117,87 @@ public sealed class EpubFormatHandlerTests : IDisposable
         var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
 
         Assert.Equal("Piranesi", metadata.Title);
-        Assert.Equal(["Susanna Clarke", "Chiwetel Ejiofor"], metadata.Creators);
+        Assert.Equal(["Susanna Clarke", "Chiwetel Ejiofor"], metadata.Creators.Select(creator => creator.Name));
         Assert.Equal(["Fantasy"], metadata.Subjects);
         Assert.Equal("Piranesi lives in the House.", metadata.Description);
         Assert.Equal("Bloomsbury", metadata.Publisher);
         Assert.Equal("en-GB", metadata.Language);
         Assert.Equal(new DateOnly(2020, 9, 15), metadata.PublicationDate);
+    }
+
+    [Fact]
+    public async Task Sort_values_and_roles_are_read_from_an_epub_2_file()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 2)
+            .WithTitle("The Left Hand of Darkness")
+            .WithMeta("calibre:title_sort", "Left Hand of Darkness, The")
+            .WithCreator("Ursula K. Le Guin", role: "aut", fileAs: "Le Guin, Ursula K.")
+            .WithCreator("Jane Translator", role: " TRL ", fileAs: "   ")
+            .WithCreator("No Role")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal("Left Hand of Darkness, The", metadata.SortTitle);
+        Assert.Equal(
+            [
+                new BookCreator("Ursula K. Le Guin", "aut", "Le Guin, Ursula K."),
+                new BookCreator("Jane Translator", "TRL", null),
+                new BookCreator("No Role", null, null),
+            ],
+            metadata.Creators);
+    }
+
+    [Fact]
+    public async Task Sort_values_and_roles_are_read_from_an_epub_3_file()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithTitle("The Dispossessed", id: "main-title")
+            .WithProperty("file-as", "Dispossessed, The", refines: "main-title")
+            .WithCreator("Ursula K. Le Guin", role: "aut", fileAs: "Le Guin, Ursula K.")
+            .WithCreator("Someone Reading", role: "nrt")
+            .WithCreator("No Role", fileAs: "Role, No")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal("Dispossessed, The", metadata.SortTitle);
+        Assert.Equal(
+            [
+                new BookCreator("Ursula K. Le Guin", "aut", "Le Guin, Ursula K."),
+                new BookCreator("Someone Reading", "nrt", null),
+                new BookCreator("No Role", null, "Role, No"),
+            ],
+            metadata.Creators);
+    }
+
+    [Fact]
+    public async Task Calibre_title_sort_is_preferred_to_a_file_as_refining_the_title()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithTitle("The Dispossessed", id: "main-title")
+            .WithProperty("file-as", "Refined, The", refines: "main-title")
+            .WithMeta("calibre:title_sort", "Dispossessed, The")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal("Dispossessed, The", metadata.SortTitle);
+    }
+
+    [Fact]
+    public async Task File_as_refining_a_title_other_than_the_one_read_is_not_its_sort_title()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithTitle("The Dispossessed", id: "main-title")
+            .WithTitle("An Ambiguous Utopia", id: "subtitle")
+            .WithProperty("file-as", "Ambiguous Utopia, An", refines: "subtitle")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal("The Dispossessed", metadata.Title);
+        Assert.Null(metadata.SortTitle);
     }
 
     [Fact]
@@ -133,6 +208,7 @@ public sealed class EpubFormatHandlerTests : IDisposable
         var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
 
         Assert.Null(metadata.Title);
+        Assert.Null(metadata.SortTitle);
         Assert.Empty(metadata.Creators);
         Assert.Empty(metadata.Subjects);
         Assert.Null(metadata.Description);
@@ -153,6 +229,33 @@ public sealed class EpubFormatHandlerTests : IDisposable
         var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
 
         Assert.Null(metadata.PublicationDate);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task Identifiers_are_read_with_their_scheme_and_without_a_prefix_naming_it(int version)
+    {
+        var path = await WriteAsync(new EpubBuilder(version)
+            .WithIdentifier("12345", scheme: "Goodreads")
+            .WithIdentifier("urn:isbn:978-0-441-47812-5", scheme: "ISBN")
+            .WithIdentifier("URN:UUID:0f3b6a6e-1c2d-4e5f-8a9b-0c1d2e3f4a5b")
+            .WithIdentifier("calibre:42")
+            .WithIdentifier("9d2c4e1a-3b5f-4a7c-8e9d-0a1b2c3d4e5f")
+            .WithIdentifier("https://example.com/books/1")
+            .WithIdentifier("   ", scheme: "isbn")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(
+            [
+                new BookIdentifier("goodreads", "12345"),
+                new BookIdentifier("isbn", "978-0-441-47812-5"),
+                new BookIdentifier("uuid", "0f3b6a6e-1c2d-4e5f-8a9b-0c1d2e3f4a5b"),
+                new BookIdentifier("calibre", "42"),
+            ],
+            metadata.Identifiers);
     }
 
     [Theory]

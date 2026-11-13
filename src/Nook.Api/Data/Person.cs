@@ -1,7 +1,7 @@
 namespace Nook.Api.Data;
 
 /// <summary>Someone who contributed to works, shared across libraries.</summary>
-public class Person : Entity
+public class Person : Entity, INamed
 {
     /// <summary>The name people see. Not unique: matching people belongs to ingest.</summary>
     public required string Name { get; set; }

@@ -8,6 +8,6 @@ public class WorkExternalId : Entity
     /// <summary>The kind of identifier, such as "isbn", as plain text.</summary>
     public required string Scheme { get; set; }
 
-    /// <summary>The identifier itself, stored as given.</summary>
+    /// <summary>The identifier itself, in the form the scheme's rule gives it, or as given for a scheme with no rule.</summary>
     public required string Value { get; set; }
 }

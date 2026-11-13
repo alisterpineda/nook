@@ -1,10 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <!-- The project has no tests yet, and a run with zero tests exits with code 8. Remove this with the first test. -->
-    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nook.Api\Nook.Api.csproj" />
   </ItemGroup>

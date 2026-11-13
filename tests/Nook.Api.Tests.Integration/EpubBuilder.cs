@@ -40,7 +40,9 @@ internal sealed class EpubBuilder
         _version = version;
     }
 
-    public EpubBuilder WithTitle(string title) => AddMetadata($"<dc:title>{Escape(title)}</dc:title>");
+    /// <summary>Adds a <c>dc:title</c>, with an id when one is given so a meta can refine it.</summary>
+    public EpubBuilder WithTitle(string title, string? id = null) =>
+        AddMetadata($"<dc:title{Attribute("id", id)}>{Escape(title)}</dc:title>");
 
     /// <summary>
     /// Adds a <c>dc:creator</c>. EPUB 2 gives its role and sort name as <c>opf:role</c> and <c>opf:file-as</c>

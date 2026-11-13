@@ -39,6 +39,11 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
         return path;
     }
 
+    /// <summary>The full path of a folder in a library, from its <c>/</c>-separated path relative to the library's folder. An empty path is the library's folder itself.</summary>
+    /// <exception cref="InvalidOperationException">The path leads outside the library's folder.</exception>
+    public string LibrarySubfolder(Library library, string relativeFolder) =>
+        relativeFolder.Length == 0 ? Path.GetFullPath(LibraryFolder(library)) : LibraryFile(library, relativeFolder);
+
     /// <summary>Opens a new file for writing. It fails when the file is already there, so nothing is overwritten.</summary>
     public static FileStream CreateFile(string path) =>
         new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize, useAsync: true);
