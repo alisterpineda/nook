@@ -12,16 +12,21 @@ public sealed class WorkMatcher(NookDbContext db)
     private const string LikeEscape = "\\";
 
     /// <summary>
-    /// The oldest item in the library with a part holding these bytes, by their SHA-256, or null when there is none.
+    /// The oldest item in the library with a part holding these bytes, by their SHA-256, with the work it belongs to,
+    /// or null when there is none.
     /// </summary>
-    public async Task<Guid?> FindItemWithHashAsync(Guid libraryId, string sha256, CancellationToken cancellationToken) =>
-        await (
+    public async Task<(Guid ItemId, Guid WorkId)?> FindItemWithHashAsync(
+        Guid libraryId, string sha256, CancellationToken cancellationToken)
+    {
+        var found = await (
             from part in db.Parts
             join item in db.Items on part.ItemId equals item.Id
             join work in db.Works on item.WorkId equals work.Id
             where part.Sha256 == sha256 && work.LibraryId == libraryId
             orderby item.CreatedAt, item.Id
-            select (Guid?)item.Id).FirstOrDefaultAsync(cancellationToken);
+            select new { item.Id, item.WorkId }).FirstOrDefaultAsync(cancellationToken);
+        return found is null ? null : (found.Id, found.WorkId);
+    }
 
     /// <summary>
     /// The oldest work in the library that holds one of the draft's ISBNs, tracked so filing can give it a cover it

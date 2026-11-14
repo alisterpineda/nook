@@ -46,6 +46,22 @@ describe('Session', () => {
     expect(session.user()).toBeNull();
   });
 
+  it('isAdmin is true only while an admin is signed in', async () => {
+    expect(session.isAdmin()).toBe(false);
+
+    for (const [role, admin] of [
+      ['admin', true],
+      ['member', false],
+      ['guest', false],
+    ] as const) {
+      const loading = session.load();
+      httpTesting.expectOne('/api/auth/me').flush({ ...ada, role });
+      await loading;
+
+      expect(session.isAdmin()).toBe(admin);
+    }
+  });
+
   it('load passes on an error other than 401', async () => {
     const loading = session.load();
 

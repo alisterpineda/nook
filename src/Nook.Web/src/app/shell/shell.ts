@@ -1,17 +1,18 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, RouterOutlet, isActive } from '@angular/router';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { LibrariesApi } from '../api/libraries-api';
 import { components } from '../api/schema';
 import { Session } from '../core/session';
+import { UploadQueue } from '../features/upload/upload-queue';
 
 type LibraryResponse = components['schemas']['LibraryResponse'];
 
 /**
- * The frame around every signed-in page: a collapsible sidebar with "All works" and the user's libraries, the
- * user's menu in its footer, and the page itself beside it.
+ * The frame around every signed-in page: a collapsible sidebar with "All works" and the user's libraries, then
+ * "Add books" for an admin, the user's menu in its footer, and the page itself beside it.
  */
 @Component({
   selector: 'app-shell',
@@ -28,8 +29,8 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
                   hlmSidebarMenuButton
                   routerLink="/works"
                   closeMobileSidebarOnClick
-                  [isActive]="selectedLibraryId() === null"
-                  [attr.aria-current]="selectedLibraryId() === null ? 'page' : null"
+                  [isActive]="onWorks() && selectedLibraryId() === null"
+                  [attr.aria-current]="onWorks() && selectedLibraryId() === null ? 'page' : null"
                 >
                   <span>All works</span>
                 </a>
@@ -41,8 +42,10 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
                     routerLink="/works"
                     [queryParams]="{ library: library.id }"
                     closeMobileSidebarOnClick
-                    [isActive]="selectedLibraryId() === library.id"
-                    [attr.aria-current]="selectedLibraryId() === library.id ? 'page' : null"
+                    [isActive]="onWorks() && selectedLibraryId() === library.id"
+                    [attr.aria-current]="
+                      onWorks() && selectedLibraryId() === library.id ? 'page' : null
+                    "
                   >
                     <span>{{ library.name }}</span>
                   </a>
@@ -50,6 +53,26 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
               }
             </ul>
           </nav>
+          @if (isAdmin()) {
+            <nav hlmSidebarGroup aria-label="Manage">
+              <div hlmSidebarGroupLabel>Manage</div>
+              <ul hlmSidebarMenu>
+                <li hlmSidebarMenuItem>
+                  <!-- Carries the library being browsed, so the upload page can offer it first. -->
+                  <a
+                    hlmSidebarMenuButton
+                    routerLink="/upload"
+                    [queryParams]="selectedLibraryId() ? { library: selectedLibraryId() } : null"
+                    closeMobileSidebarOnClick
+                    [isActive]="onUpload()"
+                    [attr.aria-current]="onUpload() ? 'page' : null"
+                  >
+                    <span>Add books</span>
+                  </a>
+                </li>
+              </ul>
+            </nav>
+          }
         </div>
         <div hlmSidebarFooter>
           @if (signOutFailed()) {
@@ -101,11 +124,17 @@ export class Shell {
     requireSync: true,
   });
 
+  private readonly uploadQueue = inject(UploadQueue);
+
   protected readonly session = inject(Session);
   protected readonly libraries = signal<LibraryResponse[]>([]);
   protected readonly signOutFailed = signal(false);
   /** The library the URL names, or `null` for "All works". */
   protected readonly selectedLibraryId = computed(() => this.queryParams().get('library'));
+  protected readonly isAdmin = this.session.isAdmin;
+  /** Whether a works page is open, the only pages "All works" and the libraries stand for. */
+  protected readonly onWorks = isActive('/works', this.router, { queryParams: 'ignored' });
+  protected readonly onUpload = isActive('/upload', this.router, { queryParams: 'ignored' });
 
   constructor() {
     void this.loadLibraries();
@@ -120,6 +149,8 @@ export class Shell {
       this.signOutFailed.set(true);
       return;
     }
+    // The next person signed in on this tab must not see, or keep sending, this user's files.
+    this.uploadQueue.reset();
     await this.router.navigateByUrl('/sign-in');
   }
 

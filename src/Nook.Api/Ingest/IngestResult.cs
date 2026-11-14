@@ -13,4 +13,5 @@ public enum IngestOutcome
 /// <summary>What an ingest job leaves as its result.</summary>
 /// <param name="Outcome">What the job did with its file.</param>
 /// <param name="ItemId">The item the file became or, for a duplicate, the item that already held it.</param>
-public sealed record IngestResult(IngestOutcome Outcome, Guid ItemId);
+/// <param name="WorkId">The work that item belongs to.</param>
+public sealed record IngestResult(IngestOutcome Outcome, Guid ItemId, Guid WorkId);

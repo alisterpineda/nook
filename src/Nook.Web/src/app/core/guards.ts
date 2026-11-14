@@ -37,3 +37,15 @@ export const setupGuard: CanActivateFn = async () => {
   }
   return (await session.setupRequired()) ? true : router.parseUrl('/sign-in');
 };
+
+/**
+ * Lets an admin through, and sends anyone else to the works list. It sits below `signedInGuard`, which has already
+ * sent a signed-out visitor away.
+ */
+export const adminGuard: CanActivateFn = async () => {
+  const session = inject(Session);
+  const router = inject(Router);
+
+  await session.ensureLoaded();
+  return session.isAdmin() ? true : router.parseUrl('/works');
+};

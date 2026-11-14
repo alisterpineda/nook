@@ -967,6 +967,36 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Fact]
+    public async Task Ingest_result_names_the_work_a_new_file_went_into()
+    {
+        var library = await factory.AddLibraryAsync();
+        var epub = new EpubBuilder().WithTitle("The Word for World Is Forest").WithCreator("Ursula K. Le Guin").Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "word-for-world.epub", library.Id);
+
+        var result = job.ReadIngestResult();
+        Assert.Equal(IngestOutcome.Created, result.Outcome);
+        Assert.Equal((await GetOnlyWorkAsync(client, library)).Id, result.WorkId);
+    }
+
+    [Fact]
+    public async Task Ingest_result_of_a_duplicate_names_the_work_that_already_holds_the_file()
+    {
+        var library = await factory.AddLibraryAsync();
+        var epub = new EpubBuilder().WithTitle("Rocannon's World").WithCreator("Ursula K. Le Guin").Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        var first = await client.IngestAsync(epub, "rocannon.epub", library.Id);
+        Assert.Equal(JobStatus.Succeeded, first.Status);
+
+        var second = await client.IngestAsync(epub, "rocannon-again.epub", library.Id);
+
+        var result = second.ReadIngestResult();
+        Assert.Equal(IngestOutcome.Duplicate, result.Outcome);
+        Assert.Equal((await GetOnlyWorkAsync(client, library)).Id, result.WorkId);
+    }
+
+    [Fact]
     public async Task Same_file_uploaded_to_two_libraries_makes_a_work_in_each()
     {
         var one = await factory.AddLibraryAsync();

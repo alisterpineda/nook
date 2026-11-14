@@ -168,6 +168,10 @@ public sealed class ConcurrentIngestTests : IClassFixture<NookApiFactory>, IDisp
         Assert.Equal(FileCount - 1, duplicates.Count);
         Assert.All(duplicates, d => Assert.Equal(created.ItemId, d.ItemId));
         Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        var work = await db.Works.SingleAsync(w => w.LibraryId == library.Id, TestContext.Current.CancellationToken);
+        Assert.All(results, r => Assert.Equal(work.Id, r.WorkId));
         await _factory.WaitForStagedFilesAsync(stagedBefore);
     }
 

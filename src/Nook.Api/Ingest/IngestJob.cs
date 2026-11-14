@@ -43,9 +43,10 @@ public sealed class IngestJob : JobType
         Library? library = null;
         WorkDraft? draft = null;
 
-        // The item the last step built and went on to save. It outlives a pass of the retry strategy, so a pass after
-        // a commit that landed but reported a failure finds the item saved instead of filing the book again.
-        Guid? builtItemId = null;
+        // The item the last step built and went on to save, and its work. They outlive a pass of the retry strategy,
+        // so a pass after a commit that landed but reported a failure finds the item saved instead of filing the book
+        // again.
+        (Guid ItemId, Guid WorkId)? built = null;
 
         return run
             .AddStep("identify-format", async cancellationToken =>
@@ -76,9 +77,9 @@ public sealed class IngestJob : JobType
                 // The same bytes already in this library: the oldest item holding them stands for the upload. A copy
                 // being filed at the same moment is caught again under the lock in the last step. A run whose worker
                 // died after saving ends here too, as a duplicate of the item it made.
-                if (await matcher.FindItemWithHashAsync(payload.LibraryId, sha256, cancellationToken) is { } itemId)
+                if (await matcher.FindItemWithHashAsync(payload.LibraryId, sha256, cancellationToken) is { } found)
                 {
-                    run.Complete(new IngestResult(IngestOutcome.Duplicate, itemId));
+                    run.Complete(new IngestResult(IngestOutcome.Duplicate, found.ItemId, found.WorkId));
                 }
             })
             .AddStep("extract-metadata", async cancellationToken =>
@@ -103,9 +104,9 @@ public sealed class IngestJob : JobType
                 {
                     // A retry starts from what the database holds, not from what a failed pass loaded or added.
                     db.ChangeTracker.Clear();
-                    if (builtItemId is { } savedId && await IsItemSavedAsync(db, savedId, cancellationToken))
+                    if (built is { } saved && await IsItemSavedAsync(db, saved.ItemId, cancellationToken))
                     {
-                        run.SetResult(new IngestResult(IngestOutcome.Created, savedId));
+                        run.SetResult(new IngestResult(IngestOutcome.Created, saved.ItemId, saved.WorkId));
                         return;
                     }
 
@@ -118,10 +119,10 @@ public sealed class IngestJob : JobType
         async Task FileUnderLockAsync(IDbContextTransaction transaction, CancellationToken cancellationToken)
         {
             // Two copies of one file uploaded together both pass check-duplicate, so it is asked again here.
-            if (await matcher.FindItemWithHashAsync(library!.Id, sha256!, cancellationToken) is { } existingId)
+            if (await matcher.FindItemWithHashAsync(library!.Id, sha256!, cancellationToken) is { } existing)
             {
                 await transaction.CommitAsync(CancellationToken.None);
-                run.Complete(new IngestResult(IngestOutcome.Duplicate, existingId));
+                run.Complete(new IngestResult(IngestOutcome.Duplicate, existing.ItemId, existing.WorkId));
                 return;
             }
 
@@ -178,11 +179,11 @@ public sealed class IngestJob : JobType
                     Sha256 = sha256!,
                 });
 
-                builtItemId = item.Id;
+                built = (item.Id, work.Id);
                 saving = true;
                 await db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(CancellationToken.None);
-                run.SetResult(new IngestResult(IngestOutcome.Created, item.Id));
+                run.SetResult(new IngestResult(IngestOutcome.Created, item.Id, work.Id));
             }
             catch
             {

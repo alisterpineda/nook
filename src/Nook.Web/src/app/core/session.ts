@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { components } from '../api/schema';
 
@@ -22,6 +22,9 @@ export class Session {
 
   /** The signed-in user, or `null` when signed out. */
   readonly user = this.currentUser.asReadonly();
+
+  /** Whether the signed-in user is an admin, who alone may add books. */
+  readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
 
   /**
    * Calls `load()` the first time it is asked and hands back that same answer after, so the route guards can

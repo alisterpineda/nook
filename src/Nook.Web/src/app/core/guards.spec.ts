@@ -9,6 +9,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
 import { routes } from '../app.routes';
+import { openRequests } from '../testing/open-requests';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
@@ -18,6 +19,16 @@ describe('route guards', () => {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
     role: 'admin',
+  };
+  const mel: CurrentUserResponse = {
+    id: '0198a1b2-0000-7000-8000-000000000002',
+    email: 'mel@example.com',
+    role: 'member',
+  };
+  const gus: CurrentUserResponse = {
+    id: '0198a1b2-0000-7000-8000-000000000003',
+    email: 'gus@example.com',
+    role: 'guest',
   };
 
   let harness: RouterTestingHarness;
@@ -44,8 +55,8 @@ describe('route guards', () => {
     (await nextRequest('/api/auth/me')).flush(null, { status: 401, statusText: 'Unauthorized' });
   }
 
-  async function answerSignedIn(): Promise<void> {
-    (await nextRequest('/api/auth/me')).flush(ada);
+  async function answerSignedIn(user: CurrentUserResponse = ada): Promise<void> {
+    (await nextRequest('/api/auth/me')).flush(user);
   }
 
   async function answerSetupRequired(required: boolean): Promise<void> {
@@ -209,6 +220,39 @@ describe('route guards', () => {
   it('/ redirects to /works', async () => {
     const navigating = harness.navigateByUrl('/');
     await answerSignedIn();
+    await answerLibraries();
+    await answerWorks();
+    await navigating;
+
+    expect(router.url).toBe('/works');
+  });
+
+  it('adminGuard lets an admin through to /upload', async () => {
+    const navigating = harness.navigateByUrl('/upload');
+    await answerSignedIn(ada);
+    // The sidebar and the upload page each ask for the libraries.
+    for (const request of await openRequests(httpTesting, '/api/libraries', 2)) {
+      request.flush([]);
+    }
+    await navigating;
+
+    expect(router.url).toBe('/upload');
+    await vi.waitFor(() => expect(heading()).toBe('Add books'));
+  });
+
+  it('adminGuard sends a member to the works list', async () => {
+    const navigating = harness.navigateByUrl('/upload');
+    await answerSignedIn(mel);
+    await answerLibraries();
+    await answerWorks();
+    await navigating;
+
+    expect(router.url).toBe('/works');
+  });
+
+  it('adminGuard sends a guest to the works list', async () => {
+    const navigating = harness.navigateByUrl('/upload');
+    await answerSignedIn(gus);
     await answerLibraries();
     await answerWorks();
     await navigating;

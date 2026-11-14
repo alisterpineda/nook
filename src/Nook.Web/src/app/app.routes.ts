@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { setupGuard, signedInGuard, signedOutGuard } from './core/guards';
+import { adminGuard, setupGuard, signedInGuard, signedOutGuard } from './core/guards';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'works' },
@@ -14,19 +14,26 @@ export const routes: Routes = [
     loadComponent: () => import('./features/sign-in/sign-in-page').then((m) => m.SignInPage),
   },
   {
-    path: 'works',
+    // One shell holds every signed-in page, so it and the services under it stay put while the user moves between
+    // them.
+    path: '',
     canActivate: [signedInGuard],
     loadComponent: () => import('./shell/shell').then((m) => m.Shell),
     children: [
       {
-        path: '',
+        path: 'works',
         loadComponent: () =>
           import('./features/works/works-list-page').then((m) => m.WorksListPage),
       },
       {
-        path: ':id',
+        path: 'works/:id',
         loadComponent: () =>
           import('./features/works/work-detail-page').then((m) => m.WorkDetailPage),
+      },
+      {
+        path: 'upload',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/upload/upload-page').then((m) => m.UploadPage),
       },
     ],
   },

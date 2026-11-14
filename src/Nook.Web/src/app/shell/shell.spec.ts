@@ -10,6 +10,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
 import { Session } from '../core/session';
+import { UploadQueue } from '../features/upload/upload-queue';
 import { Shell } from './shell';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
@@ -17,6 +18,9 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
 
 @Component({ template: '<h1>Works</h1>' })
 class WorksStub {}
+
+@Component({ template: '<h1>Add books</h1>' })
+class UploadStub {}
 
 @Component({ template: '<h1>Sign in</h1>' })
 class SignInStub {}
@@ -27,19 +31,38 @@ describe('Shell', () => {
     email: 'ada@example.com',
     role: 'admin',
   };
+  const grace: CurrentUserResponse = {
+    id: '0198a1b2-0000-7000-8000-000000000002',
+    email: 'grace@example.com',
+    role: 'member',
+  };
+  const guest: CurrentUserResponse = {
+    id: '0198a1b2-0000-7000-8000-000000000003',
+    email: 'guest@example.com',
+    role: 'guest',
+  };
   const books: LibraryResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
   const comics: LibraryResponse = { id: '0198a1b2-0000-7000-8000-00000000000b', name: 'Comics' };
 
   let harness: RouterTestingHarness;
   let httpTesting: HttpTestingController;
   let router: Router;
+  let ignoreCancelled: boolean;
 
   beforeEach(async () => {
+    ignoreCancelled = false;
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
           { path: 'sign-in', component: SignInStub },
-          { path: 'works', component: Shell, children: [{ path: '', component: WorksStub }] },
+          {
+            path: '',
+            component: Shell,
+            children: [
+              { path: 'works', component: WorksStub },
+              { path: 'upload', component: UploadStub },
+            ],
+          },
         ]),
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -48,18 +71,23 @@ describe('Shell', () => {
     httpTesting = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
 
-    const loading = TestBed.inject(Session).load();
-    httpTesting.expectOne('/api/auth/me').flush(ada);
-    await loading;
+    await signInAs(ada);
 
     harness = await RouterTestingHarness.create();
   });
 
   afterEach(() => {
-    httpTesting.verify();
+    httpTesting.verify({ ignoreCancelled });
     // The sidebar remembers whether it is open in a cookie, which would carry over to the next test.
     document.cookie = 'sidebar_state=; path=/; max-age=0';
   });
+
+  /** Loads the session with `user` signed in. */
+  async function signInAs(user: CurrentUserResponse): Promise<void> {
+    const loading = TestBed.inject(Session).load();
+    httpTesting.expectOne('/api/auth/me').flush(user);
+    await loading;
+  }
 
   /** Opens the shell at `url`, answering its request for the libraries with `answer`. */
   async function openShell(
@@ -73,8 +101,19 @@ describe('Shell', () => {
     return harness.fixture.nativeElement;
   }
 
+  /** The links of the sidebar group labelled `group`. */
+  function groupLinks(shell: HTMLElement, group: string): HTMLAnchorElement[] {
+    return Array.from(shell.querySelectorAll<HTMLAnchorElement>(`nav[aria-label="${group}"] a`));
+  }
+
   function sidebarLinks(shell: HTMLElement): HTMLAnchorElement[] {
-    return Array.from(shell.querySelectorAll<HTMLAnchorElement>('nav a'));
+    return groupLinks(shell, 'Libraries');
+  }
+
+  function addBooks(shell: HTMLElement): HTMLAnchorElement | undefined {
+    return Array.from(shell.querySelectorAll<HTMLAnchorElement>('nav a')).find(
+      (link) => link.textContent?.trim() === 'Add books',
+    );
   }
 
   function linkNamed(shell: HTMLElement, name: string): HTMLAnchorElement {
@@ -229,5 +268,87 @@ describe('Shell', () => {
     for (const link of sidebarLinks(shell)) {
       expect(link.hasAttribute('closeMobileSidebarOnClick')).toBe(true);
     }
+  });
+  it('an admin sees Add books', async () => {
+    const shell = await openShell('/works');
+
+    expect(groupLinks(shell, 'Manage').map((link) => link.textContent?.trim())).toEqual([
+      'Add books',
+    ]);
+    expect(addBooks(shell)?.getAttribute('href')).toBe('/upload');
+  });
+
+  it('a member sees no Add books', async () => {
+    await signInAs(grace);
+    const shell = await openShell('/works');
+
+    expect(addBooks(shell)).toBeUndefined();
+    expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+  });
+
+  it('a guest sees no Add books', async () => {
+    await signInAs(guest);
+    const shell = await openShell('/works');
+
+    expect(addBooks(shell)).toBeUndefined();
+    expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+  });
+
+  it('Add books carries the library being browsed', async () => {
+    const shell = await openShell(`/works?library=${comics.id}&page=2`);
+
+    expect(addBooks(shell)?.getAttribute('href')).toBe(`/upload?library=${comics.id}`);
+
+    addBooks(shell)?.click();
+    await vi.waitFor(() => expect(router.url).toBe(`/upload?library=${comics.id}`));
+  });
+
+  it('Add books is the current page on /upload and All works is not', async () => {
+    const shell = await openShell('/upload');
+
+    expect(addBooks(shell)?.getAttribute('aria-current')).toBe('page');
+    expect(selectedLinks(shell)).toEqual([]);
+    expect(shell.querySelector('h1')?.textContent?.trim()).toBe('Add books');
+
+    linkNamed(shell, 'All works').click();
+    await vi.waitFor(() => expect(router.url).toBe('/works'));
+    await harness.fixture.whenStable();
+    expect(addBooks(shell)?.getAttribute('aria-current')).toBeNull();
+    expect(selectedLinks(shell)).toEqual(['All works']);
+  });
+
+  it('signing out empties the upload list', async () => {
+    const queue = TestBed.inject(UploadQueue);
+    const shell = await openShell('/works');
+    queue.add([new File(['epub bytes'], 'dune.epub')], books.id);
+    const upload = await vi.waitFor(() => httpTesting.expectOne('/api/uploads'));
+
+    await signOutFromTheFooterMenu(shell);
+    (await vi.waitFor(() => httpTesting.expectOne('/api/auth/logout'))).flush(null, {
+      status: 204,
+      statusText: 'No Content',
+    });
+
+    await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
+    ignoreCancelled = true;
+    expect(queue.rows()).toEqual([]);
+    expect(upload.cancelled).toBe(true);
+  });
+
+  it('a failed sign-out keeps the upload list', async () => {
+    const queue = TestBed.inject(UploadQueue);
+    const shell = await openShell('/works');
+    queue.add([new File(['epub bytes'], 'dune.epub')], books.id);
+    const upload = await vi.waitFor(() => httpTesting.expectOne('/api/uploads'));
+
+    await signOutFromTheFooterMenu(shell);
+    (await vi.waitFor(() => httpTesting.expectOne('/api/auth/logout'))).flush(null, {
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+
+    await vi.waitFor(() => expect(shell.querySelector('[role="alert"]')).not.toBeNull());
+    expect(queue.rows().map((row) => [row.name, row.status])).toEqual([['dune.epub', 'uploading']]);
+    expect(upload.cancelled).toBe(false);
   });
 });
