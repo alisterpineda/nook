@@ -1,7 +1,9 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
+// The database lives in a named volume, so it outlasts the container and stays in step with the files in .data.
 var nookDb = builder.AddPostgres("postgres")
     .WithImageTag("18")
+    .WithDataVolume()
     .AddDatabase("nookdb");
 
 // The API keeps its files in .data at the repository root, which git ignores.
