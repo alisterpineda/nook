@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Nook.Api\Nook.Api.csproj" />
+    <!-- The AppHost holds a public Program too, so it is reached through an alias that only the dev admin tests name. -->
+    <ProjectReference Include="..\..\src\Nook.AppHost\Nook.AppHost.csproj" Aliases="AppHost" />
   </ItemGroup>
 
 </Project>
