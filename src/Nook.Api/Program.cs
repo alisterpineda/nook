@@ -87,6 +87,7 @@ app.UseStatusCodePages();
 app.UseStaticFiles();
 
 app.UseRateLimiter();
+app.UseKeptCacheControl();
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -11,6 +11,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, RouterLink, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
+import { text } from '../../testing/element-text';
 import { WorkDetailPage } from './work-detail-page';
 
 type ContributorRole = components['schemas']['ContributorRole'];
@@ -134,10 +135,6 @@ describe('WorkDetailPage', () => {
     const page = harness.routeNativeElement as HTMLElement;
     await shown(page);
     return page;
-  }
-
-  function text(element: Element | null | undefined): string {
-    return (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
   }
 
   /** The page's details as label and text pairs, in the order shown. */
@@ -264,6 +261,24 @@ describe('WorkDetailPage', () => {
     ]);
   });
 
+  it('has a download link for each part', async () => {
+    const page = await openWork({
+      ...dune,
+      items: [{ ...dune.items[0], parts: [dune.items[0].parts[0]] }, dune.items[1]],
+    });
+
+    const links = Array.from(page.querySelectorAll('a')).filter(
+      (link) => text(link) === 'Download',
+    );
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/api/parts/0198a1b2-0000-7000-8000-0000000000f2/file',
+      '/api/parts/0198a1b2-0000-7000-8000-0000000000f5/file',
+    ]);
+    for (const link of links) {
+      expect(link.hasAttribute('download')).toBe(true);
+    }
+  });
+
   it('shows a format it has no label for as the API sent it', async () => {
     const page = await openWork({
       ...dune,
@@ -297,10 +312,21 @@ describe('WorkDetailPage', () => {
     ]);
   });
 
-  it('renders no images', async () => {
+  it('shows the cover at the large size', async () => {
     const page = await openWork(dune);
 
-    expect(page.querySelectorAll('img, picture, svg image')).toHaveLength(0);
+    const images = Array.from(page.querySelectorAll('img'));
+    expect(images.map((image) => image.getAttribute('src'))).toEqual([
+      `/api/works/${duneId}/cover?size=large&v=abc123`,
+    ]);
+  });
+
+  it('shows a placeholder with the title when the work has no cover', async () => {
+    const page = await openWork({ ...dune, coverHash: null });
+
+    const cover = page.querySelector('app-work-cover');
+    expect(page.querySelector('img')).toBeNull();
+    expect(text(cover)).toBe('Dune');
   });
 
   it('shows Work not found when the API answers 404', async () => {

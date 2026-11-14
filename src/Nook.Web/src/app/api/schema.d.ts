@@ -107,6 +107,7 @@ export interface paths {
             parameters: {
                 query?: {
                     size?: string;
+                    v?: string;
                 };
                 header?: never;
                 path: {

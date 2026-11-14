@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { components } from './schema';
-import { WorksApi } from './works-api';
+import { WorksApi, coverUrl, partFileUrl } from './works-api';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
@@ -95,5 +95,22 @@ describe('WorksApi', () => {
     request.flush(work);
 
     expect(await fetching).toEqual(work);
+  });
+});
+
+describe('work file URLs', () => {
+  it('coverUrl names the work, the size and the cover hash', () => {
+    expect(coverUrl('0198a1b2-0000-7000-8000-000000000001', 'abc123', 'small')).toBe(
+      '/api/works/0198a1b2-0000-7000-8000-000000000001/cover?size=small&v=abc123',
+    );
+    expect(coverUrl('0198a1b2-0000-7000-8000-000000000001', 'abc123', 'large')).toBe(
+      '/api/works/0198a1b2-0000-7000-8000-000000000001/cover?size=large&v=abc123',
+    );
+  });
+
+  it('partFileUrl names the part', () => {
+    expect(partFileUrl('0198a1b2-0000-7000-8000-0000000000f2')).toBe(
+      '/api/parts/0198a1b2-0000-7000-8000-0000000000f2/file',
+    );
   });
 });

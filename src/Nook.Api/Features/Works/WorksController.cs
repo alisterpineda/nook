@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
+using Nook.Api.Features.Auth;
 using Nook.Api.Features.Libraries;
 using Nook.Api.Storage;
 
@@ -118,7 +119,8 @@ public partial class WorksController(
     /// The work's cover, as the file it was saved as, or as a JPEG at a size: <c>small</c> fits inside 400 × 600 pixels
     /// and <c>large</c> inside 1000 × 1500. A cover is never enlarged, and one that cannot be resized is served as the
     /// file it was saved as at any size. The response is served so a browser runs nothing in it, since a cover can be
-    /// an SVG, which can hold script.
+    /// an SVG, which can hold script. When <c>v</c> is the work's cover hash, the browser may keep the cover for good,
+    /// since a new cover gives the work a new hash and so a new URL; otherwise it checks every time.
     /// </summary>
     [HttpGet("{id:guid}/cover")]
     [ProducesResponseType<Stream>(
@@ -132,7 +134,7 @@ public partial class WorksController(
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCover(
-        Guid id, [FromQuery] string? size, CancellationToken cancellationToken)
+        Guid id, [FromQuery] string? size, [FromQuery] string? v, CancellationToken cancellationToken)
     {
         Response.Headers.XContentTypeOptions = "nosniff";
         Response.Headers.ContentSecurityPolicy = "default-src 'none'; sandbox";
@@ -162,12 +164,16 @@ public partial class WorksController(
             return NotFound();
         }
 
+        // The caching header goes only on a cover that is served, so a 404 is never kept.
+        var keepForGood = v is not null && v == cover.CoverHash;
+
         var path = storage.LibraryFile(cover.Library, coverPath);
         var cachedPath = coverSize is { } cachedSize && cover.CoverHash is { } coverHash
             ? coverCache.PathOf(coverHash, cachedSize)
             : null;
         if (cachedPath is not null && TryOpen(cachedPath) is { } cached)
         {
+            SetCoverCacheControl(keepForGood);
             return File(cached, CoverImageTypes.Jpeg);
         }
 
@@ -193,6 +199,7 @@ public partial class WorksController(
                 {
                     await TryKeepAsync(cachedPath, resized, cancellationToken);
                 }
+                SetCoverCacheControl(keepForGood);
                 return File(resized, CoverImageTypes.Jpeg);
             }
 
@@ -200,7 +207,21 @@ public partial class WorksController(
             LogCoverNotResized(logger, id, coverPath);
         }
 
+        SetCoverCacheControl(keepForGood);
         return PhysicalFile(path, CoverImageTypes.MediaTypeOf(path));
+    }
+
+    /// <summary>
+    /// Lets the browser keep a cover for good when it was asked for by its current hash, and otherwise makes it check
+    /// every time. Private, since covers are served only to a signed-in user. The file result that follows writes no
+    /// <c>Cache-Control</c> of its own, and the header is set so that a renewal of the session cookie on the same
+    /// response does not replace it.
+    /// </summary>
+    private void SetCoverCacheControl(bool keepForGood)
+    {
+        Response.KeepCacheControl(keepForGood
+            ? "private, max-age=31536000, immutable"
+            : "private, no-cache");
     }
 
     /// <summary>

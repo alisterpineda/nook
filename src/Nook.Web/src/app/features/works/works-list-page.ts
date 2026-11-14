@@ -1,15 +1,13 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
-import { HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
-import { HlmTableImports } from '@spartan-ng/helm/table';
 import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
 import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
 import { somethingWentWrong } from '../../core/messages';
-import { formatLabel, seriesText } from './work-labels';
+import { WorkCover } from './work-cover';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkSort = components['schemas']['WorkSort'];
@@ -44,7 +42,7 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
  */
 @Component({
   selector: 'app-works-list-page',
-  imports: [RouterLink, HlmBadgeImports, HlmButtonImports, HlmTableImports, HlmToggleGroupImports],
+  imports: [RouterLink, HlmButtonImports, HlmToggleGroupImports, WorkCover],
   template: `
     @let shownQuery = query();
     <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -73,38 +71,24 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
       @if (current.page.total === 0) {
         <p class="text-muted-foreground text-sm">No works yet</p>
       } @else {
-        <div hlmTableContainer>
-          <table hlmTable>
-            <thead hlmTHead>
-              <tr hlmTr>
-                <th hlmTh scope="col">Title</th>
-                <th hlmTh scope="col">Authors</th>
-                <th hlmTh scope="col">Series</th>
-                <th hlmTh scope="col">Formats</th>
-              </tr>
-            </thead>
-            <tbody hlmTBody>
-              @for (work of current.page.items; track work.id) {
-                <tr hlmTr>
-                  <td hlmTd>
-                    <a class="font-medium hover:underline" [routerLink]="['/works', work.id]">{{
-                      work.title
-                    }}</a>
-                  </td>
-                  <td hlmTd>{{ work.authors.join(', ') }}</td>
-                  <td hlmTd>{{ seriesText(work.series) }}</td>
-                  <td hlmTd>
-                    <span class="flex gap-1">
-                      @for (format of work.formats; track $index) {
-                        <span hlmBadge variant="secondary">{{ formatLabel(format) }}</span>
-                      }
-                    </span>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
+        <ul
+          class="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-x-4 gap-y-6"
+          aria-label="Works"
+        >
+          @for (work of current.page.items; track work.id) {
+            <li>
+              <a class="group flex flex-col gap-1" [routerLink]="['/works', work.id]">
+                <app-work-cover class="mb-1" [work]="work" size="small" />
+                <span class="line-clamp-2 text-sm font-medium group-hover:underline">{{
+                  work.title
+                }}</span>
+                <span class="text-muted-foreground line-clamp-2 text-xs">{{
+                  work.authors.join(', ')
+                }}</span>
+              </a>
+            </li>
+          }
+        </ul>
         @let pageCount = pageCountOf(current.page.total);
         <nav class="mt-4 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
           <p class="text-muted-foreground text-sm">{{ totalText(current.page.total) }}</p>
@@ -145,8 +129,6 @@ export class WorksListPage {
 
   protected readonly somethingWentWrong = somethingWentWrong;
   protected readonly sortOptions = sortOptions;
-  protected readonly seriesText = seriesText;
-  protected readonly formatLabel = formatLabel;
 
   // The sidebar, the sort control and the pager all change the URL without recreating the page, so the list follows
   // the URL rather than reading it once, and an answer for a query the user has already left is dropped.

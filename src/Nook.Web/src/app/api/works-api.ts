@@ -7,6 +7,22 @@ type WorkListQuery = NonNullable<paths['/api/works']['get']['parameters']['query
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 
+/** The sizes the API resizes a cover to. The API's `CoverSize` holds the box each one fits inside. */
+export type CoverSize = 'small' | 'large';
+
+/**
+ * Where a work's cover is at a size. The URL holds the cover hash, so a new cover gets a new URL and the browser can
+ * keep each one for good.
+ */
+export function coverUrl(workId: string, coverHash: string, size: CoverSize): string {
+  return `/api/works/${encodeURIComponent(workId)}/cover?size=${size}&v=${encodeURIComponent(coverHash)}`;
+}
+
+/** Where a part's file downloads from. */
+export function partFileUrl(partId: string): string {
+  return `/api/parts/${encodeURIComponent(partId)}/file`;
+}
+
 @Injectable({ providedIn: 'root' })
 export class WorksApi {
   private readonly http = inject(HttpClient);

@@ -9,9 +9,9 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
+import { text } from '../../testing/element-text';
 import { WorksListPage } from './works-list-page';
 
-type ItemFormat = components['schemas']['ItemFormat'];
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkSummaryResponse = components['schemas']['WorkSummaryResponse'];
 
@@ -48,7 +48,7 @@ describe('WorksListPage', () => {
     title: 'The Martian',
     authors: ['Andy Weir'],
     series: { id: '0198a1b2-0000-7000-8000-0000000000c2', name: 'Mars', position: null },
-    coverHash: null,
+    coverHash: 'def456',
     formats: [],
     addedAt: '2026-11-03T12:00:00Z',
   };
@@ -102,17 +102,20 @@ describe('WorksListPage', () => {
     return { page, request };
   }
 
-  /** Waits for the page to show what the API answered: the table, "No works yet" or an error. */
+  /** Waits for the page to show what the API answered: the grid, "No works yet" or an error. */
   async function shown(page: HTMLElement): Promise<void> {
-    await vi.waitFor(() => expect(page.querySelector('table, p')).not.toBeNull());
+    await vi.waitFor(() => expect(page.querySelector('ul, p')).not.toBeNull());
   }
 
-  /** The table's cells, one array of trimmed texts per body row. */
-  function rows(page: HTMLElement): string[][] {
-    return Array.from(page.querySelectorAll('tbody tr')).map((row) =>
-      Array.from(row.querySelectorAll('td')).map((cell) =>
-        (cell.textContent ?? '').replace(/\s+/g, ' ').trim(),
-      ),
+  /** The grid's works, one per cell. */
+  function gridItems(page: HTMLElement): Element[] {
+    return Array.from(page.querySelectorAll('ul[aria-label="Works"] > li'));
+  }
+
+  /** What each cell of the grid says beneath its cover: the title, then the authors. */
+  function captions(page: HTMLElement): string[][] {
+    return gridItems(page).map((item) =>
+      Array.from(item.querySelectorAll('app-work-cover ~ *')).map(text),
     );
   }
 
@@ -145,52 +148,58 @@ describe('WorksListPage', () => {
     );
   }
 
-  function badges(cell: Element): string[] {
-    return Array.from(cell.querySelectorAll('[data-slot="badge"]')).map(
-      (badge) => badge.textContent?.trim() ?? '',
-    );
-  }
+  it('shows each work as its cover with the title and authors beneath', async () => {
+    const { page } = await openList('/works', [dune, theMartian]);
 
-  it('shows title, authors, series and formats for each work', async () => {
-    const { page } = await openList('/works');
-
-    expect(
-      Array.from(page.querySelectorAll('thead th')).map((header) => header.textContent?.trim()),
-    ).toEqual(['Title', 'Authors', 'Series', 'Formats']);
-    expect(rows(page)).toEqual([
-      ['Dune', 'Frank Herbert', 'Dune #1', 'EPUB'],
-      ['Good Omens', 'Terry Pratchett, Neil Gaiman', '', 'EPUB'],
-      ['The Martian', 'Andy Weir', 'Mars', ''],
+    const items = gridItems(page);
+    expect(items.map((item) => item.querySelector('img')?.getAttribute('src'))).toEqual([
+      `/api/works/${dune.id}/cover?size=small&v=abc123`,
+      `/api/works/${theMartian.id}/cover?size=small&v=def456`,
     ]);
-    const formatCells = Array.from(page.querySelectorAll('tbody tr td:last-child'));
-    expect(formatCells.map(badges)).toEqual([['EPUB'], ['EPUB'], []]);
+    expect(captions(page)).toEqual([
+      ['Dune', 'Frank Herbert'],
+      ['The Martian', 'Andy Weir'],
+    ]);
+    for (const item of items) {
+      const cover = item.querySelector('app-work-cover')!;
+      expect(cover.contains(item.querySelector('img'))).toBe(true);
+      expect(Array.from(cover.parentElement!.children).indexOf(cover)).toBe(0);
+    }
+    expect(page.textContent).not.toContain('Mars');
+    expect(page.textContent).not.toContain('EPUB');
   });
 
-  it('shows a format it has no label for as the API sent it', async () => {
-    const audiobook: WorkSummaryResponse = { ...dune, formats: ['epub', 'm4b' as ItemFormat] };
-    const { page } = await openList('/works', [audiobook]);
-
-    expect(badges(page.querySelector('tbody tr td:last-child')!)).toEqual(['EPUB', 'm4b']);
-  });
-
-  it('links each title to its detail page', async () => {
+  it('shows no table', async () => {
     const { page } = await openList('/works');
 
-    const links = Array.from(page.querySelectorAll<HTMLAnchorElement>('tbody a'));
-    expect(links.map((link) => [link.textContent?.trim(), link.getAttribute('href')])).toEqual([
-      ['Dune', `/works/${dune.id}`],
-      ['Good Omens', `/works/${goodOmens.id}`],
-      ['The Martian', `/works/${theMartian.id}`],
+    expect(page.querySelector('table, [role="table"], [role="grid"]')).toBeNull();
+  });
+
+  it('shows a placeholder with the title for a work with no cover', async () => {
+    const { page } = await openList('/works');
+
+    const item = gridItems(page)[1];
+    const cover = item.querySelector('app-work-cover')!;
+    expect(cover.querySelector('img')).toBeNull();
+    expect(text(cover)).toBe('Good Omens');
+    expect(captions(page)[1]).toEqual(['Good Omens', 'Terry Pratchett, Neil Gaiman']);
+  });
+
+  it('links each work to its detail page', async () => {
+    const { page } = await openList('/works');
+
+    const links = gridItems(page).map((item) => item.querySelector<HTMLAnchorElement>('a')!);
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      `/works/${dune.id}`,
+      `/works/${goodOmens.id}`,
+      `/works/${theMartian.id}`,
     ]);
+    for (const link of links) {
+      expect(link.querySelector('app-work-cover')).not.toBeNull();
+    }
 
     links[1].click();
     await vi.waitFor(() => expect(router.url).toBe(`/works/${goodOmens.id}`));
-  });
-
-  it('renders no images', async () => {
-    const { page } = await openList('/works');
-
-    expect(page.querySelectorAll('img, picture, svg image')).toHaveLength(0);
   });
 
   it('asks for every library when the URL names none', async () => {
@@ -219,7 +228,9 @@ describe('WorksListPage', () => {
     request.flush(pageOf([theMartian]));
     await navigating;
 
-    await vi.waitFor(() => expect(rows(page).map((row) => row[0])).toEqual(['The Martian']));
+    await vi.waitFor(() =>
+      expect(captions(page).map((caption) => caption[0])).toEqual(['The Martian']),
+    );
     expect(harness.routeDebugElement?.componentInstance).toBe(listPage);
   });
 
@@ -295,7 +306,7 @@ describe('WorksListPage', () => {
     expect(router.url).toBe('/works?page=2');
     expect(request.request.params.get('Sort')).toBe('title');
     expect(request.request.params.get('Offset')).toBe('50');
-    expect(rows(page).map((row) => row[0])).toEqual(['The Martian']);
+    expect(captions(page).map((caption) => caption[0])).toEqual(['The Martian']);
     expect(page.textContent).toContain('Page 2 of 3');
   });
 
@@ -365,10 +376,10 @@ describe('WorksListPage', () => {
     expect(page.textContent).toContain('Page 1 of 3');
   });
 
-  it('shows No works yet in place of the table when there are none', async () => {
+  it('shows No works yet in place of the grid when there are none', async () => {
     const { page } = await openList('/works', []);
 
-    expect(page.querySelector('table')).toBeNull();
+    expect(page.querySelector('ul')).toBeNull();
     expect(page.textContent).toContain('No works yet');
   });
 
@@ -379,7 +390,7 @@ describe('WorksListPage', () => {
     const page = harness.routeNativeElement as HTMLElement;
     await shown(page);
 
-    expect(page.querySelector('table')).toBeNull();
+    expect(page.querySelector('ul')).toBeNull();
     expect(page.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
       'Something went wrong. Try again.',
     );

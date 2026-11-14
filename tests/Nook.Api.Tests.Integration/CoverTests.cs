@@ -1,4 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -119,6 +122,62 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(["nosniff"], response.Headers.GetValues("X-Content-Type-Options"));
         Assert.Equal(["default-src 'none'; sandbox"], response.Headers.GetValues("Content-Security-Policy"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("small")]
+    public async Task Cover_asked_for_by_its_hash_can_be_kept_for_good(string? size)
+    {
+        var work = await factory.IngestWithCoverAsync(TestImages.Png(660, 960));
+        using var client = await factory.CreateSignedInClientAsync();
+        var sizeQuery = size is null ? "" : $"size={size}&";
+
+        var response = await client.GetAsync(
+            $"/api/works/{work.Id}/cover?{sizeQuery}v={work.CoverHash}", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        AssertCanBeKeptForGood(response);
+    }
+
+    [Fact]
+    public async Task Cover_asked_for_by_its_hash_can_be_kept_when_the_response_renews_the_session_cookie()
+    {
+        // With no interval the session is checked on every request, and each check renews the cookie.
+        using var renewing = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero)));
+        var work = await factory.IngestWithCoverAsync(TestImages.Png(680, 980));
+        using var client = await renewing.CreateSignedInClientAsync();
+
+        var response = await client.GetAsync(
+            $"/api/works/{work.Id}/cover?size=small&v={work.CoverHash}", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.Contains("Set-Cookie"), "The response did not renew the session cookie.");
+        var cacheControl = AssertCanBeKeptForGood(response);
+        Assert.False(cacheControl.NoStore, $"Cache-Control is {cacheControl}.");
+        Assert.False(response.Headers.Contains("Pragma"), "The response carries Pragma.");
+        Assert.Null(response.Content.Headers.Expires);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("0123456789abcdef")]
+    public async Task Cover_asked_for_without_its_hash_is_checked_every_time(string? v)
+    {
+        var work = await factory.IngestWithCoverAsync(TestImages.Png(670, 970));
+        using var client = await factory.CreateSignedInClientAsync();
+        var url = v is null ? $"/api/works/{work.Id}/cover" : $"/api/works/{work.Id}/cover?v={v}";
+
+        var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var cacheControl = response.Headers.CacheControl;
+        Assert.NotNull(cacheControl);
+        Assert.True(cacheControl.NoCache, $"Cache-Control is {cacheControl}.");
+        Assert.True(cacheControl.Private, $"Cache-Control is {cacheControl}.");
+        Assert.Null(cacheControl.MaxAge);
+        Assert.DoesNotContain(cacheControl.Extensions, e => e.Name == "immutable");
     }
 
     [Fact]
@@ -376,5 +435,17 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         // Another test may have emptied the cache, folder and all.
         var folder = factory.CoverCacheFolder();
         return Directory.Exists(folder) ? Directory.GetFiles(folder, $"{work.CoverHash}*") : [];
+    }
+
+    /// <summary>Asserts a response lets a browser keep it for a year without asking again, and returns its header.</summary>
+    private static CacheControlHeaderValue AssertCanBeKeptForGood(HttpResponseMessage response)
+    {
+        var cacheControl = response.Headers.CacheControl;
+        Assert.NotNull(cacheControl);
+        Assert.True(cacheControl.Private, $"Cache-Control is {cacheControl}.");
+        Assert.Equal(TimeSpan.FromSeconds(31536000), cacheControl.MaxAge);
+        Assert.Contains(cacheControl.Extensions, e => e.Name == "immutable");
+        Assert.False(cacheControl.NoCache, $"Cache-Control is {cacheControl}.");
+        return cacheControl;
     }
 }
