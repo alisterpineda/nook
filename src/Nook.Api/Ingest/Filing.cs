@@ -169,6 +169,9 @@ public static class Filing
         });
     }
 
+    /// <summary>The path of a file in a folder, both relative to the library folder. An empty folder is the library folder itself.</summary>
+    public static string Join(string folder, string name) => folder.Length == 0 ? name : $"{folder}/{name}";
+
     /// <summary>
     /// Copies the staged file into the folder as <c>&lt;title&gt;&lt;extension&gt;</c> with the title made safe as a
     /// segment, or, when a part already points at that name, <c>&lt;title&gt; (2)&lt;extension&gt;</c>, then (3) and so
@@ -184,7 +187,7 @@ public static class Filing
         return FirstFree(number =>
         {
             var name = Numbered(title, number) + extension;
-            var relativePath = folder.Length == 0 ? name : $"{folder}/{name}";
+            var relativePath = Join(folder, name);
             var path = storage.LibraryFile(library, relativePath);
             return TryCopy(stagedFile, path, IsClaimed(claimedPaths, relativePath))
                 ? new FiledBook(relativePath, path, created ? folderPath : null)

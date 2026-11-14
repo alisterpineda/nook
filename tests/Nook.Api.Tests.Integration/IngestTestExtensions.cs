@@ -55,6 +55,14 @@ internal static class IngestTestExtensions
     public static async Task<List<string>> ReadPartPathsAsync(this WebApplicationFactory<Program> app, Library library) =>
         (await app.ReadPartsAsync(library)).Select(part => part.Path).ToList();
 
+    /// <summary>The work row with the id, as the database holds it.</summary>
+    public static async Task<Work> ReadWorkAsync(this WebApplicationFactory<Program> app, Guid workId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        return await db.Works.AsNoTracking().SingleAsync(w => w.Id == workId, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>How many people, series or tags have a name ending in the suffix.</summary>
     public static async Task<int> CountNamedAsync<T>(this WebApplicationFactory<Program> app, string suffix)
         where T : NamedEntity

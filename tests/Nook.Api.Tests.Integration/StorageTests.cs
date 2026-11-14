@@ -19,7 +19,7 @@ public class StorageTests(NookApiFactory factory) : IClassFixture<NookApiFactory
     }
 
     [Fact]
-    public async Task Starting_the_api_creates_the_staging_and_library_folders()
+    public async Task Starting_the_api_creates_the_staging_library_and_cache_folders()
     {
         using var client = factory.CreateClient();
         var response = await client.GetAsync("/api/setup", TestContext.Current.CancellationToken);
@@ -27,6 +27,7 @@ public class StorageTests(NookApiFactory factory) : IClassFixture<NookApiFactory
 
         Assert.True(Directory.Exists(Path.Combine(factory.DataPath, "staging")));
         Assert.True(Directory.Exists(Path.Combine(factory.DataPath, "library")));
+        Assert.True(Directory.Exists(factory.CoverCacheFolder()));
     }
 
     [Theory]

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Nook.Api.Data;
 
 namespace Nook.Api.Tests.Integration;
@@ -62,4 +63,11 @@ internal static class ApiTestExtensions
         Assert.True(response.IsSuccessStatusCode, $"GET {url} answered {(int)response.StatusCode}.");
         return await response.ReadAsync<T>();
     }
+
+    /// <summary>The messages the API has logged at a level so far, oldest first.</summary>
+    public static IReadOnlyList<string> ReadLogs(this WebApplicationFactory<Program> factory, LogLevel level) =>
+        factory.Services.GetFakeLogCollector().GetSnapshot()
+            .Where(r => r.Level == level)
+            .Select(r => r.Message)
+            .ToList();
 }

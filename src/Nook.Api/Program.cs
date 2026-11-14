@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
 using Nook.Api.Features.Uploads;
+using Nook.Api.Features.Works;
 using Nook.Api.Ingest;
 using Nook.Api.Jobs;
 using Nook.Api.Storage;
@@ -32,6 +33,8 @@ if (!buildingOpenApiDocument)
     storageOptions.ValidateDataAnnotations().ValidateOnStart();
 }
 builder.Services.AddSingleton<NookStorage>();
+builder.Services.AddSingleton<CoverResizer>();
+builder.Services.AddSingleton<CoverCache>();
 
 builder.Services.AddOptions<UploadOptions>()
     .BindConfiguration(UploadOptions.Section)

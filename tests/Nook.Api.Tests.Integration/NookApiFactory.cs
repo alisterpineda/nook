@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Logging;
 
 namespace Nook.Api.Tests.Integration;
 
@@ -31,6 +32,9 @@ public sealed class NookApiFactory(PostgresFixture server) : WebApplicationFacto
         // An idle worker looks for jobs this often, so a job no wake announces, such as one a test writes straight
         // to the database, is picked up quickly.
         builder.UseSetting("Nook:Jobs:PollSeconds", "0.2");
+
+        // Keeps what the API logs, so a test can read it.
+        builder.ConfigureLogging(logging => logging.AddFakeLogging());
     }
 
     public override async ValueTask DisposeAsync()

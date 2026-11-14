@@ -566,6 +566,10 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("cover_hash");
 
+                    b.Property<string>("CoverPath")
+                        .HasColumnType("text")
+                        .HasColumnName("cover_path");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");

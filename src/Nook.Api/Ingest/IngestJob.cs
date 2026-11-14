@@ -146,7 +146,7 @@ public sealed class IngestJob : JobType
             var filed = joined ? Filing.CopyBesideOthers(book, workFolder) : Filing.CopyIntoNewFolder(book, workFolder);
 
             var item = new Item { WorkId = work.Id, Format = handler.Format };
-            string? coverPath = null;
+            string? coverFile = null;
             var saving = false;
             try
             {
@@ -154,15 +154,17 @@ public sealed class IngestJob : JobType
                 // over any cover of the same name a run that died left there.
                 if (cover is not null && string.IsNullOrEmpty(work.CoverHash))
                 {
+                    var coverName = "cover" + cover.Extension;
                     var folder = Path.GetDirectoryName(filed.FullPath)!;
-                    var path = Path.Combine(folder, "cover" + cover.Extension);
+                    var path = Path.Combine(folder, coverName);
                     await using (var stream = NookStorage.ReplaceFile(path))
                     {
-                        coverPath = path;
+                        coverFile = path;
                         await stream.WriteAsync(cover.Bytes, cancellationToken);
                     }
 
                     work.CoverHash = Convert.ToHexStringLower(SHA256.HashData(cover.Bytes));
+                    work.CoverPath = Filing.Join(Filing.FolderOf(filed.RelativePath), coverName);
                 }
 
                 db.Items.Add(item);
@@ -188,11 +190,11 @@ public sealed class IngestJob : JobType
                 // stake. A failure before the save leaves the lock held, and the copy goes at once.
                 if (saving)
                 {
-                    await UndoUnlessSavedAsync(transaction, item.Id, filed, coverPath);
+                    await UndoUnlessSavedAsync(transaction, item.Id, filed, coverFile);
                 }
                 else
                 {
-                    Undo(filed, coverPath, logger);
+                    Undo(filed, coverFile, logger);
                 }
 
                 throw;
@@ -204,7 +206,7 @@ public sealed class IngestJob : JobType
         // and taken again on a connection of its own; under it the copy goes only when this run's item is absent and
         // no part points at the path. When nothing says, the copy stays, unclaimed, for a later run to file over.
         async Task UndoUnlessSavedAsync(
-            IDbContextTransaction transaction, Guid itemId, Filing.FiledBook filed, string? coverPath)
+            IDbContextTransaction transaction, Guid itemId, Filing.FiledBook filed, string? coverFile)
         {
             try
             {
@@ -237,7 +239,7 @@ public sealed class IngestJob : JobType
                         library!, Filing.FolderOf(filed.RelativePath), CancellationToken.None);
                     if (!Filing.IsClaimed(claimedPaths, filed.RelativePath))
                     {
-                        Undo(filed, coverPath, logger);
+                        Undo(filed, coverFile, logger);
                     }
                 });
             }
@@ -277,7 +279,7 @@ public sealed class IngestJob : JobType
     /// that leaves it empty; an author folder made on the way stays. The staged file is not touched. A failure here is
     /// logged, so the error that caused the undo is the one reported.
     /// </summary>
-    private static void Undo(Filing.FiledBook filed, string? coverPath, ILogger logger)
+    private static void Undo(Filing.FiledBook filed, string? coverFile, ILogger logger)
     {
         try
         {
@@ -288,15 +290,15 @@ public sealed class IngestJob : JobType
             logger.LogError(exception, "Could not delete the filed copy {BookPath}.", filed.FullPath);
         }
 
-        if (coverPath is not null)
+        if (coverFile is not null)
         {
             try
             {
-                File.Delete(coverPath);
+                File.Delete(coverFile);
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Could not delete the cover {CoverPath}.", coverPath);
+                logger.LogError(exception, "Could not delete the cover {CoverPath}.", coverFile);
             }
         }
 

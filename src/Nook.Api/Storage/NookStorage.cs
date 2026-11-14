@@ -3,7 +3,7 @@ using Nook.Api.Data;
 
 namespace Nook.Api.Storage;
 
-/// <summary>The folders under the data root: <c>library/</c>, which holds one folder per library, and <c>staging/</c>, which holds uploads waiting to be ingested.</summary>
+/// <summary>The folders under the data root: <c>library/</c>, which holds one folder per library, <c>staging/</c>, which holds uploads waiting to be ingested, and <c>cache/</c>, which holds files that can be made again from the library.</summary>
 public sealed class NookStorage(IOptions<StorageOptions> options)
 {
     /// <summary>The buffer files are copied through, the size <see cref="Stream.CopyToAsync(Stream)"/> uses.</summary>
@@ -19,6 +19,9 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
 
     /// <summary>The folder that holds every library's folder.</summary>
     public string LibrariesFolder => Path.Combine(Root, "library");
+
+    /// <summary>Where resized covers are kept. Everything in it can be made again from the covers in the library.</summary>
+    public string CoversCacheFolder => Path.Combine(Root, "cache", "covers");
 
     /// <summary>The folder that holds one library's files.</summary>
     public string LibraryFolder(Library library) => Path.Combine(LibrariesFolder, library.FolderName);
@@ -56,10 +59,11 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
     public static FileStream OpenFile(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, useAsync: true);
 
-    /// <summary>Creates the staging and library folders when they are missing. Reading the data root throws when it is not set.</summary>
+    /// <summary>Creates the staging, library and cover cache folders when they are missing. Reading the data root throws when it is not set.</summary>
     public void CreateFolders()
     {
         Directory.CreateDirectory(StagingFolder);
         Directory.CreateDirectory(LibrariesFolder);
+        Directory.CreateDirectory(CoversCacheFolder);
     }
 }

@@ -283,6 +283,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(TestData.PngCover)), work.CoverHash);
         var cover = factory.LibraryPath(library, "Books", "William Gibson", "Idoru", "cover.png");
         Assert.Equal(TestData.PngCover, await File.ReadAllBytesAsync(cover, TestContext.Current.CancellationToken));
+        Assert.Equal("Books/William Gibson/Idoru/cover.png", (await factory.ReadWorkAsync(work.Id)).CoverPath);
     }
 
     [Fact]
@@ -869,6 +870,40 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(TestData.PngCover, await File.ReadAllBytesAsync(cover, TestContext.Current.CancellationToken));
         var work = await GetOnlyWorkAsync(client, library);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(TestData.PngCover)), work.CoverHash);
+    }
+
+    [Fact]
+    public async Task Epub_with_a_cover_records_the_cover_files_path()
+    {
+        var library = await factory.AddLibraryAsync();
+        var epub = new EpubBuilder().WithTitle("Bloodchild").WithCreator("Octavia E. Butler")
+            .WithCover(TestData.PngCover)
+            .Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "bloodchild.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var work = await factory.ReadWorkAsync((await GetOnlyWorkAsync(client, library)).Id);
+        Assert.Equal("Books/Octavia E. Butler/Bloodchild/cover.png", work.CoverPath);
+        Assert.Equal(
+            TestData.PngCover,
+            await File.ReadAllBytesAsync(
+                factory.LibraryPath(library, work.CoverPath!.Split('/')), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Epub_without_a_cover_records_no_cover_path()
+    {
+        var library = await factory.AddLibraryAsync();
+        var epub = new EpubBuilder().WithTitle("Fledgling").WithCreator("Octavia E. Butler").Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "fledgling.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var work = await factory.ReadWorkAsync((await GetOnlyWorkAsync(client, library)).Id);
+        Assert.Null(work.CoverPath);
     }
 
     [Fact]

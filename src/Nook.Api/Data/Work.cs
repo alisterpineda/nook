@@ -33,6 +33,9 @@ public class Work : Entity
     /// <summary>The content hash of the cover image.</summary>
     public string? CoverHash { get; set; }
 
+    /// <summary>The cover file's path, relative to the library folder. Null when the work has no cover.</summary>
+    public string? CoverPath { get; set; }
+
     /// <summary>The full-text search document. Empty until search is built.</summary>
     public NpgsqlTsVector? SearchVector { get; set; }
 
