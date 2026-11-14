@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Needs the Aspire extension (microsoft-aspire.aspire-vscode) and the Aspire CLI. Starts Postgres, the API and
+      // the Angular dev server, with the debugger attached to the API.
+      "name": "Aspire: Nook",
+      "type": "aspire",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/Nook.AppHost/Nook.AppHost.csproj",
+      "dashboardBrowser": "integratedBrowser"
+    }
+  ]
+}
