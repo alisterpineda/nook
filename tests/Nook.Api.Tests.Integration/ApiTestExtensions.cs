@@ -64,6 +64,15 @@ internal static class ApiTestExtensions
         return await response.ReadAsync<T>();
     }
 
+    /// <summary>Saves rows straight to the database, for what no endpoint can set up.</summary>
+    public static async Task AddRowsAsync(this WebApplicationFactory<Program> factory, params object[] rows)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        db.AddRange(rows);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
     /// <summary>The messages the API has logged at a level so far, oldest first.</summary>
     public static IReadOnlyList<string> ReadLogs(this WebApplicationFactory<Program> factory, LogLevel level) =>
         factory.Services.GetFakeLogCollector().GetSnapshot()

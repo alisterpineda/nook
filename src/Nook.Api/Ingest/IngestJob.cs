@@ -298,7 +298,7 @@ public sealed class IngestJob : JobType
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Could not delete the cover {CoverPath}.", coverFile);
+                logger.LogError(exception, "Could not delete the cover {CoverFile}.", coverFile);
             }
         }
 

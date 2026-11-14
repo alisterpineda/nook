@@ -123,12 +123,12 @@ public partial class WorksController(
     [HttpGet("{id:guid}/cover")]
     [ProducesResponseType<Stream>(
         StatusCodes.Status200OK,
-        CoverMediaTypes.Jpeg,
-        CoverMediaTypes.Png,
-        CoverMediaTypes.Gif,
-        CoverMediaTypes.Webp,
-        CoverMediaTypes.Svg,
-        CoverMediaTypes.Fallback)]
+        CoverImageTypes.Jpeg,
+        CoverImageTypes.Png,
+        CoverImageTypes.Gif,
+        CoverImageTypes.Webp,
+        CoverImageTypes.Svg,
+        CoverImageTypes.Fallback)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCover(
@@ -168,7 +168,7 @@ public partial class WorksController(
             : null;
         if (cachedPath is not null && TryOpen(cachedPath) is { } cached)
         {
-            return File(cached, CoverMediaTypes.Jpeg);
+            return File(cached, CoverImageTypes.Jpeg);
         }
 
         // A cover gone from the library is not found, though a resized file still in the cache is served above.
@@ -193,14 +193,14 @@ public partial class WorksController(
                 {
                     await TryKeepAsync(cachedPath, resized, cancellationToken);
                 }
-                return File(resized, CoverMediaTypes.Jpeg);
+                return File(resized, CoverImageTypes.Jpeg);
             }
 
             // Nothing is cached, so the next request for this size tries again.
             LogCoverNotResized(logger, id, coverPath);
         }
 
-        return PhysicalFile(path, CoverMediaTypes.Of(path));
+        return PhysicalFile(path, CoverImageTypes.MediaTypeOf(path));
     }
 
     /// <summary>

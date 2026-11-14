@@ -17,9 +17,9 @@ namespace Nook.Api.Data.Migrations
                 nullable: true);
 
             // Works ingested before this point have a cover hash but no cover path, so their covers cannot be found.
-            // They lose the hash, and nothing fills either in for them again: uploading the same file to the same
-            // library is refused as a duplicate. A cover comes back only when the book is ingested where it is not
-            // already held, such as into a new library or an emptied install.
+            // They lose the hash. A work gets a cover again when another file with a cover is filed under it, such
+            // as another edition matched by ISBN. Uploading the same file again does not do it: that is refused as
+            // a duplicate.
             migrationBuilder.Sql("UPDATE works SET cover_hash = NULL;");
         }
 

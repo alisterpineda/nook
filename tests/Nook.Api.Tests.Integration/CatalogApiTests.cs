@@ -39,8 +39,8 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     public async Task Works_sorted_by_added_come_newest_first()
     {
         var library = await AddLibraryAsync(lib => [TestData.NewWork("First", lib, "First")]);
-        await AddAsync(TestData.NewWork("Second", library, "Second"));
-        await AddAsync(TestData.NewWork("Third", library, "Third"));
+        await factory.AddRowsAsync(TestData.NewWork("Second", library, "Second"));
+        await factory.AddRowsAsync(TestData.NewWork("Third", library, "Third"));
         using var client = await factory.CreateSignedInClientAsync();
 
         var page = await client.GetAsync<Page<WorkSummaryResponse>>($"/api/works?libraryId={library}&sort=added");
@@ -147,7 +147,7 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
         work.Items.Add(item);
         var second = new Part { ItemId = item.Id, Order = 1, Path = "b.epub", MediaType = "application/epub+zip", Size = 20, Sha256 = new string('b', 64) };
         var first = new Part { ItemId = item.Id, Order = 0, Path = "a.epub", MediaType = "application/epub+zip", Size = 10, Sha256 = new string('a', 64) };
-        await AddAsync(series, ursula, narrator, work, second, first);
+        await factory.AddRowsAsync(series, ursula, narrator, work, second, first);
         using var client = await factory.CreateSignedInClientAsync();
 
         var detail = await client.GetAsync<WorkDetailResponse>($"/api/works/{work.Id}");
@@ -190,7 +190,7 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     public async Task Work_detail_of_a_bare_work_has_empty_lists()
     {
         var work = TestData.NewWork("Bare detail");
-        await AddAsync(work);
+        await factory.AddRowsAsync(work);
         using var client = await factory.CreateSignedInClientAsync();
 
         var detail = await client.GetAsync<WorkDetailResponse>($"/api/works/{work.Id}");
@@ -217,15 +217,7 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     private async Task<Guid> AddLibraryAsync(Func<Guid, object[]> rows)
     {
         var library = await factory.AddLibraryAsync();
-        await AddAsync(rows(library.Id));
+        await factory.AddRowsAsync(rows(library.Id));
         return library.Id;
-    }
-
-    private async Task AddAsync(params object[] rows)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        db.AddRange(rows);
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

@@ -62,7 +62,7 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     public async Task Cover_of_a_work_with_no_cover_is_not_found()
     {
         var work = TestData.NewWork("Parable of the Sower");
-        await AddWorkAsync(work);
+        await factory.AddRowsAsync(work);
         using var client = await factory.CreateSignedInClientAsync();
 
         var response = await client.GetAsync($"/api/works/{work.Id}/cover", TestContext.Current.CancellationToken);
@@ -98,7 +98,7 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var work = TestData.NewWork("Dawn", library.Id);
         work.CoverHash = "0123456789abcdef";
         work.CoverPath = "Books/cover.bmp";
-        await AddWorkAsync(work);
+        await factory.AddRowsAsync(work);
         using var client = await factory.CreateSignedInClientAsync();
 
         var response = await client.GetAsync($"/api/works/{work.Id}/cover", cancellationToken);
@@ -376,13 +376,5 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         // Another test may have emptied the cache, folder and all.
         var folder = factory.CoverCacheFolder();
         return Directory.Exists(folder) ? Directory.GetFiles(folder, $"{work.CoverHash}*") : [];
-    }
-
-    private async Task AddWorkAsync(Work work)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        db.Works.Add(work);
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

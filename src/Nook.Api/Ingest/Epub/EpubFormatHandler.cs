@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using Nook.Api.Data;
+using Nook.Api.Storage;
 using VersOne.Epub;
 using VersOne.Epub.Options;
 using VersOne.Epub.Schema;
@@ -48,21 +49,6 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         "http://www.idpf.org/2008/embedding",
         "http://ns.adobe.com/pdf/enc#RC",
     ];
-
-    private static readonly Dictionary<string, string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["image/jpeg"] = ".jpg",
-        ["image/png"] = ".png",
-        ["image/gif"] = ".gif",
-        ["image/webp"] = ".webp",
-        ["image/svg+xml"] = ".svg",
-    };
-
-    /// <summary>
-    /// The extensions a cover keeps from its file name inside the EPUB: the ones the image media types stand for, and
-    /// the other spelling of JPEG's.
-    /// </summary>
-    private static readonly HashSet<string> CoverFileExtensions = [.. ImageExtensions.Values, ".jpeg"];
 
     /// <summary>The MARC relator codes of the roles Nook keeps.</summary>
     private static readonly Dictionary<string, ContributorRole> Roles = new(StringComparer.OrdinalIgnoreCase)
@@ -485,7 +471,7 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     private static string? CoverExtension(string filePath, string mediaType)
     {
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
-        return CoverFileExtensions.Contains(extension) ? extension : ImageExtensions.GetValueOrDefault(mediaType.Trim());
+        return CoverImageTypes.IsExtension(extension) ? extension : CoverImageTypes.ExtensionOf(mediaType.Trim());
     }
 
     private static string? FirstValue(IEnumerable<string?> values) => Values(values).FirstOrDefault();
