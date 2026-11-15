@@ -6,13 +6,20 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
-import { READER_ENGINE, ReaderPlace } from './reader-engine';
+import {
+  READER_ENGINE,
+  ReaderContentsEntry,
+  ReaderPlace,
+  ReaderSettings,
+  readerThemeColours,
+} from './reader-engine';
 import { ReaderPage } from './reader-page';
 import { FakeReaderEngine, provideFakeReaderEngine } from './testing/fake-reader-engine';
 
 const workId = '0198a1b2-0000-7000-8000-000000000001';
 const itemId = '0198a1b2-0000-7000-8000-0000000000f1';
 const readerUrl = `/works/${workId}/read/${itemId}`;
+const settingsKey = 'nook.reader.settings';
 
 @Component({ template: `<h1>Dune</h1>` })
 class WorkDetailStub {}
@@ -84,9 +91,55 @@ describe('ReaderPage', () => {
       .filter((method) => ['next', 'previous', 'goLeft', 'goRight'].includes(method));
   }
 
+  /** The settings the engine was asked to apply, in order. */
+  function applied(): ReaderSettings[] {
+    return engine.calls.flatMap((call) => (call.method === 'apply' ? [call.settings] : []));
+  }
+
   function place(fraction: number, chapterTitle: string | null): ReaderPlace {
     return { locator: { href: 'OEBPS/chapter-1.xhtml' }, fraction, chapterTitle };
   }
+
+  function buttons(element: HTMLElement): string[] {
+    return Array.from(element.querySelectorAll('button')).map((button) => text(button));
+  }
+
+  /** The contents panel, which is shown over the page rather than inside it, or null when it is not open. */
+  function contentsPanel(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[role="dialog"]');
+  }
+
+  async function openedContentsPanel(): Promise<HTMLElement> {
+    await vi.waitFor(() => {
+      page();
+      expect(contentsPanel()).not.toBeNull();
+    });
+    return contentsPanel()!;
+  }
+
+  /** The entries of a contents list: each entry's label, or its label and the entries under it. */
+  type Outline = (string | [string, Outline])[];
+
+  function outline(list: Element): Outline {
+    return Array.from(list.children).map((item) => {
+      const label = text(item.querySelector(':scope > button'));
+      const nested = item.querySelector('ul');
+      return nested ? [label, outline(nested)] : label;
+    });
+  }
+
+  const contents: ReaderContentsEntry[] = [
+    { label: 'Prologue', href: 'OEBPS/prologue.xhtml', children: [] },
+    {
+      label: 'Part One: Dune',
+      href: 'OEBPS/part-1.xhtml',
+      children: [
+        { label: 'Chapter 1: Arrakis', href: 'OEBPS/part-1.xhtml#chapter-1', children: [] },
+        { label: 'Chapter 2: The Gom Jabbar', href: 'OEBPS/part-1.xhtml#chapter-2', children: [] },
+      ],
+    },
+    { label: 'Appendix', href: 'OEBPS/appendix.xhtml', children: [] },
+  ];
 
   describe('with an engine that opens', () => {
     beforeEach(() => setUp([provideFakeReaderEngine(engine)]));
@@ -217,6 +270,176 @@ describe('ReaderPage', () => {
       await openReader();
 
       expect(engine.opened?.options.place).toEqual(saved);
+    });
+
+    it('lists the contents with nesting when the contents button is pressed', async () => {
+      engine.contents = contents;
+      const element = await openReader();
+      expect(contentsPanel()).toBeNull();
+
+      buttonLabelled(element, 'Contents').click();
+      const panel = await openedContentsPanel();
+
+      expect(text(panel.querySelector('h2'))).toBe('Contents');
+      expect(outline(panel.querySelector('ul')!)).toEqual([
+        'Prologue',
+        ['Part One: Dune', ['Chapter 1: Arrakis', 'Chapter 2: The Gom Jabbar']],
+        'Appendix',
+      ]);
+    });
+
+    it('goes to a chosen entry and closes the panel', async () => {
+      engine.contents = contents;
+      const element = await openReader();
+
+      buttonLabelled(element, 'Contents').click();
+      buttonLabelled(await openedContentsPanel(), 'Chapter 2: The Gom Jabbar').click();
+      await vi.waitFor(() => {
+        page();
+        expect(contentsPanel()).toBeNull();
+      });
+
+      expect(engine.calls.filter((call) => call.method === 'goTo')).toEqual([
+        { method: 'goTo', entry: contents[1].children[1] },
+      ]);
+    });
+
+    it('shows no contents button for a book without contents', async () => {
+      const element = await openReader();
+
+      expect(buttons(element)).not.toContain('Contents');
+      expect(buttons(element)).toContain('Next page');
+    });
+
+    it('opens the book with the saved settings', async () => {
+      const saved: ReaderSettings = { layout: 'scrolled', fontSize: 150, theme: 'sepia' };
+      localStorage.setItem(settingsKey, JSON.stringify(saved));
+
+      const element = await openReader();
+
+      expect(engine.opened?.options.settings).toEqual(saved);
+      expect(buttonLabelled(element, 'Scrolled layout').getAttribute('aria-pressed')).toBe('true');
+      expect(element.getAttribute('data-reader-theme')).toBe('sepia');
+    });
+
+    it('switches between paginated and scrolled', async () => {
+      const element = await openReader();
+      const layout = buttonLabelled(element, 'Scrolled layout');
+      expect(layout.getAttribute('aria-pressed')).toBe('false');
+
+      layout.click();
+      page();
+      expect(layout.getAttribute('aria-pressed')).toBe('true');
+      layout.click();
+      page();
+      expect(layout.getAttribute('aria-pressed')).toBe('false');
+
+      expect(applied()).toEqual([
+        { layout: 'scrolled', fontSize: 100, theme: 'light' },
+        { layout: 'paginated', fontSize: 100, theme: 'light' },
+      ]);
+    });
+
+    it('changes font size by ten percent and stops at 70 and 250', async () => {
+      localStorage.setItem(
+        settingsKey,
+        JSON.stringify({ layout: 'paginated', fontSize: 80, theme: 'light' }),
+      );
+      const element = await openReader();
+      const smaller = buttonLabelled(element, 'Smaller text');
+      const larger = buttonLabelled(element, 'Larger text');
+
+      larger.click();
+      smaller.click();
+      smaller.click();
+      page();
+      expect(smaller.disabled).toBe(true);
+      expect(larger.disabled).toBe(false);
+      smaller.click();
+
+      expect(applied().map((settings) => settings.fontSize)).toEqual([90, 80, 70]);
+    });
+
+    it('stops at 250 percent', async () => {
+      localStorage.setItem(
+        settingsKey,
+        JSON.stringify({ layout: 'paginated', fontSize: 240, theme: 'light' }),
+      );
+      const element = await openReader();
+      const larger = buttonLabelled(element, 'Larger text');
+
+      larger.click();
+      page();
+      expect(larger.disabled).toBe(true);
+      larger.click();
+
+      expect(applied().map((settings) => settings.fontSize)).toEqual([250]);
+    });
+
+    it('cycles light, dark and sepia and recolours the reader', async () => {
+      engine.contents = contents;
+      const element = await openReader();
+      expect(element.getAttribute('data-reader-theme')).toBe('light');
+
+      const seen: string[] = [];
+      for (const label of ['Theme: light', 'Theme: dark', 'Theme: sepia']) {
+        buttonLabelled(element, label).click();
+        page();
+        seen.push(element.getAttribute('data-reader-theme')!);
+      }
+
+      expect(seen).toEqual(['dark', 'sepia', 'light']);
+      // The reader around the book is drawn in the colours the book is.
+      expect(element.style.getPropertyValue('--background')).toBe(
+        readerThemeColours.light.background,
+      );
+      expect(element.style.getPropertyValue('--foreground')).toBe(readerThemeColours.light.text);
+      expect(applied().map((settings) => settings.theme)).toEqual(['dark', 'sepia', 'light']);
+
+      buttonLabelled(element, 'Theme: light').click();
+      buttonLabelled(element, 'Contents').click();
+      const panel = await openedContentsPanel();
+      expect(panel.querySelector('hlm-sheet-content')?.getAttribute('data-reader-theme')).toBe(
+        'dark',
+      );
+    });
+
+    it('saves a changed setting', async () => {
+      const element = await openReader();
+
+      buttonLabelled(element, 'Scrolled layout').click();
+      buttonLabelled(element, 'Larger text').click();
+      buttonLabelled(element, 'Theme: light').click();
+
+      expect(JSON.parse(localStorage.getItem(settingsKey)!)).toEqual({
+        layout: 'scrolled',
+        fontSize: 110,
+        theme: 'dark',
+      });
+    });
+
+    it('applies a setting changed while the book was opening once it has opened', async () => {
+      let finishOpening!: () => void;
+      const opening = new Promise<void>((resolve) => (finishOpening = resolve));
+      const open = engine.open.bind(engine);
+      engine.open = async (...args) => {
+        const opened = await open(...args);
+        await opening;
+        return opened;
+      };
+      await harness.navigateByUrl(readerUrl);
+      await vi.waitFor(() => {
+        page();
+        expect(engine.opened).not.toBeNull();
+      });
+
+      buttonLabelled(page(), 'Theme: light').click();
+      expect(applied()).toEqual([]);
+      finishOpening();
+      await settle();
+
+      expect(engine.opened?.options.settings.theme).toBe('light');
+      expect(applied()).toEqual([{ layout: 'paginated', fontSize: 100, theme: 'dark' }]);
     });
 
     it('saves the place as the reader moves', async () => {

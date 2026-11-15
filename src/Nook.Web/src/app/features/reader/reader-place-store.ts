@@ -1,5 +1,6 @@
 import { DOCUMENT, DestroyRef, Injectable, inject } from '@angular/core';
 import { ReaderLocator, ReaderPlace } from './reader-engine';
+import { readStoredJson, writeStoredJson } from './reader-storage';
 
 /** The least time between two writes of one book's place while the reader keeps moving. */
 const writeInterval = 1000;
@@ -36,16 +37,8 @@ export class ReaderPlaceStore {
 
   /** The place the item's book was left at, or undefined when none is kept or what is kept is not a Locator. */
   read(itemId: string): ReaderLocator | undefined {
-    try {
-      const value = this.storage()?.getItem(keyFor(itemId));
-      if (value == null) {
-        return undefined;
-      }
-      const locator: unknown = JSON.parse(value);
-      return isLocator(locator) ? locator : undefined;
-    } catch {
-      return undefined;
-    }
+    const locator = readStoredJson(this.document, keyFor(itemId));
+    return isLocator(locator) ? locator : undefined;
   }
 
   /** Keeps `place` as where the item's book was left, at once or within the second. */
@@ -85,17 +78,9 @@ export class ReaderPlaceStore {
     this.writes.set(itemId, writes);
   }
 
+  // When storage fails the place is not kept, and the book opens at its start next time.
   private write(itemId: string, locator: ReaderLocator): void {
-    try {
-      this.storage()?.setItem(keyFor(itemId), JSON.stringify(locator));
-    } catch {
-      // The place is not kept, and the book opens at its start next time.
-    }
-  }
-
-  // Reaching `localStorage` itself throws where the browser refuses storage to the page.
-  private storage(): Storage | undefined {
-    return this.document.defaultView?.localStorage;
+    writeStoredJson(this.document, keyFor(itemId), locator);
   }
 }
 

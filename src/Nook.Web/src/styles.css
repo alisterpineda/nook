@@ -6,7 +6,10 @@
 @import '@spartan-ng/brain/hlm-tailwind-preset.css';
 /* You can add global styles to this file, and also import other style files */
 
-:root {
+/* The reader shows a book in a theme of its own, whatever the app's: an element it marks with a theme takes that
+   theme's colours. */
+:root,
+[data-reader-theme='light'] {
   color-scheme: light;
 
   --font-sans:
@@ -47,7 +50,8 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-:root.dark {
+:root.dark,
+[data-reader-theme='dark'] {
   color-scheme: dark;
 
   --chart-1: oklch(0.488 0.243 264.376);

@@ -29,6 +29,22 @@ export type ReaderLayout = 'paginated' | 'scrolled';
 /** The colours the book and the reader around it are shown in. */
 export type ReaderTheme = 'light' | 'dark' | 'sepia';
 
+/** Every theme, in the order the reader offers them. */
+export const readerThemes: readonly ReaderTheme[] = ['light', 'dark', 'sepia'];
+
+/**
+ * Each theme's page, text and link colours. The book is drawn in them, and so is the reader around it, so the two
+ * meet without a seam.
+ */
+export const readerThemeColours: Record<
+  ReaderTheme,
+  { readonly background: string; readonly text: string; readonly link: string }
+> = {
+  light: { background: '#ffffff', text: '#0a0a0a', link: '#1d4ed8' },
+  dark: { background: '#0a0a0a', text: '#fafafa', link: '#93c5fd' },
+  sepia: { background: '#f4ecd8', text: '#5b4636', link: '#8a4b0f' },
+};
+
 /** How a book is shown. The same settings apply to every book. */
 export interface ReaderSettings {
   readonly layout: ReaderLayout;
