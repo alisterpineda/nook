@@ -5,6 +5,7 @@ import {
   afterNextRender,
   computed,
   inject,
+  isDevMode,
   signal,
   viewChild,
 } from '@angular/core';
@@ -30,9 +31,12 @@ import {
   ReaderArrowKey,
   ReaderContentsEntry,
   ReaderEngine,
+  ReaderLayout,
+  ReaderLocator,
   ReaderPlace,
   ReaderSettings,
   ReaderTapZone,
+  ReaderTheme,
   readerThemeColours,
   readerThemes,
 } from './reader-engine';
@@ -43,6 +47,35 @@ const couldNotShow = 'This book could not be shown.';
 
 /** Where the page stands with the book. */
 type Status = 'opening' | 'open' | 'failed';
+
+/**
+ * The reader's state as checks run in a browser read it, set on the window in dev mode only. Besides these, it carries
+ * whatever the engine tells about itself (see `ReaderEngine.inspect`).
+ */
+export interface ReaderBrowserState {
+  readonly [detail: string]: unknown;
+  /** Whether the book has opened and its place has been reported. */
+  readonly ready: boolean;
+  readonly locator: ReaderLocator | null;
+  readonly fraction: number | null;
+  readonly flow: ReaderLayout;
+  /** The labels of the table of contents, nested entries in order after the one they are under. */
+  readonly tocLabels: readonly string[];
+  readonly fontSize: number;
+  readonly theme: ReaderTheme;
+  /** How many places the engine has reported. */
+  readonly relocateCount: number;
+  /** The failures seen, as text. */
+  readonly errors: readonly string[];
+  /** Goes to the place nearest `fraction` of the way through the book. */
+  readonly goToFraction: (fraction: number) => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    __nookReader?: ReaderBrowserState;
+  }
+}
 
 /**
  * One book, full-screen: a toolbar with the way back to its work, the book's table of contents, how the book is shown
@@ -93,6 +126,7 @@ type Status = 'opening' | 'open' | 'failed';
             size="icon-sm"
             type="button"
             title="Contents"
+            data-testid="reader-toc-open"
             (click)="contentsOpen.set(true)"
           >
             <ng-icon name="lucideListTree" />
@@ -116,7 +150,7 @@ type Status = 'opening' | 'open' | 'failed';
               <hlm-sheet-header>
                 <h2 hlmSheetTitle>Contents</h2>
               </hlm-sheet-header>
-              <nav class="px-2 pb-4">
+              <nav class="px-2 pb-4" data-testid="reader-toc">
                 <ng-container
                   [ngTemplateOutlet]="entries"
                   [ngTemplateOutletContext]="{ $implicit: contents() }"
@@ -131,6 +165,7 @@ type Status = 'opening' | 'open' | 'failed';
           size="icon-sm"
           type="button"
           title="Scrolled layout"
+          data-testid="reader-flow"
           [attr.aria-pressed]="settings().layout === 'scrolled'"
           (click)="toggleLayout()"
         >
@@ -143,6 +178,7 @@ type Status = 'opening' | 'open' | 'failed';
           size="icon-sm"
           type="button"
           title="Smaller text"
+          data-testid="reader-font-smaller"
           [disabled]="settings().fontSize <= fontSize.min"
           (click)="changeFontSize(-fontSize.step)"
         >
@@ -155,6 +191,7 @@ type Status = 'opening' | 'open' | 'failed';
           size="icon-sm"
           type="button"
           title="Larger text"
+          data-testid="reader-font-larger"
           [disabled]="settings().fontSize >= fontSize.max"
           (click)="changeFontSize(fontSize.step)"
         >
@@ -167,6 +204,7 @@ type Status = 'opening' | 'open' | 'failed';
           size="icon-sm"
           type="button"
           [title]="themeLabel()"
+          data-testid="reader-theme"
           (click)="nextTheme()"
         >
           <ng-icon name="lucidePalette" />
@@ -179,6 +217,7 @@ type Status = 'opening' | 'open' | 'failed';
             size="icon-sm"
             type="button"
             title="Previous page"
+            data-testid="reader-prev"
             (click)="previous()"
           >
             <ng-icon name="lucideChevronLeft" />
@@ -190,6 +229,7 @@ type Status = 'opening' | 'open' | 'failed';
             size="icon-sm"
             type="button"
             title="Next page"
+            data-testid="reader-next"
             (click)="next()"
           >
             <ng-icon name="lucideChevronRight" />
@@ -199,7 +239,9 @@ type Status = 'opening' | 'open' | 'failed';
       }
     </header>
     @if (status() === 'failed') {
-      <p class="text-destructive p-4 text-sm" role="alert">{{ couldNotShow }}</p>
+      <p class="text-destructive p-4 text-sm" role="alert" data-testid="reader-error">
+        {{ couldNotShow }}
+      </p>
     }
     <!-- An entry's nested entries are listed inside it, indented, as deep as the book goes. -->
     <ng-template #entries let-list>
@@ -228,12 +270,18 @@ type Status = 'opening' | 'open' | 'failed';
         }
       </ul>
     </ng-template>
-    <div #book class="relative min-h-0 flex-1" [class.hidden]="status() === 'failed'"></div>
+    <div
+      #book
+      class="relative min-h-0 flex-1"
+      data-testid="reader-view"
+      [class.hidden]="status() === 'failed'"
+    ></div>
     @if (status() !== 'failed') {
       <!-- A fixed height: the navigator loses the place within a chapter when the book is resized, which a readout
            that grew with its first text would do just after opening at a saved place. -->
       <footer
         class="text-muted-foreground flex h-9 shrink-0 items-center gap-4 border-t px-4 text-sm"
+        data-testid="reader-status"
       >
         <span class="min-w-0 flex-1 truncate" data-reader-chapter>{{ place()?.chapterTitle }}</span>
         <span class="tabular-nums" data-reader-progress>{{ percent() }}</span>
@@ -292,6 +340,12 @@ export class ReaderPage {
   protected readonly themeLabel = computed(() => `Theme: ${this.settings().theme}`);
 
   private engine: ReaderEngine | null = null;
+  /** Whether the reader's state is set on the window for checks run in a browser. */
+  private readonly exposed = isDevMode();
+  /** How many places the engine has reported for the book on screen, for the browser checks. */
+  private relocateCount = 0;
+  /** The failures seen with the book on screen, as text, for the browser checks. */
+  private errors: string[] = [];
   /** Counts the books this page has been asked to show, so a book that is still opening can tell it was replaced. */
   private opening = 0;
 
@@ -317,6 +371,9 @@ export class ReaderPage {
     this.contentsOpen.set(false);
     this.settings.set(this.settingsStore.read());
     this.status.set('opening');
+    this.relocateCount = 0;
+    this.errors = [];
+    this.expose();
     void this.open(this.opening);
   }
 
@@ -325,6 +382,9 @@ export class ReaderPage {
     this.opening++;
     this.places.flush();
     this.close();
+    if (this.exposed) {
+      delete window.__nookReader;
+    }
   }
 
   private async open(opening: number): Promise<void> {
@@ -343,7 +403,7 @@ export class ReaderPage {
           place: this.places.read(this.itemId),
           settings,
           onPlace: (place) => replaced() || this.moved(place),
-          onError: () => replaced() || this.fail(),
+          onError: (error) => replaced() || this.fail(error),
           onTap: (zone) => replaced() || this.tapped(zone),
           onKey: (key) => replaced() || this.turn(key),
         },
@@ -351,14 +411,15 @@ export class ReaderPage {
       if (!replaced() && this.status() === 'opening') {
         this.contents.set(contents);
         this.status.set('open');
+        this.expose();
         // A setting changed while the book was opening was kept but not yet given to the engine.
         if (this.settings() !== settings) {
           this.applySettings();
         }
       }
-    } catch {
+    } catch (error) {
       if (!replaced()) {
-        this.fail();
+        this.fail(error);
       }
     }
   }
@@ -366,20 +427,22 @@ export class ReaderPage {
   private moved(place: ReaderPlace): void {
     this.place.set(place);
     this.places.save(this.itemId, place);
+    this.relocateCount++;
+    this.expose();
   }
 
   protected next(): void {
-    this.move((engine) => engine.next());
+    void this.move((engine) => engine.next());
   }
 
   protected previous(): void {
-    this.move((engine) => engine.previous());
+    void this.move((engine) => engine.previous());
   }
 
   /** Goes to a table of contents entry and puts the contents away. */
   protected goTo(entry: ReaderContentsEntry): void {
     this.contentsOpen.set(false);
-    this.move((engine) => engine.goTo(entry));
+    void this.move((engine) => engine.goTo(entry));
   }
 
   protected toggleLayout(): void {
@@ -404,6 +467,7 @@ export class ReaderPage {
   private change(changed: Partial<ReaderSettings>): void {
     this.settings.update((settings) => ({ ...settings, ...changed }));
     this.settingsStore.save(this.settings());
+    this.expose();
     // While the book is opening the engine has not taken the settings it was opened with; they are applied once it has.
     if (this.status() === 'open') {
       this.applySettings();
@@ -412,7 +476,7 @@ export class ReaderPage {
 
   private applySettings(): void {
     const settings = this.settings();
-    this.move((engine) => engine.apply(settings));
+    void this.move((engine) => engine.apply(settings));
   }
 
   // A tap in the middle of the book does nothing.
@@ -425,19 +489,56 @@ export class ReaderPage {
   // Taps and arrow keys name a side of the book rather than a direction, so a book read right to left turns the way
   // its reader expects.
   private turn(side: ReaderArrowKey): void {
-    this.move((engine) => (side === 'left' ? engine.goLeft() : engine.goRight()));
+    void this.move((engine) => (side === 'left' ? engine.goLeft() : engine.goRight()));
   }
 
-  private move(step: (engine: ReaderEngine) => Promise<void>): void {
-    if (this.engine) {
-      step(this.engine).catch(() => this.fail());
+  /** Runs a step on the book on screen. A step that fails after its book was left or replaced is let go. */
+  private async move(step: (engine: ReaderEngine) => Promise<void>): Promise<void> {
+    const engine = this.engine;
+    if (!engine) {
+      return;
+    }
+    const opening = this.opening;
+    try {
+      await step(engine);
+    } catch (error) {
+      if (opening === this.opening) {
+        this.fail(error);
+      }
     }
   }
 
   /** Shows the error in place of the book and takes the book down. */
-  private fail(): void {
+  private fail(error: unknown): void {
     this.status.set('failed');
+    this.errors.push(String(error));
     this.close();
+    this.expose();
+  }
+
+  /**
+   * In dev mode, sets the reader's state on the window as it stands now, for checks run in a browser to read. It is
+   * set again on every change they look at: a place reported, the book opened, a setting changed, a failure.
+   */
+  private expose(): void {
+    if (!this.exposed) {
+      return;
+    }
+    const place = this.place();
+    const settings = this.settings();
+    window.__nookReader = {
+      ...this.engine?.inspect(),
+      ready: this.status() === 'open' && place !== null,
+      locator: place?.locator ?? null,
+      fraction: place?.fraction ?? null,
+      flow: settings.layout,
+      tocLabels: labelsOf(this.contents()),
+      fontSize: settings.fontSize,
+      theme: settings.theme,
+      relocateCount: this.relocateCount,
+      errors: [...this.errors],
+      goToFraction: (fraction) => this.move((engine) => engine.goToFraction(fraction)),
+    };
   }
 
   private close(): void {
@@ -445,4 +546,9 @@ export class ReaderPage {
     this.engine = null;
     void engine?.close().catch(() => undefined);
   }
+}
+
+/** The labels of `entries` and of the entries under each, in the order the contents list them. */
+function labelsOf(entries: readonly ReaderContentsEntry[]): string[] {
+  return entries.flatMap((entry) => [entry.label, ...labelsOf(entry.children)]);
 }

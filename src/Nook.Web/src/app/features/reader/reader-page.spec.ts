@@ -442,6 +442,71 @@ describe('ReaderPage', () => {
       expect(applied()).toEqual([{ layout: 'paginated', fontSize: 100, theme: 'dark' }]);
     });
 
+    it("exposes the reader's state for browser checks in dev mode", async () => {
+      engine.contents = contents;
+      engine.details = {
+        cfi: 'OEBPS/chapter-1.xhtml#0.25000',
+        sectionIndex: 2,
+        sections: 9,
+        positions: 120,
+        fontMechanism: 'body-zoom',
+      };
+      await openReader();
+      expect(window.__nookReader?.ready).toBe(false);
+
+      engine.emitPlace(place(0.25, 'Chapter 1: Arrakis'));
+
+      expect(window.__nookReader).toMatchObject({
+        ready: true,
+        cfi: 'OEBPS/chapter-1.xhtml#0.25000',
+        locator: { href: 'OEBPS/chapter-1.xhtml' },
+        fraction: 0.25,
+        flow: 'paginated',
+        sectionIndex: 2,
+        sections: 9,
+        positions: 120,
+        tocLabels: [
+          'Prologue',
+          'Part One: Dune',
+          'Chapter 1: Arrakis',
+          'Chapter 2: The Gom Jabbar',
+          'Appendix',
+        ],
+        fontSize: 100,
+        fontMechanism: 'body-zoom',
+        theme: 'light',
+        relocateCount: 1,
+        errors: [],
+      });
+
+      buttonLabelled(page(), 'Larger text').click();
+      expect(window.__nookReader?.fontSize).toBe(110);
+
+      await window.__nookReader?.goToFraction(0.9);
+      expect(engine.calls).toContainEqual({ method: 'goToFraction', fraction: 0.9 });
+
+      engine.emitError(new Error('The chapter could not be loaded'));
+      expect(window.__nookReader?.errors).toEqual(['Error: The chapter could not be loaded']);
+
+      await harness.navigateByUrl(`/works/${workId}`);
+      expect(window.__nookReader).toBeUndefined();
+    });
+
+    it('lets go of a move that fails after the reader was left', async () => {
+      await openReader();
+      engine.emitPlace(place(0.25, 'Chapter 1: Arrakis'));
+      let failMove: (error: unknown) => void = () => undefined;
+      engine.settling = new Promise<void>((_, reject) => (failMove = reject));
+      const jump = window.__nookReader?.goToFraction(0.9);
+
+      engine.settling = null;
+      await harness.navigateByUrl(`/works/${workId}`);
+      failMove(new Error('The navigator was taken down'));
+      await jump;
+
+      expect(window.__nookReader).toBeUndefined();
+    });
+
     it('saves the place as the reader moves', async () => {
       await openReader();
       const first = place(0.1, 'Prologue');

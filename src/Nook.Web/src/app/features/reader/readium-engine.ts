@@ -22,6 +22,7 @@ import {
   readerThemeColours,
   type ReaderContentsEntry,
   type ReaderEngine,
+  type ReaderEngineDetails,
   type ReaderLocator,
   type ReaderOpenOptions,
   type ReaderOpened,
@@ -175,6 +176,9 @@ export class ReadiumEngine implements ReaderEngine {
       throw this.failure;
     }
     this.opened = true;
+    // Places seen while opening were held back: the navigator reports the chapter's start before it reaches a saved
+    // place further in, and that start would be kept as the place. Where the book opened is reported now.
+    this.report();
     return { contents: contentsOf(publication.toc?.items ?? []) };
   }
 
@@ -304,6 +308,31 @@ export class ReadiumEngine implements ReaderEngine {
     }
   }
 
+  /**
+   * The place as one string, its href and progression through that file; which file of the reading order it is in,
+   * of how many; how many positions the book has; and which rule of the navigator's stylesheet carries the font size
+   * in this browser, which differs between browsers.
+   */
+  inspect(): ReaderEngineDetails {
+    const book = this.book;
+    const locator = this.locator;
+    const settings = book?.navigator.settings;
+    return {
+      cfi: locator ? `${locator.href}#${(locator.locations?.progression ?? 0).toFixed(5)}` : null,
+      sectionIndex:
+        book && locator ? book.publication.readingOrder.findIndexWithHref(locator.href) : null,
+      sections: book?.publication.readingOrder.items.length ?? 0,
+      positions: book?.positions.length ?? 0,
+      fontMechanism: !settings
+        ? null
+        : settings.deprecatedFontSize
+          ? 'root-font-size'
+          : settings.iOSPatch
+            ? 'body-text-size-adjust'
+            : 'body-zoom',
+    };
+  }
+
   private listeners(): EpubNavigatorListeners {
     return {
       frameLoaded: noop,
@@ -355,7 +384,7 @@ export class ReadiumEngine implements ReaderEngine {
 
   private report(): void {
     const locator = this.locator;
-    if (this.closed || !locator) {
+    if (this.closed || !this.opened || !locator) {
       return;
     }
     const place: ReaderPlace = {

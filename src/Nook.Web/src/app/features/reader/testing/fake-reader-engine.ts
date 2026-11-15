@@ -4,6 +4,7 @@ import {
   ReaderArrowKey,
   ReaderContentsEntry,
   ReaderEngine,
+  ReaderEngineDetails,
   ReaderOpenOptions,
   ReaderOpened,
   ReaderPlace,
@@ -37,6 +38,10 @@ export class FakeReaderEngine implements ReaderEngine {
   contents: readonly ReaderContentsEntry[] = [];
   /** When set, `open` rejects with this instead of opening. */
   openError: unknown = undefined;
+  /** What `inspect` gives back. */
+  details: ReaderEngineDetails = {};
+  /** When set, every later move or change settles as this does, instead of resolving at once. */
+  settling: Promise<void> | null = null;
 
   private opening: FakeReaderEngineOpening | null = null;
   private closed = false;
@@ -94,6 +99,10 @@ export class FakeReaderEngine implements ReaderEngine {
     return this.record({ method: 'close' });
   }
 
+  inspect(): ReaderEngineDetails {
+    return this.details;
+  }
+
   /** Reports a position change to the page, as the engine does on every move. */
   emitPlace(place: ReaderPlace): void {
     this.openOptions().onPlace(place);
@@ -116,7 +125,7 @@ export class FakeReaderEngine implements ReaderEngine {
 
   private record(call: FakeReaderEngineCall): Promise<void> {
     this.calls.push(call);
-    return Promise.resolve();
+    return this.settling ?? Promise.resolve();
   }
 
   private openOptions(): ReaderOpenOptions {

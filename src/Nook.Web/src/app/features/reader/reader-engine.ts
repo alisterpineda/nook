@@ -92,6 +92,13 @@ export interface ReaderOpened {
 }
 
 /**
+ * What an engine tells about itself and the book it has open, beyond what the reader page is given: values that only
+ * the engine knows how to work out, such as where the place is among the book's files. For checking the reader in a
+ * browser; the page does not act on them.
+ */
+export type ReaderEngineDetails = Readonly<Record<string, JsonValue>>;
+
+/**
  * Shows a book and moves through it. The reader page reaches the book only through this, so it can be tested without
  * a browser layout engine. Every method but `open` acts on the book `open` opened, and each resolves when its move or
  * change is done.
@@ -115,6 +122,8 @@ export interface ReaderEngine {
   apply(settings: ReaderSettings): Promise<void>;
   /** Takes the book down and stops reporting. */
   close(): Promise<void>;
+  /** The engine's own details as they stand now. */
+  inspect(): ReaderEngineDetails;
 }
 
 /** Loads an engine, so its code is fetched only when a book is opened. */
