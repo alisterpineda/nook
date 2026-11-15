@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
 using Nook.Api.Features.Publications;
+using Nook.Api.Features.Security;
 using Nook.Api.Features.Uploads;
 using Nook.Api.Features.Works;
 using Nook.Api.Ingest;
@@ -81,6 +82,9 @@ if (!buildingOpenApiDocument)
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();
 }
+
+// Every response carries the web app's policy, an error and the built web app included, unless it sets its own.
+app.UseWebAppContentSecurityPolicy();
 
 // Errors and bare status codes, such as a 401 from the cookie, leave as problem details.
 app.UseExceptionHandler();

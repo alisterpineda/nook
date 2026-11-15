@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nook.Api.Data;
+using Nook.Api.Features.Security;
 using Contents = Nook.Api.Tests.Integration.EpubBuilder.Contents;
 
 namespace Nook.Api.Tests.Integration;
@@ -513,6 +514,26 @@ public class PublicationTests(NookApiFactory factory) : IClassFixture<NookApiFac
             Assert.Equal("nosniff", ContentTypeOptionsOf(response));
             Assert.Equal("no-referrer", ReferrerPolicyOf(response));
             Assert.NotEqual(SandboxPolicy, ContentSecurityPolicyOf(response));
+        }
+    }
+
+    [Fact]
+    public async Task A_book_resource_keeps_its_own_policy()
+    {
+        var part = await factory.IngestOnePartAsync(ScriptedBook());
+        var manifest = await GetSignedInManifestAsync(part.ItemId);
+        using var client = factory.CreateClient();
+
+        var resource = await client.GetAsync(Resolve(manifest, "OEBPS/styles/book.css"), CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, resource.StatusCode);
+        Assert.Equal(SandboxPolicy, ContentSecurityPolicyOf(resource));
+
+        foreach (var path in new[] { "manifest.json", PositionsHrefOf(manifest), "OEBPS/scripts/run.js" })
+        {
+            var response = await client.GetAsync(Resolve(manifest, path), CancellationToken);
+
+            Assert.Equal(WebAppContentSecurityPolicy.Value, ContentSecurityPolicyOf(response));
         }
     }
 

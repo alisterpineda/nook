@@ -1,9 +1,11 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Nook.Api.Features.Security;
 
 namespace Nook.Api.Tests.Integration;
 
@@ -78,6 +80,79 @@ public sealed class WebAppHostingTests : IClassFixture<NookApiFactory>, IDisposa
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/works/123")]
+    [InlineData("/main.js")]
+    public async Task The_web_app_and_its_files_carry_the_content_security_policy(string path)
+    {
+        using var client = _app.CreateClient();
+
+        var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal([WebAppPolicy], response.Headers.GetValues("Content-Security-Policy"));
+    }
+
+    [Fact]
+    public async Task An_api_response_carries_the_content_security_policy()
+    {
+        using var anonymous = _app.CreateClient();
+        using var signedIn = await _app.CreateSignedInClientAsync();
+
+        var responses = new[]
+        {
+            await signedIn.GetAsync("/api/works", TestContext.Current.CancellationToken),
+            await anonymous.GetAsync("/api/works", TestContext.Current.CancellationToken),
+            await signedIn.GetAsync("/api/nope", TestContext.Current.CancellationToken),
+        };
+
+        Assert.Equal(
+            [HttpStatusCode.OK, HttpStatusCode.Unauthorized, HttpStatusCode.NotFound],
+            responses.Select(response => response.StatusCode));
+        Assert.All(responses, response =>
+            Assert.Equal([WebAppPolicy], response.Headers.GetValues("Content-Security-Policy")));
+    }
+
+    /// <summary>
+    /// The dev server serves the web app in development, so it has to send the policy the API sends in production,
+    /// widened only by the socket its live reload uses. The two are separate copies, and this keeps them the same.
+    /// </summary>
+    [Fact]
+    public void The_dev_server_sends_the_same_policy_plus_its_live_reload_socket()
+    {
+        using var angularJson = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(RepositoryRoot(), "src", "Nook.Web", "angular.json")));
+
+        var devServerPolicy = angularJson.RootElement
+            .GetProperty("projects").GetProperty("nook-web").GetProperty("architect").GetProperty("serve")
+            .GetProperty("options").GetProperty("headers").GetProperty("Content-Security-Policy").GetString();
+
+        const string ApiConnectSource = "connect-src 'self' blob:";
+        Assert.Contains(ApiConnectSource, WebAppContentSecurityPolicy.Value);
+        Assert.Equal(
+            WebAppContentSecurityPolicy.Value.Replace(ApiConnectSource, "connect-src 'self' ws://localhost:4200 blob:"),
+            devServerPolicy);
+    }
+
+    /// <summary>The folder that holds the solution file, found by walking up from where the tests run.</summary>
+    private static string RepositoryRoot()
+    {
+        for (var folder = new DirectoryInfo(AppContext.BaseDirectory); folder is not null; folder = folder.Parent)
+        {
+            if (File.Exists(Path.Combine(folder.FullName, "Nook.slnx")))
+            {
+                return folder.FullName;
+            }
+        }
+
+        throw new InvalidOperationException($"No Nook.slnx above {AppContext.BaseDirectory}.");
+    }
+
+    /// <summary>The policy as the web app needs it, written out in full so a change to it is a change to a test.</summary>
+    private const string WebAppPolicy =
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' blob:; img-src 'self' blob: data:; font-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' blob:; frame-src blob:; child-src blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
 
     [Theory]
     [InlineData("/health")]
