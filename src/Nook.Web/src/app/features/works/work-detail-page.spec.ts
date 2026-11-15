@@ -279,6 +279,39 @@ describe('WorkDetailPage', () => {
     }
   });
 
+  /** The page's "Read" links. */
+  function readLinks(page: HTMLElement): HTMLAnchorElement[] {
+    return Array.from(page.querySelectorAll('a')).filter((link) => text(link) === 'Read');
+  }
+
+  it('offers to read an EPUB item that has one part', async () => {
+    const page = await openWork(dune);
+
+    expect(readLinks(page).map((link) => link.getAttribute('href'))).toEqual([
+      `/works/${duneId}/read/0198a1b2-0000-7000-8000-0000000000f4`,
+    ]);
+  });
+
+  it('offers no reading for an item with no part or several', async () => {
+    const page = await openWork({
+      ...dune,
+      items: [dune.items[0], { ...dune.items[1], parts: [] }],
+    });
+
+    expect(items(page)).toHaveLength(2);
+    expect(readLinks(page)).toEqual([]);
+  });
+
+  it('offers no reading for an item in a format it cannot read', async () => {
+    const page = await openWork({
+      ...dune,
+      items: [{ ...dune.items[1], format: 'm4b' as ItemFormat }],
+    });
+
+    expect(items(page)).toHaveLength(1);
+    expect(readLinks(page)).toEqual([]);
+  });
+
   it('shows a format it has no label for as the API sent it', async () => {
     const page = await openWork({
       ...dune,

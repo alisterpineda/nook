@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { IngestResult } from '../../api/jobs-api';
 import { components } from '../../api/schema';
+import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
 import { UploadPage } from './upload-page';
 import { UploadQueue } from './upload-queue';
@@ -351,17 +352,6 @@ describe('UploadPage', () => {
     function buttonsOf(element: HTMLElement): string[] {
       return Array.from(element.querySelectorAll('button')).map((button) => text(button));
     }
-
-    function button(element: HTMLElement, name: string): HTMLButtonElement {
-      const found = Array.from(element.querySelectorAll('button')).find(
-        (candidate) => text(candidate) === name,
-      );
-      if (!found) {
-        throw new Error(`No button named ${name}`);
-      }
-      return found;
-    }
-
     function clearFinished(): HTMLButtonElement | undefined {
       return Array.from(page.querySelectorAll('button')).find(
         (candidate) => text(candidate) === 'Clear finished',
@@ -495,7 +485,7 @@ describe('UploadPage', () => {
     it('Retry on a failed job reruns it and shows ingesting', async () => {
       await failedJob(epub('dune.epub'), duneJobId);
 
-      button(row('dune.epub'), 'Retry').click();
+      buttonLabelled(row('dune.epub'), 'Retry').click();
       const request = httpTesting.expectOne(`/api/jobs/${duneJobId}/retry`);
       expect(request.request.method).toBe('POST');
       request.flush(null, { status: 204, statusText: 'No Content' });
@@ -510,7 +500,7 @@ describe('UploadPage', () => {
       await pickFiles([dune]);
       await refuse(dune, { status: 502, title: 'Bad Gateway' });
 
-      button(row('dune.epub'), 'Retry').click();
+      buttonLabelled(row('dune.epub'), 'Retry').click();
       await settle();
 
       expectUpload(dune, books.id);
@@ -520,7 +510,7 @@ describe('UploadPage', () => {
     it('Remove on a failed job deletes the job and the row goes', async () => {
       await failedJob(epub('dune.epub'), duneJobId);
 
-      button(row('dune.epub'), 'Remove').click();
+      buttonLabelled(row('dune.epub'), 'Remove').click();
       const request = httpTesting.expectOne(`/api/jobs/${duneJobId}`);
       expect(request.request.method).toBe('DELETE');
       request.flush(null, { status: 204, statusText: 'No Content' });
@@ -534,7 +524,7 @@ describe('UploadPage', () => {
       await pickFiles([dune]);
       await refuse(dune, { status: 502, title: 'Bad Gateway' });
 
-      button(row('dune.epub'), 'Remove').click();
+      buttonLabelled(row('dune.epub'), 'Remove').click();
       await settle();
 
       expect(rows()).toEqual([]);

@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
@@ -14,6 +14,7 @@ import { WorkCover } from './work-cover';
 import { formatLabel, roleLabel, seriesText } from './work-labels';
 
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
+type WorkItemResponse = components['schemas']['WorkItemResponse'];
 
 /** Where the page stands for the work the URL names. */
 type Showing =
@@ -25,7 +26,7 @@ type Showing =
 /** One work with everything the API knows about it, leaving out what the work does not have. */
 @Component({
   selector: 'app-work-detail-page',
-  imports: [DatePipe, HlmBadgeImports, HlmButtonImports, WorkCover],
+  imports: [DatePipe, HlmBadgeImports, HlmButtonImports, RouterLink, WorkCover],
   template: `
     @let current = showing();
     @if (current.status === 'failed') {
@@ -108,7 +109,14 @@ type Showing =
             <ul class="flex flex-col gap-3">
               @for (item of work.items; track item.id) {
                 <li class="flex flex-col gap-1">
-                  <span hlmBadge variant="secondary">{{ formatLabel(item.format) }}</span>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span hlmBadge variant="secondary">{{ formatLabel(item.format) }}</span>
+                    @if (readable(item)) {
+                      <a hlmBtn size="sm" [routerLink]="['/works', work.id, 'read', item.id]"
+                        >Read</a
+                      >
+                    }
+                  </div>
                   <ul class="flex flex-col gap-1 text-sm">
                     @for (part of item.parts; track part.id) {
                       <li class="flex flex-wrap items-center gap-2">
@@ -166,6 +174,11 @@ export class WorkDetailPage {
       work.tags.length > 0 ||
       work.externalIds.length > 0
     );
+  }
+
+  // Ingest makes one part per EPUB item, but nothing enforces it, and the reader opens only an item with exactly one.
+  protected readable(item: WorkItemResponse): boolean {
+    return item.format === 'epub' && item.parts.length === 1;
   }
 
   private async load(id: string): Promise<Showing> {

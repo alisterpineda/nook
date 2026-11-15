@@ -1,18 +1,24 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { Type } from '@angular/core';
+import { Provider, Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from './api/schema';
 import { routes } from './app.routes';
+import { ReaderPage } from './features/reader/reader-page';
+import {
+  FakeReaderEngine,
+  provideFakeReaderEngine,
+} from './features/reader/testing/fake-reader-engine';
 import { SetupPage } from './features/setup/setup-page';
 import { SignInPage } from './features/sign-in/sign-in-page';
 import { UploadPage } from './features/upload/upload-page';
 import { UploadQueue } from './features/upload/upload-queue';
 import { WorkDetailPage } from './features/works/work-detail-page';
 import { WorksListPage } from './features/works/works-list-page';
+import { Shell } from './shell/shell';
 import { text } from './testing/element-text';
 import { openRequests } from './testing/open-requests';
 
@@ -68,17 +74,24 @@ describe('routes', () => {
   }
 
   /**
-   * Opens `url` as `visitor`, answering each request the guards and pages make along the way, and returns the page
-   * of type `page` that ends up on screen, if there is one.
+   * Opens `url` as `visitor` with `providers` added, answering each request the guards and pages make along the way,
+   * waits for the page of type `page` to be on screen, and says whether one of type `lookFor` is on screen too.
    */
   async function open<T>(
     url: string,
     visitor: Visitor,
     page: Type<T>,
+    providers: Provider[] = [],
+    lookFor: Type<unknown> = page,
   ): Promise<{ landedOn: string; shown: boolean }> {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideRouter(routes),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...providers,
+      ],
     });
     const httpTesting = TestBed.inject(HttpTestingController);
     const harness = await RouterTestingHarness.create();
@@ -86,7 +99,8 @@ describe('routes', () => {
 
     let settled = false;
     const navigating = harness.navigateByUrl(url).finally(() => (settled = true));
-    const isShown = () => harness.fixture.debugElement.query(By.directive(page)) !== null;
+    const isShown = (type: Type<unknown> = page) =>
+      harness.fixture.debugElement.query(By.directive(type)) !== null;
     await vi.waitFor(() => {
       for (const request of httpTesting.match(() => true)) {
         const body = byPath[request.request.url];
@@ -102,7 +116,7 @@ describe('routes', () => {
     await navigating;
     httpTesting.verify();
 
-    return { landedOn: TestBed.inject(Router).url, shown: isShown() };
+    return { landedOn: TestBed.inject(Router).url, shown: isShown(lookFor) };
   }
 
   it('the screens are at /setup, /sign-in, /works and /works/:id', async () => {
@@ -126,6 +140,35 @@ describe('routes', () => {
       landedOn: '/works/42',
       shown: true,
     });
+  });
+
+  it('shows the reader outside the shell to a signed-in visitor', async () => {
+    const signedIn = { signedIn: true, setupRequired: false };
+    const reader = '/works/42/read/0198a1b2-0000-7000-8000-0000000000f1';
+
+    expect(
+      await open(reader, signedIn, ReaderPage, [provideFakeReaderEngine(new FakeReaderEngine())]),
+    ).toEqual({ landedOn: reader, shown: true });
+    expect(
+      await open(
+        reader,
+        signedIn,
+        ReaderPage,
+        [provideFakeReaderEngine(new FakeReaderEngine())],
+        Shell,
+      ),
+    ).toEqual({ landedOn: reader, shown: false });
+  });
+
+  it('sends a signed-out visitor from the reader to sign-in', async () => {
+    expect(
+      await open(
+        '/works/42/read/0198a1b2-0000-7000-8000-0000000000f1',
+        { signedIn: false, setupRequired: false },
+        SignInPage,
+        [provideFakeReaderEngine(new FakeReaderEngine())],
+      ),
+    ).toEqual({ landedOn: '/sign-in', shown: true });
   });
 
   it('an admin who opens /upload sees the upload page', async () => {

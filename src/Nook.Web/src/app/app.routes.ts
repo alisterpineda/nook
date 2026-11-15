@@ -14,6 +14,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/sign-in/sign-in-page').then((m) => m.SignInPage),
   },
   {
+    // The reader fills the screen, so it stands outside the shell and its sidebar.
+    path: 'works/:workId/read/:itemId',
+    canActivate: [signedInGuard],
+    loadComponent: () => import('./features/reader/reader-page').then((m) => m.ReaderPage),
+  },
+  {
     // One shell holds every signed-in page, so it and the services under it stay put while the user moves between
     // them.
     path: '',
