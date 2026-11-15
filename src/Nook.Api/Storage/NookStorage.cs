@@ -3,7 +3,7 @@ using Nook.Api.Data;
 
 namespace Nook.Api.Storage;
 
-/// <summary>The folders under the data root: <c>library/</c>, which holds one folder per library, <c>staging/</c>, which holds uploads waiting to be ingested, and <c>cache/</c>, which holds files that can be made again from the library.</summary>
+/// <summary>The folders under the data root: <c>library/</c>, which holds one folder per library, <c>staging/</c>, which holds uploads waiting to be ingested, <c>cache/</c>, which holds files that can be made again from the library, and <c>keys/</c>, which holds the app's secrets.</summary>
 public sealed class NookStorage(IOptions<StorageOptions> options)
 {
     /// <summary>The buffer files are copied through, the size <see cref="Stream.CopyToAsync(Stream)"/> uses.</summary>
@@ -22,6 +22,9 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
 
     /// <summary>Where resized covers are kept. Everything in it can be made again from the covers in the library.</summary>
     public string CoversCacheFolder => Path.Combine(Root, "cache", "covers");
+
+    /// <summary>Where the app's own secrets are kept, such as the key that signs publication tokens.</summary>
+    public string KeysFolder => Path.Combine(Root, "keys");
 
     /// <summary>The folder that holds one library's files.</summary>
     public string LibraryFolder(Library library) => Path.Combine(LibrariesFolder, library.FolderName);
@@ -59,11 +62,12 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
     public static FileStream OpenFile(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, useAsync: true);
 
-    /// <summary>Creates the staging, library and cover cache folders when they are missing. Reading the data root throws when it is not set.</summary>
+    /// <summary>Creates the staging, library, cover cache and keys folders when they are missing. Reading the data root throws when it is not set.</summary>
     public void CreateFolders()
     {
         Directory.CreateDirectory(StagingFolder);
         Directory.CreateDirectory(LibrariesFolder);
         Directory.CreateDirectory(CoversCacheFolder);
+        Directory.CreateDirectory(KeysFolder);
     }
 }

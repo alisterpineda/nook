@@ -24,11 +24,7 @@ internal static class CoverTestExtensions
         Assert.Equal(JobStatus.Succeeded, job.Status);
 
         var itemId = job.ReadIngestResult().ItemId;
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        var workId = await db.Items.Where(i => i.Id == itemId).Select(i => i.WorkId)
-            .SingleAsync(TestContext.Current.CancellationToken);
-        return await factory.ReadWorkAsync(workId);
+        return await factory.ReadWorkAsync(await factory.ReadWorkIdOfItemAsync(itemId));
     }
 
     /// <summary>The path a cover resized to a size is kept at under the app's data root.</summary>

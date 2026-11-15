@@ -51,6 +51,31 @@ internal static class IngestTestExtensions
             select part).AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// Uploads the EPUB into the library given, or a library of its own, and returns its one part as the database
+    /// holds it.
+    /// </summary>
+    public static async Task<Part> IngestOnePartAsync(
+        this NookApiFactory factory, byte[] epub, Library? library = null, string fileName = "book.epub")
+    {
+        library ??= await factory.AddLibraryAsync();
+        using var admin = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await admin.IngestAsync(epub, fileName, library.Id);
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+
+        return Assert.Single(await factory.ReadPartsAsync(library));
+    }
+
+    /// <summary>The id of the work the item belongs to.</summary>
+    public static async Task<Guid> ReadWorkIdOfItemAsync(this WebApplicationFactory<Program> app, Guid itemId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        return await db.Items.Where(i => i.Id == itemId).Select(i => i.WorkId)
+            .SingleAsync(TestContext.Current.CancellationToken);
+    }
+
     /// <summary>The paths of the library's parts, oldest first.</summary>
     public static async Task<List<string>> ReadPartPathsAsync(this WebApplicationFactory<Program> app, Library library) =>
         (await app.ReadPartsAsync(library)).Select(part => part.Path).ToList();

@@ -110,20 +110,11 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
         Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
         var itemId = await AssertBookIsAtItsPartPathAsync(library, epub);
         Assert.Equal(itemId, result.ItemId);
-        Assert.Equal(await ReadWorkIdOfItemAsync(itemId), result.WorkId);
+        Assert.Equal(await _app.ReadWorkIdOfItemAsync(itemId), result.WorkId);
         await _factory.WaitForStagedFilesAsync(stagedBefore);
     }
 
     public void Dispose() => _app.Dispose();
-
-    /// <summary>The id of the work the item belongs to.</summary>
-    private async Task<Guid> ReadWorkIdOfItemAsync(Guid itemId)
-    {
-        await using var scope = _app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        return await db.Items.Where(i => i.Id == itemId).Select(i => i.WorkId)
-            .SingleAsync(TestContext.Current.CancellationToken);
-    }
 
     /// <summary>
     /// Checks the library's one part points at a file holding the bytes, and that it is the library's only book file,

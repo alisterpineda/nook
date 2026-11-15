@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
+using Nook.Api.Features.Publications;
 using Nook.Api.Features.Uploads;
 using Nook.Api.Features.Works;
 using Nook.Api.Ingest;
@@ -35,6 +36,8 @@ if (!buildingOpenApiDocument)
 builder.Services.AddSingleton<NookStorage>();
 builder.Services.AddSingleton<CoverResizer>();
 builder.Services.AddSingleton<CoverCache>();
+builder.Services.AddSingleton<PublicationTokens>();
+builder.Services.AddSingleton<PublicationCache>();
 
 builder.Services.AddOptions<UploadOptions>()
     .BindConfiguration(UploadOptions.Section)

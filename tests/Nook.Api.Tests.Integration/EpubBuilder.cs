@@ -5,8 +5,9 @@ using System.Text;
 namespace Nook.Api.Tests.Integration;
 
 /// <summary>
-/// Builds an EPUB file in memory: a package with the metadata, cover and encryption asked for, one chapter, and the
-/// table of contents its version expects. Raw overrides replace or remove any file, for tests of broken books.
+/// Builds an EPUB file in memory: a package with the metadata, cover, encryption, chapters and other files asked for
+/// (one chapter when none is), and the table of contents its version expects. Raw overrides replace or remove any
+/// file, for tests of broken books.
 /// </summary>
 internal sealed class EpubBuilder
 {
@@ -19,11 +20,15 @@ internal sealed class EpubBuilder
     /// <summary>AES-128 in CBC mode, the algorithm DRM schemes encrypt content with.</summary>
     public const string Aes128Cbc = "http://www.w3.org/2001/04/xmlenc#aes128-cbc";
 
-    private const string PackagePath = "OEBPS/content.opf";
+    private const string PackageFolder = "OEBPS/";
+    private const string PackagePath = PackageFolder + "content.opf";
 
     private readonly int _version;
     private readonly List<string> _metadata = [];
     private readonly List<string> _manifest = [];
+    private readonly List<(string Href, string Body)> _chapters = [];
+    private readonly List<(string Href, byte[] Content)> _manifestFiles = [];
+    private IReadOnlyList<Contents>? _contents;
     private readonly Dictionary<string, byte[]> _files = [];
     private readonly HashSet<string> _removed = [];
     private string? _uniqueIdentifier;
@@ -157,6 +162,47 @@ internal sealed class EpubBuilder
             """);
     }
 
+    /// <summary>
+    /// Adds a chapter to the spine, after the ones added before it, at a path relative to the package folder. The
+    /// first one added replaces the chapter the builder writes when none is.
+    /// </summary>
+    /// <param name="body">The markup inside the chapter's <c>body</c> element.</param>
+    public EpubBuilder WithChapter(string path, string body)
+    {
+        _chapters.Add((path, body));
+        return this;
+    }
+
+    /// <summary>Adds a file declared in the package manifest but not in the spine, at a path relative to the package folder.</summary>
+    public EpubBuilder WithManifestItem(string path, string content, string mediaType) =>
+        WithManifestItem(path, Encoding.UTF8.GetBytes(content), mediaType);
+
+    /// <inheritdoc cref="WithManifestItem(string, string, string)"/>
+    public EpubBuilder WithManifestItem(string path, byte[] content, string mediaType)
+    {
+        _manifestFiles.Add((path, content));
+        _manifest.Add($"<item id=\"{NextId("item")}\" href=\"{Escape(path)}\" media-type=\"{Escape(mediaType)}\"/>");
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the table of contents, written to the nav document in EPUB 3 and to the NCX in EPUB 2, in place of the one
+    /// entry for the builder's own chapter.
+    /// </summary>
+    public EpubBuilder WithContents(params Contents[] entries)
+    {
+        _contents = entries;
+        return this;
+    }
+
+    /// <summary>
+    /// An entry in the table of contents.
+    /// </summary>
+    /// <param name="Title">The entry's text.</param>
+    /// <param name="Href">The target relative to the package folder, with any fragment, or null for a heading with no link (EPUB 3 only).</param>
+    /// <param name="Children">The entries nested under it.</param>
+    public sealed record Contents(string Title, string? Href, params Contents[] Children);
+
     /// <summary>Puts a file in the archive as given, replacing the one the builder would write at that path.</summary>
     public EpubBuilder WithFile(string path, string content) => WithFile(path, Encoding.UTF8.GetBytes(content));
 
@@ -183,11 +229,13 @@ internal sealed class EpubBuilder
             ("mimetype", Encoding.ASCII.GetBytes("application/epub+zip")),
             ("META-INF/container.xml", Encoding.UTF8.GetBytes(ContainerXml)),
             (PackagePath, Encoding.UTF8.GetBytes(PackageXml())),
-            ("OEBPS/chapter.xhtml", Encoding.UTF8.GetBytes(ChapterXhtml)),
-            _version == 2
-                ? ("OEBPS/toc.ncx", Encoding.UTF8.GetBytes(Ncx))
-                : ("OEBPS/nav.xhtml", Encoding.UTF8.GetBytes(NavXhtml)),
         };
+        files.AddRange(Chapters.Select(chapter =>
+            (PackageFolder + chapter.Href, Encoding.UTF8.GetBytes(ChapterXhtml(chapter.Body)))));
+        files.Add(_version == 2
+            ? (PackageFolder + "toc.ncx", Encoding.UTF8.GetBytes(Ncx()))
+            : (PackageFolder + "nav.xhtml", Encoding.UTF8.GetBytes(NavXhtml())));
+        files.AddRange(_manifestFiles.Select(file => (PackageFolder + file.Href, file.Content)));
 
         // An override replaces the built file in place, so the mimetype entry stays first when it is overridden.
         for (var i = 0; i < files.Count; i++)
@@ -221,6 +269,13 @@ internal sealed class EpubBuilder
         return stream.ToArray();
     }
 
+    /// <summary>The chapters added, or the builder's own one when none is.</summary>
+    private IReadOnlyList<(string Href, string Body)> Chapters =>
+        _chapters.Count > 0 ? _chapters : [("chapter.xhtml", "<p>Once upon a time.</p>")];
+
+    /// <summary>The table of contents set, or one entry for the first chapter when none is.</summary>
+    private IReadOnlyList<Contents> ContentsEntries => _contents ?? [new Contents("Chapter", Chapters[0].Href)];
+
     private string PackageXml()
     {
         var uniqueIdentifier = _uniqueIdentifier is null ? "" : $" unique-identifier=\"{_uniqueIdentifier}\"";
@@ -228,6 +283,9 @@ internal sealed class EpubBuilder
             ? "<item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>"
             : "<item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>";
         var spineToc = _version == 2 ? " toc=\"ncx\"" : "";
+        var chapterItems = Chapters.Select((chapter, index) =>
+            $"<item id=\"chapter{index + 1}\" href=\"{Escape(chapter.Href)}\" media-type=\"application/xhtml+xml\"/>");
+        var itemrefs = Chapters.Select((_, index) => $"<itemref idref=\"chapter{index + 1}\"/>");
         return $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <package xmlns="http://www.idpf.org/2007/opf" version="{_version}.0"{uniqueIdentifier}>
@@ -235,12 +293,12 @@ internal sealed class EpubBuilder
                 {string.Join("\n    ", _metadata)}
               </metadata>
               <manifest>
-                <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+                {string.Join("\n    ", chapterItems)}
                 {tocItem}
                 {string.Join("\n    ", _manifest)}
               </manifest>
               <spine{spineToc}>
-                <itemref idref="chapter"/>
+                {string.Join("\n    ", itemrefs)}
               </spine>
             </package>
             """;
@@ -255,29 +313,49 @@ internal sealed class EpubBuilder
         </container>
         """;
 
-    private const string ChapterXhtml = """
+    private static string ChapterXhtml(string body) => $"""
         <?xml version="1.0" encoding="UTF-8"?>
-        <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter</title></head><body><p>Once upon a time.</p></body></html>
+        <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter</title></head><body>{body}</body></html>
         """;
 
-    private const string Ncx = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-          <head/>
-          <docTitle><text>Book</text></docTitle>
-          <navMap>
-            <navPoint id="chapter" playOrder="1"><navLabel><text>Chapter</text></navLabel><content src="chapter.xhtml"/></navPoint>
-          </navMap>
-        </ncx>
-        """;
+    private string Ncx()
+    {
+        var playOrder = 0;
+        string NavPoint(Contents entry)
+        {
+            var src = entry.Href ?? throw new InvalidOperationException("An NCX entry needs a link.");
+            var id = ++playOrder;
+            return $"<navPoint id=\"point{id}\" playOrder=\"{id}\"><navLabel><text>{Escape(entry.Title)}</text></navLabel>"
+                + $"<content src=\"{Escape(src)}\"/>{string.Concat(entry.Children.Select(NavPoint))}</navPoint>";
+        }
 
-    private const string NavXhtml = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-          <head><title>Contents</title></head>
-          <body><nav epub:type="toc"><ol><li><a href="chapter.xhtml">Chapter</a></li></ol></nav></body>
-        </html>
-        """;
+        return $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+              <head/>
+              <docTitle><text>Book</text></docTitle>
+              <navMap>{string.Concat(ContentsEntries.Select(NavPoint))}</navMap>
+            </ncx>
+            """;
+    }
+
+    private string NavXhtml()
+    {
+        static string List(IEnumerable<Contents> entries) =>
+            $"<ol>{string.Concat(entries.Select(entry =>
+                $"<li>{(entry.Href is null
+                    ? $"<span>{Escape(entry.Title)}</span>"
+                    : $"<a href=\"{Escape(entry.Href)}\">{Escape(entry.Title)}</a>")}"
+                + $"{(entry.Children.Length > 0 ? List(entry.Children) : "")}</li>"))}</ol>";
+
+        return $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+              <head><title>Contents</title></head>
+              <body><nav epub:type="toc"><h1>Contents</h1>{List(ContentsEntries)}</nav></body>
+            </html>
+            """;
+    }
 
     private EpubBuilder AddMetadata(string element)
     {

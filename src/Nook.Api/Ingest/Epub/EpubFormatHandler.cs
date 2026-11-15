@@ -12,7 +12,7 @@ using VersOne.Epub.Schema;
 
 namespace Nook.Api.Ingest.Epub;
 
-/// <summary>Reads EPUB files. The rest of Nook reaches the EPUB library only through this class.</summary>
+/// <summary>Reads EPUB files. The rest of Nook reaches the EPUB library only through this folder.</summary>
 public sealed partial class EpubFormatHandler : IFormatHandler
 {
     private const string MimetypeEntry = "mimetype";
@@ -147,7 +147,7 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     /// Opens the book without reading its content, after refusing a DRM-encrypted one and one whose markup files the
     /// zip declares larger than the library should parse.
     /// </summary>
-    private static async Task<EpubBookRef> OpenAsync(string path, CancellationToken cancellationToken)
+    internal static async Task<EpubBookRef> OpenAsync(string path, CancellationToken cancellationToken)
     {
         await CheckArchiveAsync(path, cancellationToken);
 
@@ -327,7 +327,7 @@ public sealed partial class EpubFormatHandler : IFormatHandler
     /// <c>opf:file-as</c> attributes, else from EPUB 3 <c>role</c> and <c>file-as</c> metas refining it. A role Nook
     /// does not keep is null.
     /// </summary>
-    private static List<BookCreator> ReadCreators(
+    internal static List<BookCreator> ReadCreators(
         IEnumerable<EpubMetadataCreator> creators, IReadOnlyList<EpubMetadataMeta> metas) =>
         creators
             .Where(creator => !string.IsNullOrWhiteSpace(creator.Creator))
@@ -474,7 +474,8 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         return CoverImageTypes.IsExtension(extension) ? extension : CoverImageTypes.ExtensionOf(mediaType.Trim());
     }
 
-    private static string? FirstValue(IEnumerable<string?> values) => Values(values).FirstOrDefault();
+    /// <summary>The first value that is not blank, trimmed, or null when there is none.</summary>
+    internal static string? FirstValue(IEnumerable<string?> values) => Values(values).FirstOrDefault();
 
     private static List<string> Values(IEnumerable<string?> values) =>
         values.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value!.Trim()).ToList();
