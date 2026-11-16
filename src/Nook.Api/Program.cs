@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
 using Nook.Api.Features.Publications;
@@ -31,10 +32,11 @@ builder.AddNpgsqlDbContext<NookDbContext>("nookdb", configureDbContextOptions: o
     options.UseSnakeCaseNamingConvention()
         .AddInterceptors(new TimestampInterceptor(timeProvider)));
 
-// The data root is required: the API refuses to start without it.
+// The data root is required, and no folder may sit inside another: the API refuses to start otherwise.
 var storageOptions = builder.Services.AddOptions<StorageOptions>().BindConfiguration(StorageOptions.Section);
 if (!buildingOpenApiDocument)
 {
+    builder.Services.AddSingleton<IValidateOptions<StorageOptions>, StorageOptionsValidator>();
     storageOptions.ValidateDataAnnotations().ValidateOnStart();
 }
 builder.Services.AddSingleton<NookStorage>();
@@ -90,8 +92,9 @@ var app = builder.Build();
 
 if (!buildingOpenApiDocument)
 {
-    // Checked before migrating, so a missing data root stops the API before it touches the database.
-    app.Services.GetRequiredService<NookStorage>().CreateFolders();
+    // Checked before migrating, so a missing data root or a folder Nook cannot write to stops the API before it
+    // touches the database.
+    app.Services.GetRequiredService<NookStorage>().PrepareFolders(app.Services.GetRequiredService<ILogger<NookStorage>>());
 
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();

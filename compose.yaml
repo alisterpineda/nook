@@ -8,10 +8,15 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/data
+      # To keep the library somewhere else, such as on a larger disk, mount that folder over the library's place.
+      # Like ./data, it must belong to the user with the id 1654. The README's "Storage" section says more.
+      # - /mnt/books:/data/library
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      # To keep the cache out of ./data, give it a folder inside the container. It is made again when it is lost.
+      # Nook__CachePath: /tmp/nook-cache
       ConnectionStrings__nookdb: Host=postgres;Database=nook;Username=nook;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
 
   postgres:
