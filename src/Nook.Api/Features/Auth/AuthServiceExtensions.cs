@@ -1,6 +1,9 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Nook.Api.Data;
 
 namespace Nook.Api.Features.Auth;
@@ -9,7 +12,8 @@ public static class AuthServiceExtensions
 {
     /// <summary>
     /// Adds sign-in with a cookie, an authorization default that requires a signed-in user on every endpoint,
-    /// and the rate limit for the endpoints that take a password.
+    /// the rate limit for the endpoints that take a password, the single sign-on settings, and, when single sign-on
+    /// is on, the OpenID Connect handler that signs in at the provider.
     /// </summary>
     public static IServiceCollection AddNookAuth(this IServiceCollection services, IConfiguration configuration)
     {
@@ -32,7 +36,89 @@ public static class AuthServiceExtensions
             .AddSignInManager()
             .AddClaimsPrincipalFactory<NookClaimsPrincipalFactory>();
 
-        services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdentityCookies();
+        services.AddOptions<OidcOptions>()
+            .BindConfiguration(OidcOptions.Section)
+            .Validate(
+                options => options.IsValid(),
+                $"{OidcOptions.Section}:ClientId and {OidcOptions.Section}:ClientSecret are required when {OidcOptions.Section}:Authority is set.")
+            .ValidateOnStart();
+
+        var authentication = services.AddAuthentication(IdentityConstants.ApplicationScheme);
+        authentication.AddIdentityCookies();
+
+        var oidc = configuration.GetSection(OidcOptions.Section).Get<OidcOptions>() ?? new OidcOptions();
+        if (oidc.Enabled)
+        {
+            authentication.AddOpenIdConnect(OidcSignIn.Scheme, options =>
+            {
+                options.Authority = oidc.Authority;
+                options.ClientId = oidc.ClientId;
+                options.ClientSecret = oidc.ClientSecret;
+
+                // The authorization code flow, which is the one the handler protects with PKCE.
+                options.ResponseType = OpenIdConnectResponseType.Code;
+                options.ResponseMode = OpenIdConnectResponseMode.Query;
+
+                // The request goes to the provider in the redirect's query, not pushed to it first, so a provider that
+                // offers pushed authorization requests does not change how sign-in starts.
+                options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
+
+                // Under /api, because the web app's dev server passes only /api on to the API.
+                options.CallbackPath = "/api/auth/oidc/callback";
+
+                options.Scope.Clear();
+                foreach (var scope in oidc.Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    options.Scope.Add(scope);
+                }
+
+                // Claims keep the names the provider gives them, and the groups and whether the email is verified
+                // reach the principal whether the provider sends them in the id token or from userinfo.
+                options.GetClaimsFromUserInfoEndpoint = true;
+                options.MapInboundClaims = false;
+                options.ClaimActions.MapJsonKey(oidc.GroupsClaim, oidc.GroupsClaim);
+                options.ClaimActions.MapJsonKey("email_verified", "email_verified");
+
+                options.SaveTokens = false;
+
+                // Nook finds or creates the user and signs them in itself, so the handler never signs in to a
+                // cookie of its own.
+                options.Events.OnTicketReceived = async context =>
+                {
+                    string? failure;
+                    try
+                    {
+                        var signIn = context.HttpContext.RequestServices.GetRequiredService<OidcSignIn>();
+                        failure = await signIn.SignInAsync(context.Principal!);
+                    }
+                    catch (Exception exception)
+                    {
+                        SignInLogger(context.HttpContext)
+                            .LogWarning(exception, "Single sign-on failed while signing in to Nook: {Reason}", exception.Message);
+                        failure = OidcSignIn.Failed;
+                    }
+
+                    context.HandleResponse();
+                    context.Response.Redirect(failure is null ? "/" : $"/sign-in?error={failure}");
+                };
+
+                // A callback the handler rejects, such as one with an error from the provider or a state it did not
+                // issue, goes back to the sign-in page instead of failing the request.
+                options.Events.OnRemoteFailure = context =>
+                {
+                    SignInLogger(context.HttpContext).LogWarning(
+                        context.Failure,
+                        "Single sign-on failed at the callback: {Reason}",
+                        context.Failure?.Message);
+
+                    context.Response.Redirect($"/sign-in?error={OidcSignIn.Failed}");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
+                };
+            });
+        }
+
+        services.AddScoped<OidcSignIn>();
 
         services.ConfigureApplicationCookie(options =>
         {
@@ -72,6 +158,9 @@ public static class AuthServiceExtensions
 
         return services;
     }
+
+    private static ILogger SignInLogger(HttpContext context) =>
+        context.RequestServices.GetRequiredService<ILogger<OidcSignIn>>();
 }
 
 /// <summary>The names of Nook's rate limits.</summary>

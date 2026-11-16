@@ -10,3 +10,6 @@ public record CurrentUserResponse(Guid Id, string Email, UserRole Role)
 {
     public static CurrentUserResponse From(NookUser user) => new(user.Id, user.Email ?? user.UserName ?? "", user.Role);
 }
+
+/// <summary>How someone may sign in besides a password: the name of the single sign-on provider, or null when there is none.</summary>
+public record SignInOptionsResponse(string? SsoName);

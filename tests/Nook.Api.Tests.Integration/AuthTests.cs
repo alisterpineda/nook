@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -200,5 +201,70 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
         Assert.Contains("\"/api/works/{id}\"", description);
         Assert.Contains("\"epub\"", description);
+    }
+
+    [Fact]
+    public async Task Sign_in_options_name_no_single_sign_on_when_none_is_configured()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/auth/sign-in-options", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            "{\"ssoName\":null}",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Single_sign_on_login_is_not_found_when_none_is_configured()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/auth/oidc/login", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Authentik", "Authentik")]
+    [InlineData(null, "SSO")]
+    public async Task Sign_in_options_name_the_configured_single_sign_on(string? displayName, string expected)
+    {
+        await using var app = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Nook:Oidc:Authority", "https://sso.test/realms/nook");
+            builder.UseSetting("Nook:Oidc:ClientId", "nook");
+            builder.UseSetting("Nook:Oidc:ClientSecret", "nook-secret");
+            if (displayName is not null)
+            {
+                builder.UseSetting("Nook:Oidc:DisplayName", displayName);
+            }
+        });
+        using var client = app.CreateClient();
+
+        var options = await client.GetAsync<SignInOptionsResponse>("/api/auth/sign-in-options");
+
+        Assert.Equal(new SignInOptionsResponse(expected), options);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("nook")]
+    public async Task Api_refuses_to_start_with_an_authority_but_no_client_id_or_secret(string? clientId)
+    {
+        await using var app = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Nook:Oidc:Authority", "https://sso.test/realms/nook");
+            if (clientId is not null)
+            {
+                builder.UseSetting("Nook:Oidc:ClientId", clientId);
+            }
+        });
+
+        var exception = Assert.ThrowsAny<Exception>(() => app.CreateClient());
+
+        var messages = exception.Flatten().Select(inner => inner.Message);
+        Assert.Contains(messages, message => message.Contains("Nook:Oidc", StringComparison.Ordinal));
     }
 }

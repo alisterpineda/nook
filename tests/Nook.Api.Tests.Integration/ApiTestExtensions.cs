@@ -20,10 +20,14 @@ internal static class ApiTestExtensions
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
-    /// <summary>Creates a user with a new email and <see cref="Password"/>.</summary>
-    public static async Task<NookUser> CreateUserAsync(this WebApplicationFactory<Program> factory, UserRole role = UserRole.Member)
+    /// <summary>The name of the session cookie.</summary>
+    private const string SessionCookie = "nook";
+
+    /// <summary>Creates a user with <see cref="Password"/>, and a new email unless one is given.</summary>
+    public static async Task<NookUser> CreateUserAsync(
+        this WebApplicationFactory<Program> factory, UserRole role = UserRole.Member, string? email = null)
     {
-        var email = $"{Guid.NewGuid():N}@example.test";
+        email ??= $"{Guid.NewGuid():N}@example.test";
         var user = new NookUser { UserName = email, Email = email, Role = role };
 
         await using var scope = factory.Services.CreateAsyncScope();
@@ -62,6 +66,30 @@ internal static class ApiTestExtensions
         var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
         Assert.True(response.IsSuccessStatusCode, $"GET {url} answered {(int)response.StatusCode}.");
         return await response.ReadAsync<T>();
+    }
+
+    /// <summary>The cookies a response sets, each as its whole <c>Set-Cookie</c> value.</summary>
+    public static IEnumerable<string> SetCookies(this HttpResponseMessage response) =>
+        response.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies : [];
+
+    /// <summary>Whether a response sets the session cookie.</summary>
+    public static bool SetsSessionCookie(this HttpResponseMessage response) =>
+        response.SetCookies().Any(cookie => cookie.StartsWith($"{SessionCookie}=", StringComparison.Ordinal));
+
+    /// <summary>An exception with every exception inside it, for finding the message of a failed start.</summary>
+    public static IEnumerable<Exception> Flatten(this Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            yield return current;
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions.SelectMany(Flatten))
+                {
+                    yield return inner;
+                }
+            }
+        }
     }
 
     /// <summary>Saves rows straight to the database, for what no endpoint can set up.</summary>

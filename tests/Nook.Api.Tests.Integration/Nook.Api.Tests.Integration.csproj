@@ -4,7 +4,13 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.15" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.11.0" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Testcontainers.Keycloak" Version="4.16.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The realm, client, groups and users the single sign-on tests sign in with, imported when Keycloak starts. -->
+    <None Include="Keycloak\nook-realm.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1244,6 +1244,67 @@
         }
       }
     },
+    "/api/auth/sign-in-options": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInOptionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInOptionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInOptionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oidc/login": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -2103,6 +2164,20 @@
         "properties": {
           "required": {
             "type": "boolean"
+          }
+        }
+      },
+      "SignInOptionsResponse": {
+        "required": [
+          "ssoName"
+        ],
+        "type": "object",
+        "properties": {
+          "ssoName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

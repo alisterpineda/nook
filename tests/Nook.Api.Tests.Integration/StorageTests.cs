@@ -13,7 +13,7 @@ public class StorageTests(NookApiFactory factory) : IClassFixture<NookApiFactory
 
         var exception = Assert.ThrowsAny<Exception>(() => app.CreateClient());
 
-        var messages = Flatten(exception).Select(inner => inner.Message);
+        var messages = exception.Flatten().Select(inner => inner.Message);
         Assert.Contains(messages, message => message.Contains("Nook:DataPath", StringComparison.Ordinal));
     }
 
@@ -52,20 +52,5 @@ public class StorageTests(NookApiFactory factory) : IClassFixture<NookApiFactory
         Assert.Equal(
             Path.GetFullPath(Path.Combine(factory.DataPath, "library", "Books", "Author", "Title", "Title.epub")),
             path);
-    }
-
-    private static IEnumerable<Exception> Flatten(Exception exception)
-    {
-        for (var current = exception; current is not null; current = current.InnerException)
-        {
-            yield return current;
-            if (current is AggregateException aggregate)
-            {
-                foreach (var inner in aggregate.InnerExceptions.SelectMany(Flatten))
-                {
-                    yield return inner;
-                }
-            }
-        }
     }
 }
