@@ -43,22 +43,7 @@ public partial class WorksController(
         var items = await works
             .Skip(query.Offset)
             .Take(query.Limit)
-            .Select(w => new WorkSummaryResponse(
-                w.Id,
-                w.SectionId,
-                w.Title,
-                (from c in w.Contributors
-                 join p in db.People on c.PersonId equals p.Id
-                 where c.Role == ContributorRole.Author
-                 orderby c.Order, c.Id
-                 select p.Name).ToList(),
-                db.Series
-                    .Where(s => s.Id == w.SeriesId)
-                    .Select(s => new WorkSeriesResponse(s.Id, s.Name, w.SeriesPosition))
-                    .FirstOrDefault(),
-                w.CoverHash,
-                w.Items.Select(i => i.Format).Distinct().OrderBy(f => f).ToList(),
-                w.CreatedAt))
+            .ToSummaries(db)
             .ToListAsync(cancellationToken);
 
         return new Page<WorkSummaryResponse>(items, total, query.Offset, query.Limit);
