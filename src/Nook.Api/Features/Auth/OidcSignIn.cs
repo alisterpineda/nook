@@ -71,7 +71,15 @@ public sealed class OidcSignIn(
                     return Fail(SetupRequired, "Nook has no users yet and the provider's groups do not make this person an admin");
                 }
 
-                user = new NookUser { UserName = email, Email = email, EmailConfirmed = emailVerified };
+                // The role is set here, not only by the save below, so a first user who is an admin is never stored
+                // as anything less.
+                user = new NookUser
+                {
+                    UserName = email,
+                    Email = email,
+                    EmailConfirmed = emailVerified,
+                    Role = RoleFromGroups(principal, UserRole.Guest),
+                };
 
                 // The login is added before the user is created, so the one save that creates the user writes
                 // both, and a failure leaves neither.
