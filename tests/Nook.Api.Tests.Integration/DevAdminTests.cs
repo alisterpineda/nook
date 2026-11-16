@@ -18,7 +18,7 @@ public class DevAdminTests(NookApiFactory factory) : IClassFixture<NookApiFactor
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         Assert.Equal("admin@nook.test", DevAdmin.Email);
-        Assert.Equal("nook-dev-password", DevAdmin.Password);
+        Assert.Equal("admin@nook.test", DevAdmin.Password);
 
         var logger = await factory.EnsureDevAdminAsync(cancellationToken);
 

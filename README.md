@@ -14,6 +14,6 @@ On an empty database the stack creates an admin, so there is no setup form to fi
 <http://localhost:4200> with:
 
 - Email: `admin@nook.test`
-- Password: `nook-dev-password`
+- Password: `admin@nook.test` (the same as the email)
 
 A database that was set up before the stack created this admin keeps its own admin until its volume is removed.

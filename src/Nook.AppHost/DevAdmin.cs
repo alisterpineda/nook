@@ -12,7 +12,8 @@ public static class DevAdmin
 {
     public const string Email = "admin@nook.test";
 
-    public const string Password = "nook-dev-password";
+    /// <summary>The same as the email, so there is one thing to remember. It is long enough for the password rule.</summary>
+    public const string Password = Email;
 
     /// <summary>
     /// Sets Nook up with the dev admin through <c>POST api/setup</c> on <paramref name="api"/>. A failed call is
