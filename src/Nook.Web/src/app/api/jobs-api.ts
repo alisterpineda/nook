@@ -10,7 +10,7 @@ type JobDetailResponse = components['schemas']['JobDetailResponse'];
  * API's `IngestResult`.
  */
 export interface IngestResult {
-  /** Whether the file became a new item or the library already held it. */
+  /** Whether the file became a new item or matched an item already held. */
   outcome: 'created' | 'duplicate';
   /** The item the file became or, for a duplicate, the item that already held it. */
   itemId: string;

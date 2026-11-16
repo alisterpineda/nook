@@ -14,7 +14,8 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    LibraryId?: string;
+                    SectionId?: string;
+                    NoSection?: boolean;
                     Sort?: components["schemas"]["WorkSort"];
                     Offset?: number;
                     Limit?: number;
@@ -183,7 +184,7 @@ export interface paths {
                 content: {
                     "multipart/form-data": {
                         /** Format: uuid */
-                        LibraryId?: string;
+                        SectionId?: string;
                         File?: components["schemas"]["IFormFile"];
                     };
                 };
@@ -332,6 +333,43 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SectionResponse"][];
+                        "application/json": components["schemas"]["SectionResponse"][];
+                        "text/json": components["schemas"]["SectionResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -570,43 +608,6 @@ export interface paths {
                         "text/plain": components["schemas"]["ProblemDetails"];
                         "application/json": components["schemas"]["ProblemDetails"];
                         "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/libraries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["LibraryResponse"][];
-                        "application/json": components["schemas"]["LibraryResponse"][];
-                        "text/json": components["schemas"]["LibraryResponse"][];
                     };
                 };
             };
@@ -1087,11 +1088,6 @@ export interface components {
             updatedAt: string;
         };
         JsonElement: unknown;
-        LibraryResponse: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-        };
         LoginRequest: {
             email: string;
             password: string;
@@ -1162,6 +1158,11 @@ export interface components {
             total: number;
             positions: components["schemas"]["PublicationPosition"][];
         };
+        SectionResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         SetupRequest: {
             email: string;
             password: string;
@@ -1198,7 +1199,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            libraryId: string;
+            sectionId: null | string;
             title: string;
             sortTitle: string;
             description: null | string;
@@ -1247,7 +1248,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            libraryId: string;
+            sectionId: null | string;
             title: string;
             authors: string[];
             series: null | components["schemas"]["WorkSeriesResponse"];

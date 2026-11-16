@@ -89,7 +89,7 @@ export class SetupPage {
     let destination: string;
     try {
       await this.session.createFirstAdmin(email, password);
-      destination = '/works';
+      destination = '/library';
     } catch (error) {
       if (!(error instanceof HttpErrorResponse) || error.status !== HttpStatusCode.Conflict) {
         this.showFailure(error);

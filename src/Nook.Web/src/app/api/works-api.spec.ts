@@ -23,12 +23,12 @@ describe('WorksApi', () => {
 
   afterEach(() => httpTesting.verify());
 
-  it('list sends the library, sort, offset and limit as query parameters', async () => {
+  it('list sends the section, sort, offset and limit as query parameters', async () => {
     const page: PageOfWorkSummaryResponse = {
       items: [
         {
           id: '0198a1b2-0000-7000-8000-000000000001',
-          libraryId: '0198a1b2-0000-7000-8000-00000000000a',
+          sectionId: '0198a1b2-0000-7000-8000-00000000000a',
           title: 'Dune',
           authors: ['Frank Herbert'],
           series: { id: '0198a1b2-0000-7000-8000-0000000000c1', name: 'Dune', position: 1 },
@@ -43,14 +43,14 @@ describe('WorksApi', () => {
     };
 
     const listing = api.list({
-      LibraryId: '0198a1b2-0000-7000-8000-00000000000a',
+      SectionId: '0198a1b2-0000-7000-8000-00000000000a',
       Sort: 'added',
       Offset: 50,
       Limit: 50,
     });
     const request = httpTesting.expectOne((req) => req.url === '/api/works');
     expect(request.request.method).toBe('GET');
-    expect(request.request.params.get('LibraryId')).toBe('0198a1b2-0000-7000-8000-00000000000a');
+    expect(request.request.params.get('SectionId')).toBe('0198a1b2-0000-7000-8000-00000000000a');
     expect(request.request.params.get('Sort')).toBe('added');
     expect(request.request.params.get('Offset')).toBe('50');
     expect(request.request.params.get('Limit')).toBe('50');
@@ -59,10 +59,10 @@ describe('WorksApi', () => {
     expect(await listing).toEqual(page);
   });
 
-  it('list leaves out the library when none is given', async () => {
+  it('list leaves out the section when none is given', async () => {
     const listing = api.list({ Sort: 'title', Offset: 0, Limit: 50 });
     const request = httpTesting.expectOne((req) => req.url === '/api/works');
-    expect(request.request.params.has('LibraryId')).toBe(false);
+    expect(request.request.params.has('SectionId')).toBe(false);
     expect(request.request.params.keys()).toEqual(['Sort', 'Offset', 'Limit']);
     request.flush(emptyPage);
 
@@ -72,7 +72,7 @@ describe('WorksApi', () => {
   it('get requests the work by id', async () => {
     const work: WorkDetailResponse = {
       id: '0198a1b2-0000-7000-8000-000000000001',
-      libraryId: '0198a1b2-0000-7000-8000-00000000000a',
+      sectionId: '0198a1b2-0000-7000-8000-00000000000a',
       title: 'Dune',
       sortTitle: 'Dune',
       description: null,

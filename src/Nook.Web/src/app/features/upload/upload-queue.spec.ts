@@ -11,7 +11,7 @@ type ProblemDetails = components['schemas']['ProblemDetails'];
 type UploadResponse = components['schemas']['UploadResponse'];
 
 describe('UploadQueue', () => {
-  const libraryId = '0198a1b2-0000-7000-8000-00000000000a';
+  const sectionId = '0198a1b2-0000-7000-8000-00000000000a';
   const duneJobId = '0198a1b2-0000-7000-8000-0000000000d1';
   const emmaJobId = '0198a1b2-0000-7000-8000-0000000000d2';
 
@@ -34,12 +34,12 @@ describe('UploadQueue', () => {
     return new File(['epub bytes'], name, { type: 'application/epub+zip' });
   }
 
-  /** The one open upload, after checking it sends `file` to the library. */
+  /** The one open upload, after checking it sends `file` to the section. */
   function openUpload(file: File) {
     const request = httpTesting.expectOne('/api/uploads');
     expect(request.request.method).toBe('POST');
     const form = request.request.body as FormData;
-    expect(form.get('libraryId')).toBe(libraryId);
+    expect(form.get('sectionId')).toBe(sectionId);
     expect(form.get('file')).toBe(file);
     return request;
   }
@@ -57,7 +57,7 @@ describe('UploadQueue', () => {
     const dune = epub('dune.epub');
     const emma = epub('emma.epub');
 
-    queue.add([dune, emma], libraryId);
+    queue.add([dune, emma], sectionId);
 
     expect(statuses()).toEqual([
       ['dune.epub', 'uploading'],
@@ -82,7 +82,7 @@ describe('UploadQueue', () => {
   it("a refused upload fails its row with the server's message and the next file is still sent", () => {
     const huge = epub('huge.epub');
     const emma = epub('emma.epub');
-    queue.add([huge, emma], libraryId);
+    queue.add([huge, emma], sectionId);
 
     const problem: ProblemDetails = {
       title: 'Payload Too Large',
@@ -101,18 +101,18 @@ describe('UploadQueue', () => {
 
   it('a refusal with only a title fails its row with the title', () => {
     const dune = epub('dune.epub');
-    queue.add([dune], libraryId);
+    queue.add([dune], sectionId);
 
-    const problem: ProblemDetails = { title: 'The library does not exist.', status: 404 };
+    const problem: ProblemDetails = { title: 'The section does not exist.', status: 404 };
     openUpload(dune).flush(problem, { status: 404, statusText: 'Not Found' });
 
     expect(statuses()).toEqual([['dune.epub', 'failed']]);
-    expect(queue.rows()[0].error).toBe('The library does not exist.');
+    expect(queue.rows()[0].error).toBe('The section does not exist.');
   });
 
   it('a refusal with no message fails its row with the general message', () => {
     const dune = epub('dune.epub');
-    queue.add([dune], libraryId);
+    queue.add([dune], sectionId);
 
     openUpload(dune).flush('Bad gateway', { status: 502, statusText: 'Bad Gateway' });
 
@@ -123,10 +123,10 @@ describe('UploadQueue', () => {
   it('files added while one is sending wait their turn', () => {
     const dune = epub('dune.epub');
     const emma = epub('emma.epub');
-    queue.add([dune], libraryId);
+    queue.add([dune], sectionId);
     const request = openUpload(dune);
 
-    queue.add([emma], libraryId);
+    queue.add([emma], sectionId);
 
     expect(statuses()).toEqual([
       ['dune.epub', 'uploading'],
@@ -137,7 +137,7 @@ describe('UploadQueue', () => {
   });
 
   it('a destroyed queue cancels its open upload', () => {
-    queue.add([epub('dune.epub')], libraryId);
+    queue.add([epub('dune.epub')], sectionId);
     const request = httpTesting.expectOne('/api/uploads');
 
     TestBed.resetTestingModule();
@@ -156,7 +156,7 @@ describe('UploadQueue', () => {
   it('leaving is questioned while a file is waiting or uploading', () => {
     const dune = epub('dune.epub');
     const emma = epub('emma.epub');
-    queue.add([dune, emma], libraryId);
+    queue.add([dune, emma], sectionId);
     expect(leavingIsQuestioned()).toBe(true);
 
     accept(dune, duneJobId);
@@ -174,7 +174,7 @@ describe('UploadQueue', () => {
   });
 
   it('a destroyed queue no longer questions leaving', () => {
-    queue.add([epub('dune.epub')], libraryId);
+    queue.add([epub('dune.epub')], sectionId);
     const request = httpTesting.expectOne('/api/uploads');
 
     TestBed.resetTestingModule();
@@ -231,7 +231,7 @@ describe('UploadQueue', () => {
 
     function ingest(name: string, jobId: string): void {
       const file = epub(name);
-      queue.add([file], libraryId);
+      queue.add([file], sectionId);
       accept(file, jobId);
     }
 
@@ -329,7 +329,7 @@ describe('UploadQueue', () => {
 
     function failedUpload(name: string): File {
       const file = epub(name);
-      queue.add([file], libraryId);
+      queue.add([file], sectionId);
       openUpload(file).flush('Bad gateway', { status: 502, statusText: 'Bad Gateway' });
       return file;
     }
@@ -448,7 +448,7 @@ describe('UploadQueue', () => {
       await vi.advanceTimersByTimeAsync(0);
       const uploading = epub('uploading.epub');
       const waiting = epub('waiting.epub');
-      queue.add([uploading, waiting], libraryId);
+      queue.add([uploading, waiting], sectionId);
 
       queue.clearFinished();
 
@@ -484,7 +484,7 @@ describe('UploadQueue', () => {
 
     it('resetting drops every row, cancels the open upload and sends nothing more', async () => {
       ingest('dune.epub', duneJobId);
-      queue.add([epub('emma.epub'), epub('huck.epub')], libraryId);
+      queue.add([epub('emma.epub'), epub('huck.epub')], sectionId);
       const open = httpTesting.expectOne('/api/uploads');
 
       queue.reset();

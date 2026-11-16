@@ -11,8 +11,8 @@ type ProblemDetails = components['schemas']['ProblemDetails'];
 
 /**
  * Where a file stands: `waiting` for its turn, `uploading` while its request is open, `ingesting` once the server
- * has taken it and started a job, `added` or `duplicate` once the job has made it a new item or found the library
- * already held it, or `failed` when the server refused it or its job failed.
+ * has taken it and started a job, `added` or `duplicate` once the job has made it a new item or matched
+ * an item already held, or `failed` when the server refused it or its job failed.
  */
 export type UploadStatus = 'waiting' | 'uploading' | 'ingesting' | 'added' | 'duplicate' | 'failed';
 
@@ -21,8 +21,8 @@ export interface UploadRow {
   readonly id: number;
   readonly name: string;
   readonly file: File;
-  /** The library selected when the file was added, which is where it goes. */
-  readonly libraryId: string;
+  /** The section selected when the file was added, which is where it goes, or `null` for the Default area. */
+  readonly sectionId: string | null;
   readonly status: UploadStatus;
   /** The job ingesting the file, once the server has answered. */
   readonly jobId?: string;
@@ -33,7 +33,7 @@ export interface UploadRow {
 }
 
 /**
- * The files being added to libraries, sent one request at a time in the order they were added. It is provided in
+ * The files being added, sent one request at a time in the order they were added. It is provided in
  * the root so uploads keep going while the user moves between pages.
  */
 @Injectable({ providedIn: 'root' })
@@ -74,13 +74,16 @@ export class UploadQueue {
     });
   }
 
-  /** Adds a row per file, each to go to `libraryId`, and sends them after any already waiting. */
-  add(files: Iterable<File>, libraryId: string): void {
+  /**
+   * Adds a row per file, each to go to `sectionId` or, when it is `null`, the Default area, and sends them after any
+   * already waiting.
+   */
+  add(files: Iterable<File>, sectionId: string | null): void {
     const added = Array.from(files, (file): UploadRow => ({
       id: this.nextId++,
       name: file.name,
       file,
-      libraryId,
+      sectionId,
       status: 'waiting',
     }));
     this.allRows.update((rows) => [...rows, ...added]);
@@ -164,7 +167,7 @@ export class UploadQueue {
       }
     };
     sending.add(
-      this.uploads.upload(row.libraryId, row.file).subscribe({
+      this.uploads.upload(row.sectionId, row.file).subscribe({
         next: ({ jobId }) => {
           this.change(row.id, { status: 'ingesting', jobId });
           this.schedulePoll();
@@ -251,7 +254,7 @@ export class UploadQueue {
   }
 }
 
-/** Whether the row's file is in the library, newly added or already held, with nothing left to do for it. */
+/** Whether the row's file is held, newly added or already there, with nothing left to do for it. */
 export function isFinished(row: UploadRow): boolean {
   return row.status === 'added' || row.status === 'duplicate';
 }

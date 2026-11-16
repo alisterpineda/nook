@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 import { adminGuard, setupGuard, signedInGuard, signedOutGuard } from './core/guards';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'works' },
+  { path: '', pathMatch: 'full', redirectTo: 'library' },
   {
     path: 'setup',
     canActivate: [setupGuard],
@@ -27,7 +27,7 @@ export const routes: Routes = [
     loadComponent: () => import('./shell/shell').then((m) => m.Shell),
     children: [
       {
-        path: 'works',
+        path: 'library',
         loadComponent: () =>
           import('./features/works/works-list-page').then((m) => m.WorksListPage),
       },
@@ -43,5 +43,5 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: '**', redirectTo: 'works' },
+  { path: '**', redirectTo: 'library' },
 ];

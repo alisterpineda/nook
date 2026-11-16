@@ -24,7 +24,7 @@ describe('SignInPage', () => {
   beforeEach(async () => {
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([{ path: 'works', children: [] }]),
+        provideRouter([{ path: 'library', children: [] }]),
         provideHttpClient(),
         provideHttpClientTesting(),
       ],
@@ -71,7 +71,7 @@ describe('SignInPage', () => {
     );
   }
 
-  it('signing in goes to /works', async () => {
+  it('signing in goes to /library', async () => {
     await submit('ada@example.com', 'correct horse battery');
 
     const request = await vi.waitFor(() => httpTesting.expectOne('/api/auth/login'));
@@ -82,7 +82,7 @@ describe('SignInPage', () => {
     });
     request.flush(ada);
 
-    await vi.waitFor(() => expect(router.url).toBe('/works'));
+    await vi.waitFor(() => expect(router.url).toBe('/library'));
     expect(TestBed.inject(Session).user()).toEqual(ada);
   });
 

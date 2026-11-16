@@ -107,7 +107,7 @@ export class SignInPage {
     } finally {
       this.submitting.set(false);
     }
-    await this.router.navigateByUrl('/works');
+    await this.router.navigateByUrl('/library');
   }
 }
 

@@ -32,7 +32,7 @@ class WorksListStub {
 describe('WorkDetailPage', () => {
   const dune: WorkDetailResponse = {
     id: duneId,
-    libraryId: '0198a1b2-0000-7000-8000-00000000000a',
+    sectionId: '0198a1b2-0000-7000-8000-00000000000a',
     title: 'Dune',
     sortTitle: 'Dune',
     description: 'A desert planet.\nA spice.',
@@ -103,7 +103,7 @@ describe('WorkDetailPage', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
-          { path: 'works', component: WorksListStub },
+          { path: 'library', component: WorksListStub },
           { path: 'works/:id', component: WorkDetailPage },
         ]),
         provideLocationMocks(),
@@ -406,7 +406,7 @@ describe('WorkDetailPage', () => {
   it('going back returns to the list URL it was opened from', async () => {
     // A running app does this on its first navigation, which a test never makes.
     router.setUpLocationChangeListener();
-    const listUrl = '/works?library=0198a1b2-0000-7000-8000-00000000000a&sort=added&page=2';
+    const listUrl = '/library?section=0198a1b2-0000-7000-8000-00000000000a&sort=added&page=2';
     await harness.navigateByUrl(listUrl);
     const link = (harness.routeNativeElement as HTMLElement).querySelector('a')!;
 

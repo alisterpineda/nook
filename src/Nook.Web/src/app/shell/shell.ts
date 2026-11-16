@@ -3,16 +3,18 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink, RouterOutlet, isActive } from '@angular/router';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
-import { LibrariesApi } from '../api/libraries-api';
+import { SectionsApi } from '../api/sections-api';
 import { components } from '../api/schema';
+import { LibraryArea, areaParam, readArea, sameArea } from '../core/default-area';
 import { Session } from '../core/session';
 import { UploadQueue } from '../features/upload/upload-queue';
 
-type LibraryResponse = components['schemas']['LibraryResponse'];
+type SectionResponse = components['schemas']['SectionResponse'];
 
 /**
- * The frame around every signed-in page: a collapsible sidebar with "All works" and the user's libraries, then
- * "Add books" for an admin, the user's menu in its footer, and the page itself beside it.
+ * The frame around every signed-in page: a collapsible sidebar with "Library", then "Default" and the user's
+ * sections when there are any, then "Add books" for an admin, the user's menu in its footer, and the page itself
+ * beside it.
  */
 @Component({
   selector: 'app-shell',
@@ -21,33 +23,20 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
     <div hlmSidebarWrapper>
       <hlm-sidebar>
         <div hlmSidebarContent>
-          <nav hlmSidebarGroup aria-label="Libraries">
+          <nav hlmSidebarGroup aria-label="Library">
             <ul hlmSidebarMenu>
-              <li hlmSidebarMenuItem>
-                <!-- Links name only the library, so choosing one drops the page and sort of the list before. -->
-                <a
-                  hlmSidebarMenuButton
-                  routerLink="/works"
-                  closeMobileSidebarOnClick
-                  [isActive]="onWorks() && selectedLibraryId() === null"
-                  [attr.aria-current]="onWorks() && selectedLibraryId() === null ? 'page' : null"
-                >
-                  <span>All works</span>
-                </a>
-              </li>
-              @for (library of libraries(); track library.id) {
+              <!-- Links name only the section, so choosing one drops the page and sort of the list before. -->
+              @for (link of links(); track link.section) {
                 <li hlmSidebarMenuItem>
                   <a
                     hlmSidebarMenuButton
-                    routerLink="/works"
-                    [queryParams]="{ library: library.id }"
+                    routerLink="/library"
+                    [queryParams]="link.section === null ? null : { section: link.section }"
                     closeMobileSidebarOnClick
-                    [isActive]="onWorks() && selectedLibraryId() === library.id"
-                    [attr.aria-current]="
-                      onWorks() && selectedLibraryId() === library.id ? 'page' : null
-                    "
+                    [isActive]="link.current"
+                    [attr.aria-current]="link.current ? 'page' : null"
                   >
-                    <span>{{ library.name }}</span>
+                    <span>{{ link.label }}</span>
                   </a>
                 </li>
               }
@@ -58,11 +47,11 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
               <div hlmSidebarGroupLabel>Manage</div>
               <ul hlmSidebarMenu>
                 <li hlmSidebarMenuItem>
-                  <!-- Carries the library being browsed, so the upload page can offer it first. -->
+                  <!-- Carries the section being browsed, Default included, so the upload page can preselect it. -->
                   <a
                     hlmSidebarMenuButton
                     routerLink="/upload"
-                    [queryParams]="selectedLibraryId() ? { library: selectedLibraryId() } : null"
+                    [queryParams]="browsedSection() ? { section: browsedSection() } : null"
                     closeMobileSidebarOnClick
                     [isActive]="onUpload()"
                     [attr.aria-current]="onUpload() ? 'page' : null"
@@ -118,7 +107,7 @@ type LibraryResponse = components['schemas']['LibraryResponse'];
   `,
 })
 export class Shell {
-  private readonly librariesApi = inject(LibrariesApi);
+  private readonly sectionsApi = inject(SectionsApi);
   private readonly router = inject(Router);
   private readonly queryParams = toSignal(inject(ActivatedRoute).queryParamMap, {
     requireSync: true,
@@ -127,17 +116,35 @@ export class Shell {
   private readonly uploadQueue = inject(UploadQueue);
 
   protected readonly session = inject(Session);
-  protected readonly libraries = signal<LibraryResponse[]>([]);
+  protected readonly sections = signal<SectionResponse[]>([]);
   protected readonly signOutFailed = signal(false);
-  /** The library the URL names, or `null` for "All works". */
-  protected readonly selectedLibraryId = computed(() => this.queryParams().get('library'));
+  /** The `section` the URL carries, which "Add books" passes on. */
+  protected readonly browsedSection = computed(() => areaParam(readArea(this.queryParams())));
   protected readonly isAdmin = this.session.isAdmin;
-  /** Whether a works page is open, the only pages "All works" and the libraries stand for. */
-  protected readonly onWorks = isActive('/works', this.router, { queryParams: 'ignored' });
+  /** Whether the list of works is open, the only page "Library", "Default" and the sections stand for. */
+  protected readonly onLibrary = isActive('/library', this.router, { queryParams: 'ignored' });
   protected readonly onUpload = isActive('/upload', this.router, { queryParams: 'ignored' });
+  /**
+   * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,
+   * since the Default area is worth naming only beside a section. The one the URL names is current.
+   */
+  protected readonly links = computed(() => {
+    const sections = this.sections();
+    const areas: { label: string; area: LibraryArea }[] = [
+      { label: 'Library', area: { kind: 'all' } },
+      ...(sections.length > 0 ? [{ label: 'Default', area: { kind: 'default' } as const }] : []),
+      ...sections.map(({ id, name }) => ({ label: name, area: { kind: 'section', id } as const })),
+    ];
+    const browsed = readArea(this.queryParams());
+    return areas.map(({ label, area }) => ({
+      label,
+      section: areaParam(area),
+      current: this.onLibrary() && sameArea(area, browsed),
+    }));
+  });
 
   constructor() {
-    void this.loadLibraries();
+    void this.loadSections();
   }
 
   protected async signOut(): Promise<void> {
@@ -154,11 +161,11 @@ export class Shell {
     await this.router.navigateByUrl('/sign-in');
   }
 
-  private async loadLibraries(): Promise<void> {
+  private async loadSections(): Promise<void> {
     try {
-      this.libraries.set(await this.librariesApi.list());
+      this.sections.set(await this.sectionsApi.list());
     } catch {
-      // Without the libraries the sidebar still offers "All works", which is enough to keep going.
+      // Without the sections the sidebar still offers "Library", which is enough to keep going.
     }
   }
 }

@@ -23,7 +23,7 @@ import { text } from './testing/element-text';
 import { openRequests } from './testing/open-requests';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
-type LibraryResponse = components['schemas']['LibraryResponse'];
+type SectionResponse = components['schemas']['SectionResponse'];
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type UploadResponse = components['schemas']['UploadResponse'];
 type UserRole = components['schemas']['UserRole'];
@@ -45,7 +45,7 @@ describe('routes', () => {
   const noWorks: PageOfWorkSummaryResponse = { items: [], total: 0, offset: 0, limit: 50 };
   const dune: WorkDetailResponse = {
     id: '42',
-    libraryId: '0198a1b2-0000-7000-8000-00000000000a',
+    sectionId: '0198a1b2-0000-7000-8000-00000000000a',
     title: 'Dune',
     sortTitle: 'Dune',
     description: null,
@@ -66,7 +66,7 @@ describe('routes', () => {
   function answers(visitor: Visitor): Record<string, object> {
     return {
       '/api/setup': { required: visitor.setupRequired },
-      '/api/libraries': [],
+      '/api/sections': [],
       '/api/works': noWorks,
       '/api/works/42': dune,
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
@@ -119,7 +119,7 @@ describe('routes', () => {
     return { landedOn: TestBed.inject(Router).url, shown: isShown(lookFor) };
   }
 
-  it('the screens are at /setup, /sign-in, /works and /works/:id', async () => {
+  it('the screens are at /setup, /sign-in, /library and /works/:id', async () => {
     const firstVisitor = { signedIn: false, setupRequired: true };
     const signedOut = { signedIn: false, setupRequired: false };
     const signedIn = { signedIn: true, setupRequired: false };
@@ -132,8 +132,8 @@ describe('routes', () => {
       landedOn: '/sign-in',
       shown: true,
     });
-    expect(await open('/works', signedIn, WorksListPage)).toEqual({
-      landedOn: '/works',
+    expect(await open('/library', signedIn, WorksListPage)).toEqual({
+      landedOn: '/library',
       shown: true,
     });
     expect(await open('/works/42', signedIn, WorkDetailPage)).toEqual({
@@ -184,7 +184,7 @@ describe('routes', () => {
         { signedIn: true, setupRequired: false, role: 'member' },
         WorksListPage,
       ),
-    ).toEqual({ landedOn: '/works', shown: true });
+    ).toEqual({ landedOn: '/library', shown: true });
   });
 
   it('a signed-out visitor who opens /upload lands on sign-in', async () => {
@@ -195,7 +195,7 @@ describe('routes', () => {
   });
 
   it('the upload list is still there after visiting the works list and coming back', async () => {
-    const books: LibraryResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
+    const books: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
@@ -205,8 +205,8 @@ describe('routes', () => {
 
     const opening = harness.navigateByUrl('/upload');
     (await vi.waitFor(() => httpTesting.expectOne('/api/auth/me'))).flush(ada);
-    // The sidebar and the upload page each ask for the libraries.
-    for (const request of await openRequests(httpTesting, '/api/libraries', 2)) {
+    // The sidebar and the upload page each ask for the sections.
+    for (const request of await openRequests(httpTesting, '/api/sections', 2)) {
       request.flush([books]);
     }
     await opening;
@@ -223,15 +223,15 @@ describe('routes', () => {
     input.dispatchEvent(new Event('change'));
     const upload = httpTesting.expectOne('/api/uploads');
 
-    const leaving = harness.navigateByUrl('/works');
+    const leaving = harness.navigateByUrl('/library');
     (
       await vi.waitFor(() => httpTesting.expectOne((request) => request.url === '/api/works'))
     ).flush(noWorks);
     await leaving;
-    expect(TestBed.inject(Router).url).toBe('/works');
+    expect(TestBed.inject(Router).url).toBe('/library');
 
     const returning = harness.navigateByUrl('/upload');
-    (await vi.waitFor(() => httpTesting.expectOne('/api/libraries'))).flush([books]);
+    (await vi.waitFor(() => httpTesting.expectOne('/api/sections'))).flush([books]);
     await returning;
 
     /** Each row's file name and the status it shows. */

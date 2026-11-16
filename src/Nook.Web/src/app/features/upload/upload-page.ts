@@ -6,16 +6,17 @@ import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmInputImports } from '@spartan-ng/helm/input';
 import { HlmLabelImports } from '@spartan-ng/helm/label';
 import { map } from 'rxjs';
-import { LibrariesApi } from '../../api/libraries-api';
+import { SectionsApi } from '../../api/sections-api';
 import { components } from '../../api/schema';
+import { defaultArea, readArea } from '../../core/default-area';
 import { somethingWentWrong } from '../../core/messages';
 import { UploadQueue, UploadRow, UploadStatus, isFinished } from './upload-queue';
 
-type LibraryResponse = components['schemas']['LibraryResponse'];
+type SectionResponse = components['schemas']['SectionResponse'];
 
-/** Where the libraries files can be added to stand. */
-type Libraries =
-  { status: 'loading' } | { status: 'loaded'; libraries: LibraryResponse[] } | { status: 'failed' };
+/** Where the sections files can be added to stand. */
+type Sections =
+  { status: 'loading' } | { status: 'loaded'; sections: SectionResponse[] } | { status: 'failed' };
 
 /** How each status reads on a row, and the badge it wears. */
 const statusLabels: Record<UploadStatus, { text: string; variant: BadgeVariants['variant'] }> = {
@@ -28,61 +29,52 @@ const statusLabels: Record<UploadStatus, { text: string; variant: BadgeVariants[
 };
 
 /**
- * Adds books by sending the files picked or dropped to the upload queue, each to the library selected when it was
- * added. A library picker shows only when there are several, preselected with the library the URL names. Below,
- * a row per file follows it to its result, oldest first.
+ * Adds books by sending the files picked or dropped to the upload queue, each to the section selected when it was
+ * added, or to the Default area. A section picker shows only when there are sections, offering Default first and
+ * preselected with the section the URL names, else Default. Below, a row per file follows it to its result, oldest
+ * first.
  */
 @Component({
   selector: 'app-upload-page',
   imports: [RouterLink, HlmBadgeImports, HlmButtonImports, HlmInputImports, HlmLabelImports],
   template: `
     <h1 class="mb-4 text-lg font-semibold">Add books</h1>
-    @let current = libraries();
+    @let current = sections();
     @if (current.status === 'failed') {
       <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
     } @else if (current.status === 'loaded') {
-      @if (current.libraries.length === 0) {
-        <p class="text-muted-foreground text-sm">There is no library to add books to.</p>
-      } @else {
-        @let selected = selectedLibraryId();
-        @if (current.libraries.length > 1) {
-          <div class="mb-4 grid max-w-xs gap-2">
-            <label hlmLabel for="upload-library">Library</label>
-            <select hlmInput id="upload-library" (change)="chooseLibrary($event)">
-              <option value="" disabled [selected]="selected === null">Choose a library</option>
-              @for (library of current.libraries; track library.id) {
-                <option [value]="library.id" [selected]="library.id === selected">
-                  {{ library.name }}
-                </option>
-              }
-            </select>
-          </div>
-        }
-        <div
-          data-drop-zone
-          class="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-8 text-center"
-          [class.opacity-50]="selected === null"
-          [attr.aria-disabled]="selected === null ? 'true' : null"
-          (dragover)="allowDrop($event)"
-          (drop)="dropped($event)"
-        >
-          <p class="text-muted-foreground text-sm">Drop EPUB files here, or choose them.</p>
-          <label hlmLabel class="sr-only" for="upload-files">Choose files</label>
-          <input
-            hlmInput
-            id="upload-files"
-            class="max-w-xs"
-            type="file"
-            multiple
-            accept=".epub,application/epub+zip"
-            [disabled]="selected === null"
-            (change)="picked($event)"
-          />
+      @if (current.sections.length > 0) {
+        @let selected = selectedSectionId();
+        <div class="mb-4 grid max-w-xs gap-2">
+          <label hlmLabel for="upload-section">Section</label>
+          <select hlmInput id="upload-section" (change)="chooseSection($event)">
+            <option [value]="defaultArea" [selected]="selected === null">Default</option>
+            @for (section of current.sections; track section.id) {
+              <option [value]="section.id" [selected]="section.id === selected">
+                {{ section.name }}
+              </option>
+            }
+          </select>
         </div>
-        @if (selected === null) {
-          <p class="text-muted-foreground mt-2 text-sm">Choose a library to add books to.</p>
-        }
       }
+      <div
+        data-drop-zone
+        class="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-8 text-center"
+        (dragover)="allowDrop($event)"
+        (drop)="dropped($event)"
+      >
+        <p class="text-muted-foreground text-sm">Drop EPUB files here, or choose them.</p>
+        <label hlmLabel class="sr-only" for="upload-files">Choose files</label>
+        <input
+          hlmInput
+          id="upload-files"
+          class="max-w-xs"
+          type="file"
+          multiple
+          accept=".epub,application/epub+zip"
+          (change)="picked($event)"
+        />
+      </div>
     }
     @if (rows().length > 0) {
       <div class="mt-6 mb-2 flex items-center justify-between gap-2">
@@ -126,45 +118,51 @@ const statusLabels: Record<UploadStatus, { text: string; variant: BadgeVariants[
   `,
 })
 export class UploadPage {
-  private readonly librariesApi = inject(LibrariesApi);
+  private readonly sectionsApi = inject(SectionsApi);
   private readonly queue = inject(UploadQueue);
 
   protected readonly somethingWentWrong = somethingWentWrong;
+  protected readonly defaultArea = defaultArea;
   protected readonly statusLabels = statusLabels;
   protected readonly rows = this.queue.rows;
   /** Whether any row was added or found to be a duplicate, which "Clear finished" takes away. */
   protected readonly isFinished = isFinished;
   protected readonly anyFinished = computed(() => this.rows().some(isFinished));
-  protected readonly libraries = signal<Libraries>({ status: 'loading' });
+  protected readonly sections = signal<Sections>({ status: 'loading' });
 
-  /** The library the URL names as the one being browsed, which may be none the user can see. */
-  private readonly browsedLibraryId = toSignal(
-    inject(ActivatedRoute).queryParamMap.pipe(map((params) => params.get('library'))),
-    { requireSync: true },
+  /** The area the URL names as the one being browsed, which may be a section the user cannot see. */
+  private readonly browsedArea = toSignal(
+    inject(ActivatedRoute).queryParamMap.pipe(map(readArea)),
+    {
+      requireSync: true,
+    },
   );
 
-  /** The library files go to when added: the only one, else the one browsed, until the user chooses another. */
-  protected readonly selectedLibraryId = linkedSignal(
+  /**
+   * The section files go to when added, or `null` for the Default area: the one browsed when the user can see it,
+   * until the user chooses another.
+   */
+  protected readonly selectedSectionId = linkedSignal(
     computed(() => {
-      const current = this.libraries();
+      const current = this.sections();
       if (current.status !== 'loaded') {
         return null;
       }
-      if (current.libraries.length === 1) {
-        return current.libraries[0].id;
+      const browsed = this.browsedArea();
+      if (browsed.kind !== 'section') {
+        return null;
       }
-      const browsed = this.browsedLibraryId();
-      return current.libraries.find((library) => library.id === browsed)?.id ?? null;
+      return current.sections.find((section) => section.id === browsed.id)?.id ?? null;
     }),
   );
 
   constructor() {
-    void this.loadLibraries();
+    void this.loadSections();
   }
 
-  protected chooseLibrary(event: Event): void {
+  protected chooseSection(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    this.selectedLibraryId.set(value === '' ? null : value);
+    this.selectedSectionId.set(value === defaultArea ? null : value);
   }
 
   protected allowDrop(event: Event): void {
@@ -172,7 +170,7 @@ export class UploadPage {
     event.preventDefault();
     const transfer = (event as DragEvent).dataTransfer;
     if (transfer) {
-      transfer.dropEffect = this.selectedLibraryId() === null ? 'none' : 'copy';
+      transfer.dropEffect = 'copy';
     }
   }
 
@@ -200,20 +198,19 @@ export class UploadPage {
     this.queue.clearFinished();
   }
 
-  /** Sends every file to the selected library whatever its type: the server decides what it takes. */
+  /** Sends every file to the selected section whatever its type: the server decides what it takes. */
   private add(files: ArrayLike<File> | null | undefined): void {
-    const libraryId = this.selectedLibraryId();
-    if (libraryId === null || !files || files.length === 0) {
+    if (!files || files.length === 0) {
       return;
     }
-    this.queue.add(Array.from(files), libraryId);
+    this.queue.add(Array.from(files), this.selectedSectionId());
   }
 
-  private async loadLibraries(): Promise<void> {
+  private async loadSections(): Promise<void> {
     try {
-      this.libraries.set({ status: 'loaded', libraries: await this.librariesApi.list() });
+      this.sections.set({ status: 'loaded', sections: await this.sectionsApi.list() });
     } catch {
-      this.libraries.set({ status: 'failed' });
+      this.sections.set({ status: 'failed' });
     }
   }
 }

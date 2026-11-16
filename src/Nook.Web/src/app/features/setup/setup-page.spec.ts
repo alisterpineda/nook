@@ -25,7 +25,7 @@ describe('SetupPage', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
-          { path: 'works', children: [] },
+          { path: 'library', children: [] },
           { path: 'sign-in', children: [] },
         ]),
         provideHttpClient(),
@@ -68,7 +68,7 @@ describe('SetupPage', () => {
     await fixture.whenStable();
   }
 
-  it('submitting creates the first admin and goes to /works', async () => {
+  it('submitting creates the first admin and goes to /library', async () => {
     await submit('ada@example.com', 'correct horse battery');
 
     const request = await vi.waitFor(() => httpTesting.expectOne('/api/setup'));
@@ -79,7 +79,7 @@ describe('SetupPage', () => {
     });
     request.flush(ada);
 
-    await vi.waitFor(() => expect(router.url).toBe('/works'));
+    await vi.waitFor(() => expect(router.url).toBe('/library'));
     expect(TestBed.inject(Session).user()).toEqual(ada);
   });
 

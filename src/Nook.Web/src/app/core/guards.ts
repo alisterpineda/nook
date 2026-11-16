@@ -20,7 +20,7 @@ export const signedOutGuard: CanActivateFn = async () => {
   const router = inject(Router);
 
   await session.ensureLoaded();
-  return session.user() ? router.parseUrl('/works') : true;
+  return session.user() ? router.parseUrl('/library') : true;
 };
 
 /**
@@ -33,7 +33,7 @@ export const setupGuard: CanActivateFn = async () => {
 
   await session.ensureLoaded();
   if (session.user()) {
-    return router.parseUrl('/works');
+    return router.parseUrl('/library');
   }
   return (await session.setupRequired()) ? true : router.parseUrl('/sign-in');
 };
@@ -47,5 +47,5 @@ export const adminGuard: CanActivateFn = async () => {
   const router = inject(Router);
 
   await session.ensureLoaded();
-  return session.isAdmin() ? true : router.parseUrl('/works');
+  return session.isAdmin() ? true : router.parseUrl('/library');
 };

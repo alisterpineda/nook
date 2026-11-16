@@ -27,7 +27,7 @@ export function partFileUrl(partId: string): string {
 export class WorksApi {
   private readonly http = inject(HttpClient);
 
-  /** One page of the works the signed-in user can see, from one library or from all of them. */
+  /** One page of the works the signed-in user can see, from one section, from those in no section, or from all. */
   list(query: WorkListQuery): Promise<PageOfWorkSummaryResponse> {
     let params = new HttpParams();
     for (const [name, value] of Object.entries(query)) {

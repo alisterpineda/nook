@@ -24,7 +24,7 @@ describe('WorksListPage', () => {
 
   const dune: WorkSummaryResponse = {
     id: '0198a1b2-0000-7000-8000-000000000001',
-    libraryId: booksId,
+    sectionId: booksId,
     title: 'Dune',
     authors: ['Frank Herbert'],
     series: { id: '0198a1b2-0000-7000-8000-0000000000c1', name: 'Dune', position: 1 },
@@ -34,7 +34,7 @@ describe('WorksListPage', () => {
   };
   const goodOmens: WorkSummaryResponse = {
     id: '0198a1b2-0000-7000-8000-000000000002',
-    libraryId: booksId,
+    sectionId: booksId,
     title: 'Good Omens',
     authors: ['Terry Pratchett', 'Neil Gaiman'],
     series: null,
@@ -44,13 +44,23 @@ describe('WorksListPage', () => {
   };
   const theMartian: WorkSummaryResponse = {
     id: '0198a1b2-0000-7000-8000-000000000003',
-    libraryId: comicsId,
+    sectionId: comicsId,
     title: 'The Martian',
     authors: ['Andy Weir'],
     series: { id: '0198a1b2-0000-7000-8000-0000000000c2', name: 'Mars', position: null },
     coverHash: 'def456',
     formats: [],
     addedAt: '2026-11-03T12:00:00Z',
+  };
+  const inDefault: WorkSummaryResponse = {
+    id: '0198a1b2-0000-7000-8000-000000000004',
+    sectionId: null,
+    title: 'Project Hail Mary',
+    authors: ['Andy Weir'],
+    series: null,
+    coverHash: null,
+    formats: ['epub'],
+    addedAt: '2026-11-04T12:00:00Z',
   };
 
   let harness: RouterTestingHarness;
@@ -61,7 +71,7 @@ describe('WorksListPage', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
-          { path: 'works', component: WorksListPage },
+          { path: 'library', component: WorksListPage },
           { path: 'works/:id', component: WorkDetailStub },
         ]),
         provideHttpClient(),
@@ -149,7 +159,7 @@ describe('WorksListPage', () => {
   }
 
   it('shows each work as its cover with the title and authors beneath', async () => {
-    const { page } = await openList('/works', [dune, theMartian]);
+    const { page } = await openList('/library', [dune, theMartian]);
 
     const items = gridItems(page);
     expect(items.map((item) => item.querySelector('img')?.getAttribute('src'))).toEqual([
@@ -169,14 +179,20 @@ describe('WorksListPage', () => {
     expect(page.textContent).not.toContain('EPUB');
   });
 
+  it('the heading reads Library', async () => {
+    const { page } = await openList('/library');
+
+    expect(text(page.querySelector('h1'))).toBe('Library');
+  });
+
   it('shows no table', async () => {
-    const { page } = await openList('/works');
+    const { page } = await openList('/library');
 
     expect(page.querySelector('table, [role="table"], [role="grid"]')).toBeNull();
   });
 
   it('shows a placeholder with the title for a work with no cover', async () => {
-    const { page } = await openList('/works');
+    const { page } = await openList('/library');
 
     const item = gridItems(page)[1];
     const cover = item.querySelector('app-work-cover')!;
@@ -186,7 +202,7 @@ describe('WorksListPage', () => {
   });
 
   it('links each work to its detail page', async () => {
-    const { page } = await openList('/works');
+    const { page } = await openList('/library');
 
     const links = gridItems(page).map((item) => item.querySelector<HTMLAnchorElement>('a')!);
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
@@ -202,29 +218,49 @@ describe('WorksListPage', () => {
     await vi.waitFor(() => expect(router.url).toBe(`/works/${goodOmens.id}`));
   });
 
-  it('asks for every library when the URL names none', async () => {
-    const { request } = await openList('/works');
+  it('asks for every section when the URL names none', async () => {
+    const { request } = await openList('/library');
 
     const params = request.request.params;
-    expect(params.has('LibraryId')).toBe(false);
+    expect(params.has('SectionId')).toBe(false);
+    expect(params.has('NoSection')).toBe(false);
     expect(params.get('Sort')).toBe('title');
     expect(params.get('Offset')).toBe('0');
     expect(params.get('Limit')).toBe('50');
   });
 
-  it('asks for one library when the URL names it', async () => {
-    const { request } = await openList(`/works?library=${booksId}`, [dune, goodOmens]);
+  it("asks for one section's works when the URL names it", async () => {
+    const { request } = await openList(`/library?section=${booksId}`, [dune, goodOmens]);
 
-    expect(request.request.params.get('LibraryId')).toBe(booksId);
+    expect(request.request.params.get('SectionId')).toBe(booksId);
+    expect(request.request.params.has('NoSection')).toBe(false);
   });
 
-  it('asks again when the URL switches library while the page is open', async () => {
-    const { page } = await openList('/works');
+  it("asks for the default area's works when the URL says section=default", async () => {
+    const { request } = await openList('/library?section=default', [inDefault]);
+
+    expect(request.request.params.get('NoSection')).toBe('true');
+    expect(request.request.params.has('SectionId')).toBe(false);
+  });
+
+  it('sorting keeps the section in the URL', async () => {
+    const { page } = await openList('/library?section=default&page=2', [inDefault], 120);
+
+    buttonNamed(page, 'Recently added').click();
+    const request = await answerNext(page, [inDefault], 120);
+
+    expect(router.url).toBe('/library?section=default&sort=added');
+    expect(request.request.params.get('NoSection')).toBe('true');
+    expect(request.request.params.get('Sort')).toBe('added');
+  });
+
+  it('asks again when the URL switches section while the page is open', async () => {
+    const { page } = await openList('/library');
     const listPage = harness.routeDebugElement?.componentInstance;
 
-    const navigating = harness.navigateByUrl(`/works?library=${comicsId}`);
+    const navigating = harness.navigateByUrl(`/library?section=${comicsId}`);
     const request = await worksRequest();
-    expect(request.request.params.get('LibraryId')).toBe(comicsId);
+    expect(request.request.params.get('SectionId')).toBe(comicsId);
     request.flush(pageOf([theMartian]));
     await navigating;
 
@@ -235,7 +271,7 @@ describe('WorksListPage', () => {
   });
 
   it('asks for 50 works sorted by title when the URL has no parameters', async () => {
-    const { page, request } = await openList('/works');
+    const { page, request } = await openList('/library');
 
     const params = request.request.params;
     expect(params.get('Sort')).toBe('title');
@@ -245,15 +281,15 @@ describe('WorksListPage', () => {
     expect(buttonNamed(page, 'Recently added')).toBeTruthy();
   });
 
-  it('loads the library, sort and page the URL names', async () => {
+  it('loads the section, sort and page the URL names', async () => {
     const { page, request } = await openList(
-      `/works?library=${booksId}&sort=added&page=3`,
+      `/library?section=${booksId}&sort=added&page=3`,
       [dune],
       101,
     );
 
     const params = request.request.params;
-    expect(params.get('LibraryId')).toBe(booksId);
+    expect(params.get('SectionId')).toBe(booksId);
     expect(params.get('Sort')).toBe('added');
     expect(params.get('Offset')).toBe('100');
     expect(params.get('Limit')).toBe('50');
@@ -262,14 +298,14 @@ describe('WorksListPage', () => {
   });
 
   it('choosing Recently added puts sort=added in the URL and goes back to page 1', async () => {
-    const { page } = await openList(`/works?library=${booksId}&page=2`, [dune], 120);
+    const { page } = await openList(`/library?section=${booksId}&page=2`, [dune], 120);
 
     buttonNamed(page, 'Recently added').click();
     const request = await answerNext(page, [goodOmens], 120);
 
-    expect(router.url).toBe(`/works?library=${booksId}&sort=added`);
+    expect(router.url).toBe(`/library?section=${booksId}&sort=added`);
     const params = request.request.params;
-    expect(params.get('LibraryId')).toBe(booksId);
+    expect(params.get('SectionId')).toBe(booksId);
     expect(params.get('Sort')).toBe('added');
     expect(params.get('Offset')).toBe('0');
     expect(chosenSorts(page)).toEqual(['Recently added']);
@@ -277,81 +313,81 @@ describe('WorksListPage', () => {
   });
 
   it('choosing the sort that is already chosen keeps it chosen', async () => {
-    const { page } = await openList('/works?sort=added');
+    const { page } = await openList('/library?sort=added');
 
     buttonNamed(page, 'Recently added').click();
     harness.detectChanges();
 
     expect(chosenSorts(page)).toEqual(['Recently added']);
-    expect(router.url).toBe('/works?sort=added');
+    expect(router.url).toBe('/library?sort=added');
   });
 
   it('choosing Title leaves sort out of the URL', async () => {
-    const { page } = await openList('/works?sort=added&page=2', [dune], 120);
+    const { page } = await openList('/library?sort=added&page=2', [dune], 120);
 
     buttonNamed(page, 'Title').click();
     const request = await answerNext(page, [dune], 120);
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
     expect(request.request.params.get('Sort')).toBe('title');
     expect(chosenSorts(page)).toEqual(['Title']);
   });
 
   it('Next puts page=2 in the URL and asks for offset 50', async () => {
-    const { page } = await openList('/works', [dune, goodOmens, theMartian], 120);
+    const { page } = await openList('/library', [dune, goodOmens, theMartian], 120);
 
     buttonNamed(page, 'Next').click();
     const request = await answerNext(page, [theMartian], 120);
 
-    expect(router.url).toBe('/works?page=2');
+    expect(router.url).toBe('/library?page=2');
     expect(request.request.params.get('Sort')).toBe('title');
     expect(request.request.params.get('Offset')).toBe('50');
     expect(captions(page).map((caption) => caption[0])).toEqual(['The Martian']);
     expect(page.textContent).toContain('Page 2 of 3');
   });
 
-  it('Previous from page 2 leaves page out of the URL and keeps the library and sort', async () => {
-    const { page } = await openList(`/works?library=${booksId}&sort=added&page=2`, [dune], 120);
+  it('Previous from page 2 leaves page out of the URL and keeps the section and sort', async () => {
+    const { page } = await openList(`/library?section=${booksId}&sort=added&page=2`, [dune], 120);
 
     buttonNamed(page, 'Previous').click();
     const request = await answerNext(page, [goodOmens], 120);
 
-    expect(router.url).toBe(`/works?library=${booksId}&sort=added`);
+    expect(router.url).toBe(`/library?section=${booksId}&sort=added`);
     expect(request.request.params.get('Offset')).toBe('0');
   });
 
   it('Previous is disabled on the first page and Next on the last', async () => {
-    const { page } = await openList('/works', [dune], 120);
+    const { page } = await openList('/library', [dune], 120);
     expect(buttonNamed(page, 'Previous').disabled).toBe(true);
     expect(buttonNamed(page, 'Next').disabled).toBe(false);
 
-    await openList('/works?page=2', [dune], 120);
+    await openList('/library?page=2', [dune], 120);
     expect(buttonNamed(page, 'Previous').disabled).toBe(false);
     expect(buttonNamed(page, 'Next').disabled).toBe(false);
 
-    await openList('/works?page=3', [dune], 120);
+    await openList('/library?page=3', [dune], 120);
     expect(buttonNamed(page, 'Previous').disabled).toBe(false);
     expect(buttonNamed(page, 'Next').disabled).toBe(true);
   });
 
   it('disables both Previous and Next when every work fits on one page', async () => {
-    const { page } = await openList('/works', [dune, goodOmens], 2);
+    const { page } = await openList('/library', [dune, goodOmens], 2);
 
     expect(buttonNamed(page, 'Previous').disabled).toBe(true);
     expect(buttonNamed(page, 'Next').disabled).toBe(true);
   });
 
   it('shows the total', async () => {
-    const { page } = await openList('/works', [dune], 120);
+    const { page } = await openList('/library', [dune], 120);
     expect(page.textContent).toContain('120 works');
 
-    await openList(`/works?library=${booksId}`, [dune], 1);
+    await openList(`/library?section=${booksId}`, [dune], 1);
     expect(page.textContent).toContain('1 work');
     expect(page.textContent).not.toContain('1 works');
   });
 
   it('has no page-size control', async () => {
-    const { page } = await openList('/works', [dune], 120);
+    const { page } = await openList('/library', [dune], 120);
 
     expect(
       page.querySelectorAll('input, select, [role="combobox"], [role="listbox"]'),
@@ -363,10 +399,10 @@ describe('WorksListPage', () => {
   });
 
   it.each([
-    '/works?sort=newest&page=0',
-    '/works?sort=TITLE&page=abc',
-    '/works?sort=&page=-2',
-    '/works?page=1.5',
+    '/library?sort=newest&page=0',
+    '/library?sort=TITLE&page=abc',
+    '/library?sort=&page=-2',
+    '/library?page=1.5',
   ])('treats an unknown sort or page as the default: %s', async (url) => {
     const { page, request } = await openList(url, [dune], 120);
 
@@ -377,14 +413,14 @@ describe('WorksListPage', () => {
   });
 
   it('shows No works yet in place of the grid when there are none', async () => {
-    const { page } = await openList('/works', []);
+    const { page } = await openList('/library', []);
 
     expect(page.querySelector('ul')).toBeNull();
     expect(page.textContent).toContain('No works yet');
   });
 
   it('says something went wrong when the works cannot be loaded', async () => {
-    const navigating = harness.navigateByUrl('/works');
+    const navigating = harness.navigateByUrl('/library');
     (await worksRequest()).flush(null, { status: 500, statusText: 'Internal Server Error' });
     await navigating;
     const page = harness.routeNativeElement as HTMLElement;

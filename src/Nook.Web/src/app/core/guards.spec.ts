@@ -64,8 +64,8 @@ describe('route guards', () => {
   }
 
   /** Answers the sidebar's request, which the signed-in pages make once they are shown. */
-  async function answerLibraries(): Promise<void> {
-    (await nextRequest('/api/libraries')).flush([]);
+  async function answerSections(): Promise<void> {
+    (await nextRequest('/api/sections')).flush([]);
   }
 
   /** Answers the works list's request, which it makes once it is shown. */
@@ -79,7 +79,7 @@ describe('route guards', () => {
   async function answerWork(): Promise<void> {
     (await nextRequest('/api/works/42')).flush({
       id: '42',
-      libraryId: '0198a1b2-0000-7000-8000-00000000000a',
+      sectionId: '0198a1b2-0000-7000-8000-00000000000a',
       title: 'Dune',
       sortTitle: 'Dune',
       description: null,
@@ -101,8 +101,8 @@ describe('route guards', () => {
     return harness.routeNativeElement?.querySelector('h1')?.textContent?.trim();
   }
 
-  it('a signed-out visitor to /works lands on /sign-in when a user exists', async () => {
-    const navigating = harness.navigateByUrl('/works');
+  it('a signed-out visitor to /library lands on /sign-in when a user exists', async () => {
+    const navigating = harness.navigateByUrl('/library');
     await answerSignedOut();
     await answerSetupRequired(false);
     await navigating;
@@ -111,8 +111,8 @@ describe('route guards', () => {
     expect(heading()).toBe('Sign in');
   });
 
-  it('a signed-out visitor to /works lands on /setup when no user exists', async () => {
-    const navigating = harness.navigateByUrl('/works');
+  it('a signed-out visitor to /library lands on /setup when no user exists', async () => {
+    const navigating = harness.navigateByUrl('/library');
     await answerSignedOut();
     await answerSetupRequired(true);
     // The setup page's own guard asks again.
@@ -123,21 +123,21 @@ describe('route guards', () => {
     expect(heading()).toBe('Set up Nook');
   });
 
-  it('a signed-in user reaches /works', async () => {
-    const navigating = harness.navigateByUrl('/works');
+  it('a signed-in user reaches /library', async () => {
+    const navigating = harness.navigateByUrl('/library');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
-    expect(heading()).toBe('Works');
+    expect(router.url).toBe('/library');
+    expect(heading()).toBe('Library');
   });
 
   it('a signed-in user reaches a work', async () => {
     const navigating = harness.navigateByUrl('/works/42');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWork();
     await navigating;
 
@@ -145,24 +145,24 @@ describe('route guards', () => {
     await vi.waitFor(() => expect(heading()).toBe('Dune'));
   });
 
-  it('a signed-in user who opens /sign-in lands on /works', async () => {
+  it('a signed-in user who opens /sign-in lands on /library', async () => {
     const navigating = harness.navigateByUrl('/sign-in');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
   });
 
-  it('a signed-in user who opens /setup lands on /works', async () => {
+  it('a signed-in user who opens /setup lands on /library', async () => {
     const navigating = harness.navigateByUrl('/setup');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
   });
 
   it('a signed-out visitor reaches /sign-in', async () => {
@@ -193,9 +193,9 @@ describe('route guards', () => {
   });
 
   it('asks the API for the session only once across navigations', async () => {
-    const first = harness.navigateByUrl('/works');
+    const first = harness.navigateByUrl('/library');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await first;
 
@@ -207,31 +207,31 @@ describe('route guards', () => {
     expect(router.url).toBe('/works/42');
   });
 
-  it('an unknown path redirects to /works', async () => {
+  it('an unknown path redirects to /library', async () => {
     const navigating = harness.navigateByUrl('/no/such/page');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
   });
 
-  it('/ redirects to /works', async () => {
+  it('/ redirects to /library', async () => {
     const navigating = harness.navigateByUrl('/');
     await answerSignedIn();
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
   });
 
   it('adminGuard lets an admin through to /upload', async () => {
     const navigating = harness.navigateByUrl('/upload');
     await answerSignedIn(ada);
-    // The sidebar and the upload page each ask for the libraries.
-    for (const request of await openRequests(httpTesting, '/api/libraries', 2)) {
+    // The sidebar and the upload page each ask for the sections.
+    for (const request of await openRequests(httpTesting, '/api/sections', 2)) {
       request.flush([]);
     }
     await navigating;
@@ -243,20 +243,20 @@ describe('route guards', () => {
   it('adminGuard sends a member to the works list', async () => {
     const navigating = harness.navigateByUrl('/upload');
     await answerSignedIn(mel);
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
   });
 
   it('adminGuard sends a guest to the works list', async () => {
     const navigating = harness.navigateByUrl('/upload');
     await answerSignedIn(gus);
-    await answerLibraries();
+    await answerSections();
     await answerWorks();
     await navigating;
 
-    expect(router.url).toBe('/works');
+    expect(router.url).toBe('/library');
   });
 });

@@ -6,6 +6,7 @@ import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
 import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
+import { LibraryArea, readArea, sameArea } from '../../core/default-area';
 import { somethingWentWrong } from '../../core/messages';
 import { WorkCover } from './work-cover';
 
@@ -14,7 +15,7 @@ type WorkSort = components['schemas']['WorkSort'];
 
 /** What the URL asks the list to show. */
 interface ListQuery {
-  libraryId: string | null;
+  area: LibraryArea;
   sort: WorkSort;
   /** Counts from 1. */
   page: number;
@@ -37,8 +38,8 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
 ];
 
 /**
- * One page of the works in the library the URL names, or in every library the user can see when it names none, in
- * the sort order and at the page the URL names.
+ * One page of the works in the section the URL names, of the works in no section when it names the Default area,
+ * or of every work the user can see when it names none, in the sort order and at the page the URL names.
  */
 @Component({
   selector: 'app-works-list-page',
@@ -46,7 +47,7 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
   template: `
     @let shownQuery = query();
     <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-      <h1 class="text-lg font-semibold">Works</h1>
+      <h1 class="text-lg font-semibold">Library</h1>
       <div
         hlmToggleGroup
         type="single"
@@ -136,7 +137,7 @@ export class WorksListPage {
     map(toListQuery),
     distinctUntilChanged(
       (previous, next) =>
-        previous.libraryId === next.libraryId &&
+        sameArea(previous.area, next.area) &&
         previous.sort === next.sort &&
         previous.page === next.page,
     ),
@@ -171,8 +172,8 @@ export class WorksListPage {
     return total === 1 ? '1 work' : `${total} works`;
   }
 
-  /** Puts the sort and page in the URL, keeping its library, and leaves out each one that is at its default. */
-  private show({ sort, page }: Omit<ListQuery, 'libraryId'>): void {
+  /** Puts the sort and page in the URL, keeping its section, and leaves out each one that is at its default. */
+  private show({ sort, page }: Omit<ListQuery, 'area'>): void {
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { sort: sort === defaultSort ? null : sort, page: page === 1 ? null : page },
@@ -180,10 +181,11 @@ export class WorksListPage {
     });
   }
 
-  private async load({ libraryId, sort, page }: ListQuery): Promise<Listing> {
+  private async load({ area, sort, page }: ListQuery): Promise<Listing> {
     try {
       const response = await this.worksApi.list({
-        LibraryId: libraryId ?? undefined,
+        SectionId: area.kind === 'section' ? area.id : undefined,
+        NoSection: area.kind === 'default' ? true : undefined,
         Sort: sort,
         Offset: (page - 1) * pageSize,
         Limit: pageSize,
@@ -200,7 +202,7 @@ function toListQuery(params: ParamMap): ListQuery {
   const sortParam = params.get('sort');
   const pageParam = params.get('page');
   return {
-    libraryId: params.get('library'),
+    area: readArea(params),
     sort: sortOptions.find((option) => option.value === sortParam)?.value ?? defaultSort,
     page: pageParam !== null && /^[1-9][0-9]*$/.test(pageParam) ? Number(pageParam) : 1,
   };

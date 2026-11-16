@@ -15,13 +15,13 @@ import { UploadPage } from './upload-page';
 import { UploadQueue } from './upload-queue';
 
 type JobDetailResponse = components['schemas']['JobDetailResponse'];
-type LibraryResponse = components['schemas']['LibraryResponse'];
+type SectionResponse = components['schemas']['SectionResponse'];
 type ProblemDetails = components['schemas']['ProblemDetails'];
 type UploadResponse = components['schemas']['UploadResponse'];
 
 describe('UploadPage', () => {
-  const books: LibraryResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
-  const comics: LibraryResponse = { id: '0198a1b2-0000-7000-8000-00000000000b', name: 'Comics' };
+  const books: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
+  const comics: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000b', name: 'Comics' };
 
   let harness: RouterTestingHarness;
   let httpTesting: HttpTestingController;
@@ -48,11 +48,11 @@ describe('UploadPage', () => {
     return new File(['epub bytes'], name, { type: 'application/epub+zip' });
   }
 
-  /** Opens the page at `url` and answers its request for libraries with `libraries`. */
-  async function openPage(url: string, libraries: LibraryResponse[]): Promise<HTMLElement> {
+  /** Opens the page at `url` and answers its request for sections with `sections`. */
+  async function openPage(url: string, sections: SectionResponse[]): Promise<HTMLElement> {
     const navigating = harness.navigateByUrl(url);
-    const request = await vi.waitFor(() => httpTesting.expectOne('/api/libraries'));
-    request.flush(libraries);
+    const request = await vi.waitFor(() => httpTesting.expectOne('/api/sections'));
+    request.flush(sections);
     await navigating;
     const page = harness.routeNativeElement as HTMLElement;
     await vi.waitFor(() => expect(page.querySelector('input, p')).not.toBeNull());
@@ -75,7 +75,7 @@ describe('UploadPage', () => {
     return zone;
   }
 
-  function libraryPicker(page: HTMLElement): HTMLSelectElement | null {
+  function sectionPicker(page: HTMLElement): HTMLSelectElement | null {
     return page.querySelector('select');
   }
 
@@ -94,26 +94,45 @@ describe('UploadPage', () => {
     return event;
   }
 
-  /** The one open upload, after checking it sends `file` to `libraryId`. */
-  function expectUpload(file: File, libraryId: string): TestRequest {
+  /** The one open upload, after checking it sends `file` to `sectionId`, or to the Default area when it is null. */
+  function expectUpload(file: File, sectionId: string | null): TestRequest {
     const request = httpTesting.expectOne('/api/uploads');
     expect(request.request.method).toBe('POST');
     const form = request.request.body as FormData;
-    expect(form.get('libraryId')).toBe(libraryId);
+    expect(form.has('sectionId')).toBe(sectionId !== null);
+    expect(form.get('sectionId')).toBe(sectionId);
     expect(form.get('file')).toBe(file);
     return request;
   }
 
-  /** Chooses `library` in the library picker. */
-  async function choose(page: HTMLElement, library: LibraryResponse): Promise<void> {
-    const picker = libraryPicker(page)!;
-    picker.value = library.id;
+  /** The name of each option the section picker offers, in order. */
+  function offered(page: HTMLElement): string[] {
+    return Array.from(sectionPicker(page)!.options, (option) => option.text.trim());
+  }
+
+  /** The name of the option the section picker shows as chosen. */
+  function chosen(page: HTMLElement): string {
+    return sectionPicker(page)!.selectedOptions[0]?.text.trim() ?? '';
+  }
+
+  /** Chooses the option named `name` in the section picker. */
+  function choose(page: HTMLElement, name: string): void {
+    const picker = sectionPicker(page)!;
+    const option = Array.from(picker.options).find((candidate) => candidate.text.trim() === name);
+    if (!option) {
+      throw new Error(`The picker offers no ${name}`);
+    }
+    picker.value = option.value;
     picker.dispatchEvent(new Event('change'));
-    await vi.waitFor(() => expect(fileInput(page).disabled).toBe(false));
+  }
+
+  /** Whether the page lets files be added: the input and the drop zone both take them. */
+  function takesFiles(page: HTMLElement): boolean {
+    return !fileInput(page).disabled && dropZone(page).getAttribute('aria-disabled') === null;
   }
 
   it('the picker takes several files and offers epub files', async () => {
-    const page = await openPage('/upload', [books]);
+    const page = await openPage('/upload', []);
 
     const input = fileInput(page);
     expect(input.multiple).toBe(true);
@@ -122,110 +141,123 @@ describe('UploadPage', () => {
     expect(dropZone(page).contains(input)).toBe(true);
   });
 
-  it('picked files are sent to the only library, with no library picker shown', async () => {
-    const page = await openPage('/upload', [books]);
-    expect(libraryPicker(page)).toBeNull();
+  it('with no sections, picked files go to the default area and no picker shows', async () => {
+    const page = await openPage('/upload', []);
+    expect(sectionPicker(page)).toBeNull();
+    expect(takesFiles(page)).toBe(true);
 
     const dune = epub('dune.epub');
     const emma = epub('emma.epub');
     pick(page, [dune, emma]);
 
-    expectUpload(dune, books.id);
+    expectUpload(dune, null);
     expect(
       TestBed.inject(UploadQueue)
         .rows()
-        .map((row) => [row.name, row.libraryId]),
+        .map((row) => [row.name, row.sectionId]),
     ).toEqual([
-      ['dune.epub', books.id],
-      ['emma.epub', books.id],
+      ['dune.epub', null],
+      ['emma.epub', null],
     ]);
   });
 
   it('dropped files are sent', async () => {
-    const page = await openPage('/upload', [books]);
+    const page = await openPage('/upload', []);
 
     const dune = epub('dune.epub');
     const event = drop(page, [dune]);
 
     expect(event.defaultPrevented).toBe(true);
-    expectUpload(dune, books.id);
+    expectUpload(dune, null);
   });
 
   it('a file that is not an epub is still sent', async () => {
-    const page = await openPage('/upload', [books]);
+    const page = await openPage('/upload', []);
 
     const notes = new File(['some text'], 'notes.txt', { type: 'text/plain' });
     pick(page, [notes]);
-    expectUpload(notes, books.id);
+    expectUpload(notes, null);
 
     const queue = TestBed.inject(UploadQueue);
     queue.reset();
     const cover = new File(['png bytes'], 'cover.png', { type: 'image/png' });
     drop(page, [cover]);
-    expectUpload(cover, books.id);
+    expectUpload(cover, null);
   });
 
-  it('with several libraries the one named in the URL is preselected', async () => {
-    const page = await openPage(`/upload?library=${comics.id}`, [books, comics]);
+  it('with sections the picker offers Default first and then each section', async () => {
+    const page = await openPage('/upload', [books, comics]);
 
-    const picker = libraryPicker(page)!;
-    expect(picker).not.toBeNull();
-    expect(text(page.querySelector(`label[for="${picker.id}"]`))).toBe('Library');
-    expect(
-      Array.from(picker.options)
-        .filter((option) => !option.disabled)
-        .map((option) => option.text.trim()),
-    ).toEqual(['Books', 'Comics']);
-    expect(picker.value).toBe(comics.id);
-    expect(fileInput(page).disabled).toBe(false);
+    const picker = sectionPicker(page)!;
+    expect(text(page.querySelector(`label[for="${picker.id}"]`))).toBe('Section');
+    expect(offered(page)).toEqual(['Default', 'Books', 'Comics']);
+    expect(page.textContent).not.toContain('Choose a section');
+  });
+
+  it('the section named in the URL is preselected', async () => {
+    const page = await openPage(`/upload?section=${comics.id}`, [books, comics]);
+
+    expect(chosen(page)).toBe('Comics');
+    expect(takesFiles(page)).toBe(true);
 
     const dune = epub('dune.epub');
     pick(page, [dune]);
     expectUpload(dune, comics.id);
   });
 
-  it('with several libraries and none named, files cannot be added until one is chosen', async () => {
-    const page = await openPage('/upload', [books, comics]);
+  it('Default is preselected when the URL names no section', async () => {
+    const page = await openPage('/upload', [books]);
 
-    const picker = libraryPicker(page)!;
-    expect(picker.value).toBe('');
-    expect(fileInput(page).disabled).toBe(true);
-    expect(dropZone(page).getAttribute('aria-disabled')).toBe('true');
-    expect(page.textContent).toContain('Choose a library to add books to.');
-
-    const dune = epub('dune.epub');
-    drop(page, [dune]);
-    httpTesting.expectNone('/api/uploads');
-    expect(TestBed.inject(UploadQueue).rows()).toEqual([]);
-
-    await choose(page, books);
-    expect(dropZone(page).getAttribute('aria-disabled')).toBeNull();
-    expect(page.textContent).not.toContain('Choose a library to add books to.');
-
-    pick(page, [dune]);
-    expectUpload(dune, books.id);
+    expect(offered(page)).toEqual(['Default', 'Books']);
+    expect(chosen(page)).toBe('Default');
+    expect(takesFiles(page)).toBe(true);
   });
 
-  it('a library in the URL the user cannot see counts as none', async () => {
-    const page = await openPage('/upload?library=0198a1b2-0000-7000-8000-0000000000ff', [
+  it('Default is preselected when the URL says section=default', async () => {
+    const page = await openPage('/upload?section=default', [books, comics]);
+
+    expect(chosen(page)).toBe('Default');
+    expect(takesFiles(page)).toBe(true);
+  });
+
+  it('a section in the URL the user cannot see counts as Default', async () => {
+    const page = await openPage('/upload?section=0198a1b2-0000-7000-8000-0000000000ff', [
       books,
       comics,
     ]);
 
-    expect(libraryPicker(page)!.value).toBe('');
-    expect(fileInput(page).disabled).toBe(true);
+    expect(chosen(page)).toBe('Default');
+    expect(takesFiles(page)).toBe(true);
+
+    const dune = epub('dune.epub');
+    pick(page, [dune]);
+    expectUpload(dune, null);
   });
 
-  it('with no libraries the page says there is nowhere to add books', async () => {
-    const page = await openPage('/upload', []);
+  it('files added after choosing a section go to it', async () => {
+    const page = await openPage('/upload', [books, comics]);
 
-    expect(page.textContent).toContain('There is no library to add books to.');
-    expect(page.querySelector('input, select, [data-drop-zone]')).toBeNull();
+    choose(page, 'Books');
+    const dune = epub('dune.epub');
+    pick(page, [dune]);
+
+    expectUpload(dune, books.id);
   });
 
-  it('says something went wrong when the libraries cannot be loaded', async () => {
+  it('files added with Default chosen carry no section', async () => {
+    const page = await openPage(`/upload?section=${comics.id}`, [books, comics]);
+
+    choose(page, 'Default');
+    const dune = epub('dune.epub');
+    drop(page, [dune]);
+
+    expectUpload(dune, null);
+    expect(TestBed.inject(UploadQueue).rows()[0].sectionId).toBeNull();
+  });
+
+  it('says something went wrong when the sections cannot be loaded', async () => {
     const navigating = harness.navigateByUrl('/upload');
-    (await vi.waitFor(() => httpTesting.expectOne('/api/libraries'))).flush(null, {
+    (await vi.waitFor(() => httpTesting.expectOne('/api/sections'))).flush(null, {
       status: 500,
       statusText: 'Internal Server Error',
     });
@@ -252,7 +284,7 @@ describe('UploadPage', () => {
     // The page is opened on real timers, since `vi.waitFor` would fire the queue's polls under fake ones. From the
     // first file on, time moves only when a test moves it.
     beforeEach(async () => {
-      page = await openPage('/upload', [books]);
+      page = await openPage('/upload', []);
       vi.useFakeTimers();
     });
 
@@ -296,13 +328,13 @@ describe('UploadPage', () => {
     /** Answers the open upload of `file` with `jobId`. */
     async function accept(file: File, jobId: string): Promise<void> {
       const response: UploadResponse = { jobId };
-      expectUpload(file, books.id).flush(response, { status: 202, statusText: 'Accepted' });
+      expectUpload(file, null).flush(response, { status: 202, statusText: 'Accepted' });
       await settle();
     }
 
     /** Answers the open upload of `file` with a refusal. */
     async function refuse(file: File, problem: ProblemDetails): Promise<void> {
-      expectUpload(file, books.id).flush(problem, {
+      expectUpload(file, null).flush(problem, {
         status: problem.status ?? 500,
         statusText: 'Refused',
       });
@@ -374,7 +406,7 @@ describe('UploadPage', () => {
       await settle();
 
       expect(rows().map(fileName)).toEqual(['dune.epub', 'emma.epub', 'frankenstein.epub']);
-      expectUpload(dune, books.id);
+      expectUpload(dune, null);
     });
 
     it('a file shows waiting, uploading, ingesting and then added as it goes through', async () => {
@@ -392,7 +424,7 @@ describe('UploadPage', () => {
         ['dune.epub', 'Ingesting'],
         ['emma.epub', 'Uploading'],
       ]);
-      expectUpload(emma, books.id);
+      expectUpload(emma, null);
 
       await answerPolls({ [duneJobId]: job(duneJobId, 'running') });
       expect(shown()[0]).toEqual(['dune.epub', 'Ingesting']);
@@ -435,7 +467,7 @@ describe('UploadPage', () => {
       await pickFiles([dune, emma, frank]);
       await accept(dune, duneJobId);
       await accept(emma, emmaJobId);
-      expectUpload(frank, books.id);
+      expectUpload(frank, null);
 
       await answerPolls({
         [duneJobId]: succeeded(duneJobId, 'created', duneWorkId),
@@ -460,7 +492,7 @@ describe('UploadPage', () => {
       await accept(emma, emmaJobId);
       await accept(frank, frankJobId);
       await accept(gina, ginaJobId);
-      expectUpload(hugo, books.id);
+      expectUpload(hugo, null);
 
       await answerPolls({
         [emmaJobId]: job(emmaJobId, 'failed', { error: 'Broken.' }),
@@ -503,7 +535,7 @@ describe('UploadPage', () => {
       buttonLabelled(row('dune.epub'), 'Retry').click();
       await settle();
 
-      expectUpload(dune, books.id);
+      expectUpload(dune, null);
       expect(shown()).toEqual([['dune.epub', 'Uploading']]);
     });
 
@@ -541,7 +573,7 @@ describe('UploadPage', () => {
       await accept(dune, duneJobId);
       await accept(emma, emmaJobId);
       await accept(frank, frankJobId);
-      expectUpload(gina, books.id);
+      expectUpload(gina, null);
 
       await answerPolls({
         [duneJobId]: succeeded(duneJobId, 'created', duneWorkId),
