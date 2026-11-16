@@ -77,6 +77,7 @@ describe('routes', () => {
   function answers(visitor: Visitor): Record<string, object> {
     return {
       '/api/setup': { required: visitor.setupRequired },
+      '/api/auth/sign-in-options': { ssoName: null },
       '/api/sections': [],
       '/api/works': noWorks,
       '/api/works/42': dune,

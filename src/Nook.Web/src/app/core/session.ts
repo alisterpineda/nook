@@ -7,6 +7,7 @@ type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type LoginRequest = components['schemas']['LoginRequest'];
 type SetupRequest = components['schemas']['SetupRequest'];
 type SetupStatusResponse = components['schemas']['SetupStatusResponse'];
+type SignInOptionsResponse = components['schemas']['SignInOptionsResponse'];
 
 /**
  * Who is signed in, and the calls that change it. The session itself is the API's `nook` cookie, so the user
@@ -58,6 +59,11 @@ export class Session {
   async setupRequired(): Promise<boolean> {
     const status = await firstValueFrom(this.http.get<SetupStatusResponse>('/api/setup'));
     return status.required;
+  }
+
+  /** The ways to sign in besides a password: the name of the single sign-on provider, or `null` when there is none. */
+  signInOptions(): Promise<SignInOptionsResponse> {
+    return firstValueFrom(this.http.get<SignInOptionsResponse>('/api/auth/sign-in-options'));
   }
 
   /** Creates the first admin, whom the API signs in. */

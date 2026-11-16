@@ -9,6 +9,7 @@ import { HlmLabelImports } from '@spartan-ng/helm/label';
 import { components } from '../../api/schema';
 import { somethingWentWrong } from '../../core/messages';
 import { Session } from '../../core/session';
+import { SsoButton } from '../sign-in/sso-button';
 
 type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'];
 
@@ -21,6 +22,7 @@ type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'
     HlmCardImports,
     HlmInputImports,
     HlmLabelImports,
+    SsoButton,
   ],
   template: `
     <main class="flex min-h-svh items-center justify-center p-4">
@@ -63,6 +65,7 @@ type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'
           }
           <button hlmBtn type="submit" [disabled]="submitting()">Create admin</button>
         </form>
+        <app-sso-button />
       </section>
     </main>
   `,

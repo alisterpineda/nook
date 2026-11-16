@@ -183,6 +183,18 @@ describe('Session', () => {
     expect(await notRequired).toBe(false);
   });
 
+  it('signInOptions reports what the API says', async () => {
+    const named = session.signInOptions();
+    const request = httpTesting.expectOne('/api/auth/sign-in-options');
+    expect(request.request.method).toBe('GET');
+    request.flush({ ssoName: 'Authentik' });
+    expect(await named).toEqual({ ssoName: 'Authentik' });
+
+    const unnamed = session.signInOptions();
+    httpTesting.expectOne('/api/auth/sign-in-options').flush({ ssoName: null });
+    expect(await unnamed).toEqual({ ssoName: null });
+  });
+
   it('createFirstAdmin posts the email and password and sets the user', async () => {
     const creating = session.createFirstAdmin('ada@example.com', 'correct horse');
 

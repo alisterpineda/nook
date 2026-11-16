@@ -1,12 +1,18 @@
 import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  TestRequest,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { components } from '../../api/schema';
 import { Session } from '../../core/session';
+import { linkLabelled } from '../../testing/link-labelled';
 import { SetupPage } from './setup-page';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
+type SignInOptionsResponse = components['schemas']['SignInOptionsResponse'];
 type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'];
 
 describe('SetupPage', () => {
@@ -20,6 +26,7 @@ describe('SetupPage', () => {
   let page: HTMLElement;
   let httpTesting: HttpTestingController;
   let router: Router;
+  let signInOptions: TestRequest;
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
@@ -37,6 +44,7 @@ describe('SetupPage', () => {
     fixture = TestBed.createComponent(SetupPage);
     page = fixture.nativeElement;
     await fixture.whenStable();
+    signInOptions = httpTesting.expectOne('/api/auth/sign-in-options');
   });
 
   afterEach(() => httpTesting.verify());
@@ -68,64 +76,87 @@ describe('SetupPage', () => {
     await fixture.whenStable();
   }
 
-  it('submitting creates the first admin and goes to /library', async () => {
-    await submit('ada@example.com', 'correct horse battery');
+  async function answerSignInOptions(options: SignInOptionsResponse): Promise<void> {
+    signInOptions.flush(options);
+    await fixture.whenStable();
+  }
 
-    const request = await vi.waitFor(() => httpTesting.expectOne('/api/setup'));
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({
-      email: 'ada@example.com',
-      password: 'correct horse battery',
-    });
-    request.flush(ada);
+  it('offers single sign-on when the API names one', async () => {
+    await answerSignInOptions({ ssoName: 'Authentik' });
 
-    await vi.waitFor(() => expect(router.url).toBe('/library'));
-    expect(TestBed.inject(Session).user()).toEqual(ada);
+    const link = await vi.waitFor(() => linkLabelled(page, 'Sign in with Authentik'));
+    expect(link.getAttribute('href')).toBe('/api/auth/oidc/login');
+    expect(fieldLabelled('Email')).toBeDefined();
   });
 
-  it("shows the API's message under the password field on a validation error", async () => {
-    await submit('ada@example.com', 'short');
+  describe('without single sign-on', () => {
+    beforeEach(() => answerSignInOptions({ ssoName: null }));
 
-    const problem: ValidationProblemDetails = {
-      title: 'One or more validation errors occurred.',
-      status: 400,
-      errors: { Password: ['Passwords must be at least 8 characters.'] },
-    };
-    (await vi.waitFor(() => httpTesting.expectOne('/api/setup'))).flush(problem, {
-      status: 400,
-      statusText: 'Bad Request',
+    it('offers no single sign-on', () => {
+      expect(page.querySelector('a')).toBeNull();
     });
 
-    await vi.waitFor(() =>
-      expect(fieldLabelled('Password').parentElement?.textContent).toContain(
-        'Passwords must be at least 8 characters.',
-      ),
-    );
-    expect(fieldLabelled('Email').parentElement?.textContent).not.toContain('Passwords must');
-    expect(router.url).toBe('/');
-  });
+    it('submitting creates the first admin and goes to /library', async () => {
+      await submit('ada@example.com', 'correct horse battery');
 
-  it('goes to /sign-in when Nook is already set up', async () => {
-    await submit('ada@example.com', 'correct horse battery');
+      const request = await vi.waitFor(() => httpTesting.expectOne('/api/setup'));
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({
+        email: 'ada@example.com',
+        password: 'correct horse battery',
+      });
+      request.flush(ada);
 
-    (await vi.waitFor(() => httpTesting.expectOne('/api/setup'))).flush(
-      { title: 'Nook is already set up.', status: 409 },
-      { status: 409, statusText: 'Conflict' },
-    );
-
-    await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
-    expect(TestBed.inject(Session).user()).toBeNull();
-  });
-
-  it('shows a general message when setup fails for another reason', async () => {
-    await submit('ada@example.com', 'correct horse battery');
-
-    (await vi.waitFor(() => httpTesting.expectOne('/api/setup'))).flush(null, {
-      status: 500,
-      statusText: 'Internal Server Error',
+      await vi.waitFor(() => expect(router.url).toBe('/library'));
+      expect(TestBed.inject(Session).user()).toEqual(ada);
     });
 
-    await vi.waitFor(() => expect(page.textContent).toContain('Something went wrong. Try again.'));
-    expect(router.url).toBe('/');
+    it("shows the API's message under the password field on a validation error", async () => {
+      await submit('ada@example.com', 'short');
+
+      const problem: ValidationProblemDetails = {
+        title: 'One or more validation errors occurred.',
+        status: 400,
+        errors: { Password: ['Passwords must be at least 8 characters.'] },
+      };
+      (await vi.waitFor(() => httpTesting.expectOne('/api/setup'))).flush(problem, {
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      await vi.waitFor(() =>
+        expect(fieldLabelled('Password').parentElement?.textContent).toContain(
+          'Passwords must be at least 8 characters.',
+        ),
+      );
+      expect(fieldLabelled('Email').parentElement?.textContent).not.toContain('Passwords must');
+      expect(router.url).toBe('/');
+    });
+
+    it('goes to /sign-in when Nook is already set up', async () => {
+      await submit('ada@example.com', 'correct horse battery');
+
+      (await vi.waitFor(() => httpTesting.expectOne('/api/setup'))).flush(
+        { title: 'Nook is already set up.', status: 409 },
+        { status: 409, statusText: 'Conflict' },
+      );
+
+      await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
+      expect(TestBed.inject(Session).user()).toBeNull();
+    });
+
+    it('shows a general message when setup fails for another reason', async () => {
+      await submit('ada@example.com', 'correct horse battery');
+
+      (await vi.waitFor(() => httpTesting.expectOne('/api/setup'))).flush(null, {
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      await vi.waitFor(() =>
+        expect(page.textContent).toContain('Something went wrong. Try again.'),
+      );
+      expect(router.url).toBe('/');
+    });
   });
 });

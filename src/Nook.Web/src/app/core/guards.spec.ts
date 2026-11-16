@@ -63,6 +63,11 @@ describe('route guards', () => {
     (await nextRequest('/api/setup')).flush({ required });
   }
 
+  /** Answers the sign-in or setup page's request for the ways to sign in, which it makes once it is shown. */
+  async function answerSignInOptions(): Promise<void> {
+    (await nextRequest('/api/auth/sign-in-options')).flush({ ssoName: null });
+  }
+
   /** Answers the sidebar's request, which the signed-in pages make once they are shown. */
   async function answerSections(): Promise<void> {
     (await nextRequest('/api/sections')).flush([]);
@@ -105,6 +110,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/library');
     await answerSignedOut();
     await answerSetupRequired(false);
+    await answerSignInOptions();
     await navigating;
 
     expect(router.url).toBe('/sign-in');
@@ -117,6 +123,7 @@ describe('route guards', () => {
     await answerSetupRequired(true);
     // The setup page's own guard asks again.
     await answerSetupRequired(true);
+    await answerSignInOptions();
     await navigating;
 
     expect(router.url).toBe('/setup');
@@ -168,6 +175,7 @@ describe('route guards', () => {
   it('a signed-out visitor reaches /sign-in', async () => {
     const navigating = harness.navigateByUrl('/sign-in');
     await answerSignedOut();
+    await answerSignInOptions();
     await navigating;
 
     expect(router.url).toBe('/sign-in');
@@ -178,6 +186,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/setup');
     await answerSignedOut();
     await answerSetupRequired(false);
+    await answerSignInOptions();
     await navigating;
 
     expect(router.url).toBe('/sign-in');
@@ -187,6 +196,7 @@ describe('route guards', () => {
     const navigating = harness.navigateByUrl('/setup');
     await answerSignedOut();
     await answerSetupRequired(true);
+    await answerSignInOptions();
     await navigating;
 
     expect(router.url).toBe('/setup');

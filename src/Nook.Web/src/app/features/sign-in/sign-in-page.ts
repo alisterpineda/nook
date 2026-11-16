@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmInputImports } from '@spartan-ng/helm/input';
@@ -9,10 +9,19 @@ import { HlmLabelImports } from '@spartan-ng/helm/label';
 import { components } from '../../api/schema';
 import { somethingWentWrong } from '../../core/messages';
 import { Session } from '../../core/session';
+import { SsoButton } from './sso-button';
 
 type ProblemDetails = components['schemas']['ProblemDetails'];
 
 const tooManyAttempts = 'Too many attempts. Try again in a minute.';
+
+/** What the API's single sign-on means by each `error` it sends back to this page. */
+const singleSignOnFailures: Readonly<Record<string, string>> = {
+  'sso-failed': 'Single sign-on did not work. Try again.',
+  'sso-no-email': 'Your single sign-on account has no email address, and Nook needs one.',
+  'sso-email-unverified':
+    'A Nook account already uses this email address, and your single sign-on provider has not confirmed that the address is yours.',
+};
 
 /** Signs in with an email and password. */
 @Component({
@@ -23,6 +32,7 @@ const tooManyAttempts = 'Too many attempts. Try again in a minute.';
     HlmCardImports,
     HlmInputImports,
     HlmLabelImports,
+    SsoButton,
   ],
   template: `
     <main class="flex min-h-svh items-center justify-center p-4">
@@ -65,6 +75,7 @@ const tooManyAttempts = 'Too many attempts. Try again in a minute.';
           }
           <button hlmBtn type="submit" [disabled]="submitting()">Sign in</button>
         </form>
+        <app-sso-button />
       </section>
     </main>
   `,
@@ -80,7 +91,10 @@ export class SignInPage {
   });
   private readonly attempted = signal(false);
   protected readonly submitting = signal(false);
-  protected readonly error = signal<string | null>(null);
+  // Single sign-on comes back here with why it failed; a password attempt replaces that message.
+  protected readonly error = signal<string | null>(
+    singleSignOnFailure(inject(ActivatedRoute).snapshot.queryParamMap.get('error')),
+  );
 
   /** Whether to mark a field wrong: only once the user has tried to sign in with it. */
   protected showsInvalid(field: 'email' | 'password'): boolean {
@@ -109,6 +123,13 @@ export class SignInPage {
     }
     await this.router.navigateByUrl('/library');
   }
+}
+
+/** The message for a single sign-on failure code, or null for no code or one this page does not know. */
+function singleSignOnFailure(code: string | null): string | null {
+  return code !== null && Object.hasOwn(singleSignOnFailures, code)
+    ? singleSignOnFailures[code]
+    : null;
 }
 
 /** The API's own words for a wrong email or password, and fixed words for anything else. */
