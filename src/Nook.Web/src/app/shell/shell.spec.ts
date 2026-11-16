@@ -25,6 +25,12 @@ class WorkStub {}
 @Component({ template: '<h1>Add books</h1>' })
 class UploadStub {}
 
+@Component({ template: '<h1>Authors</h1>' })
+class AuthorsStub {}
+
+@Component({ template: '<h1>Person</h1>' })
+class PersonStub {}
+
 @Component({ template: '<h1>Sign in</h1>' })
 class SignInStub {}
 
@@ -65,6 +71,8 @@ describe('Shell', () => {
               { path: 'library', component: WorksStub },
               { path: 'works/:id', component: WorkStub },
               { path: 'upload', component: UploadStub },
+              { path: 'authors', component: AuthorsStub },
+              { path: 'people/:id', component: PersonStub },
             ],
           },
         ]),
@@ -338,6 +346,59 @@ describe('Shell', () => {
     await harness.fixture.whenStable();
     expect(addBooks(shell)?.getAttribute('aria-current')).toBeNull();
     expect(selectedLinks(shell)).toEqual(['Library']);
+  });
+
+  it('shows Authors linking to /authors', async () => {
+    const shell = await openShell('/library');
+
+    expect(
+      groupLinks(shell, 'Browse').map((link) => [
+        link.textContent?.trim(),
+        link.getAttribute('href'),
+      ]),
+    ).toEqual([['Authors', '/authors']]);
+  });
+
+  it('a guest sees Authors', async () => {
+    await signInAs(guest);
+    const shell = await openShell('/library');
+
+    expect(groupLinks(shell, 'Browse').map((link) => link.textContent?.trim())).toEqual([
+      'Authors',
+    ]);
+  });
+
+  it('shows Authors when the user can see no sections', async () => {
+    const shell = await openShell('/library', (request) => request.flush([]));
+
+    expect(groupLinks(shell, 'Browse').map((link) => link.textContent?.trim())).toEqual([
+      'Authors',
+    ]);
+  });
+
+  it('Authors is the current page on /authors and Library is not', async () => {
+    const shell = await openShell('/authors?page=2');
+
+    expect(groupLinks(shell, 'Browse')[0].getAttribute('aria-current')).toBe('page');
+    expect(selectedLinks(shell)).toEqual([]);
+    expect(shell.querySelector('h1')?.textContent?.trim()).toBe('Authors');
+  });
+
+  it("marks no link current on a person's page", async () => {
+    const shell = await openShell('/people/42');
+
+    expect(selectedLinks(shell)).toEqual([]);
+    expect(groupLinks(shell, 'Browse')[0].getAttribute('aria-current')).toBeNull();
+  });
+
+  it('closes the sidebar on a phone when Authors is chosen', async () => {
+    const shell = await openShell('/library');
+
+    const links = groupLinks(shell, 'Browse');
+    expect(links).toHaveLength(1);
+    for (const link of links) {
+      expect(link.hasAttribute('closeMobileSidebarOnClick')).toBe(true);
+    }
   });
 
   it('signing out empties the upload list', async () => {

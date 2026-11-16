@@ -13,8 +13,8 @@ type SectionResponse = components['schemas']['SectionResponse'];
 
 /**
  * The frame around every signed-in page: a collapsible sidebar with "Library", then "Default" and the user's
- * sections when there are any, then "Add books" for an admin, the user's menu in its footer, and the page itself
- * beside it.
+ * sections when there are any, then "Authors", then "Add books" for an admin, the user's menu in its footer, and the
+ * page itself beside it.
  */
 @Component({
   selector: 'app-shell',
@@ -40,6 +40,21 @@ type SectionResponse = components['schemas']['SectionResponse'];
                   </a>
                 </li>
               }
+            </ul>
+          </nav>
+          <nav hlmSidebarGroup aria-label="Browse">
+            <ul hlmSidebarMenu>
+              <li hlmSidebarMenuItem>
+                <a
+                  hlmSidebarMenuButton
+                  routerLink="/authors"
+                  closeMobileSidebarOnClick
+                  [isActive]="onAuthors()"
+                  [attr.aria-current]="onAuthors() ? 'page' : null"
+                >
+                  <span>Authors</span>
+                </a>
+              </li>
             </ul>
           </nav>
           @if (isAdmin()) {
@@ -124,6 +139,7 @@ export class Shell {
   /** Whether the list of works is open, the only page "Library", "Default" and the sections stand for. */
   protected readonly onLibrary = isActive('/library', this.router, { queryParams: 'ignored' });
   protected readonly onUpload = isActive('/upload', this.router, { queryParams: 'ignored' });
+  protected readonly onAuthors = isActive('/authors', this.router, { queryParams: 'ignored' });
   /**
    * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,
    * since the Default area is worth naming only beside a section. The one the URL names is current.

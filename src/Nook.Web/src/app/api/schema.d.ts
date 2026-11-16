@@ -572,6 +572,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Role?: components["schemas"]["ContributorRole"];
+                    Offset?: number;
+                    Limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PageOfPersonSummaryResponse"];
+                        "application/json": components["schemas"]["PageOfPersonSummaryResponse"];
+                        "text/json": components["schemas"]["PageOfPersonSummaryResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/people/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PersonDetailResponse"];
+                        "application/json": components["schemas"]["PersonDetailResponse"];
+                        "text/json": components["schemas"]["PersonDetailResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/parts/{id}/file": {
         parameters: {
             query?: never;
@@ -1101,6 +1192,15 @@ export interface components {
             /** Format: int32 */
             limit: number;
         };
+        PageOfPersonSummaryResponse: {
+            items: components["schemas"]["PersonSummaryResponse"][];
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            offset: number;
+            /** Format: int32 */
+            limit: number;
+        };
         PageOfWorkSummaryResponse: {
             items: components["schemas"]["WorkSummaryResponse"][];
             /** Format: int32 */
@@ -1109,6 +1209,25 @@ export interface components {
             offset: number;
             /** Format: int32 */
             limit: number;
+        };
+        PersonDetailResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            sortName: string;
+            roles: components["schemas"]["PersonRoleResponse"][];
+        };
+        PersonRoleResponse: {
+            role: components["schemas"]["ContributorRole"];
+            works: components["schemas"]["WorkSummaryResponse"][];
+        };
+        PersonSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            sortName: string;
+            /** Format: int32 */
+            workCount: number;
         };
         ProblemDetails: {
             type?: null | string;

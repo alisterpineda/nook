@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
@@ -8,7 +8,7 @@ import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
 import { LibraryArea, readArea, sameArea } from '../../core/library-area';
 import { somethingWentWrong } from '../../core/messages';
-import { WorkCover } from './work-cover';
+import { WorkCard } from './work-card';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkSort = components['schemas']['WorkSort'];
@@ -43,7 +43,7 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
  */
 @Component({
   selector: 'app-works-list-page',
-  imports: [RouterLink, HlmButtonImports, HlmToggleGroupImports, WorkCover],
+  imports: [HlmButtonImports, HlmToggleGroupImports, WorkCard],
   template: `
     @let shownQuery = query();
     <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -78,15 +78,7 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
         >
           @for (work of current.page.items; track work.id) {
             <li>
-              <a class="group flex flex-col gap-1" [routerLink]="['/works', work.id]">
-                <app-work-cover class="mb-1" [work]="work" size="small" />
-                <span class="line-clamp-2 text-sm font-medium group-hover:underline">{{
-                  work.title
-                }}</span>
-                <span class="text-muted-foreground line-clamp-2 text-xs">{{
-                  work.authors.join(', ')
-                }}</span>
-              </a>
+              <app-work-card [work]="work" />
             </li>
           }
         </ul>

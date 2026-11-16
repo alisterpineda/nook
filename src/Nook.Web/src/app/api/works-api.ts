@@ -1,6 +1,7 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { toParams } from './query-params';
 import { components, paths } from './schema';
 
 type WorkListQuery = NonNullable<paths['/api/works']['get']['parameters']['query']>;
@@ -29,13 +30,9 @@ export class WorksApi {
 
   /** One page of the works the signed-in user can see, from one section, from those in no section, or from all. */
   list(query: WorkListQuery): Promise<PageOfWorkSummaryResponse> {
-    let params = new HttpParams();
-    for (const [name, value] of Object.entries(query)) {
-      if (value !== undefined) {
-        params = params.set(name, value);
-      }
-    }
-    return firstValueFrom(this.http.get<PageOfWorkSummaryResponse>('/api/works', { params }));
+    return firstValueFrom(
+      this.http.get<PageOfWorkSummaryResponse>('/api/works', { params: toParams(query) }),
+    );
   }
 
   /** One work with its contributors, tags, external ids and items. */

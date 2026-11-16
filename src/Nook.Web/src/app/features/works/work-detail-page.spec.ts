@@ -157,7 +157,7 @@ describe('WorkDetailPage', () => {
 
   function contributors(page: HTMLElement): string[][] {
     return Array.from(page.querySelectorAll('[aria-label="Contributors"] li')).map((item) =>
-      Array.from(item.querySelectorAll('span')).map(text),
+      Array.from(item.querySelectorAll('a, span')).map(text),
     );
   }
 
@@ -186,6 +186,16 @@ describe('WorkDetailPage', () => {
     expect(contributors(page)).toEqual([
       ['Frank Herbert', 'Author'],
       ['Scott Brick', 'Narrator'],
+    ]);
+  });
+
+  it('links each contributor to their page whatever their role', async () => {
+    const page = await openWork(dune);
+
+    const links = Array.from(page.querySelectorAll('[aria-label="Contributors"] li a'));
+    expect(links.map((link) => [text(link), link.getAttribute('href')])).toEqual([
+      ['Frank Herbert', '/people/0198a1b2-0000-7000-8000-0000000000d1'],
+      ['Scott Brick', '/people/0198a1b2-0000-7000-8000-0000000000d2'],
     ]);
   });
 

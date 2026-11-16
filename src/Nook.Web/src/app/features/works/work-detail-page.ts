@@ -44,7 +44,11 @@ type Showing =
               <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Contributors">
                 @for (contributor of work.contributors; track $index) {
                   <li>
-                    <span class="font-medium">{{ contributor.name }}</span>
+                    <a
+                      class="font-medium hover:underline"
+                      [routerLink]="['/people', contributor.personId]"
+                      >{{ contributor.name }}</a
+                    >
                     <span class="text-muted-foreground ms-1">{{
                       roleLabel(contributor.role)
                     }}</span>

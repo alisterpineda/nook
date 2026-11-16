@@ -37,6 +37,15 @@ export const routes: Routes = [
           import('./features/works/work-detail-page').then((m) => m.WorkDetailPage),
       },
       {
+        path: 'authors',
+        loadComponent: () =>
+          import('./features/people/authors-list-page').then((m) => m.AuthorsListPage),
+      },
+      {
+        path: 'people/:id',
+        loadComponent: () => import('./features/people/person-page').then((m) => m.PersonPage),
+      },
+      {
         path: 'upload',
         canActivate: [adminGuard],
         loadComponent: () => import('./features/upload/upload-page').then((m) => m.UploadPage),

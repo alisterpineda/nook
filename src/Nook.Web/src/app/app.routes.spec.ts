@@ -7,6 +7,8 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from './api/schema';
 import { routes } from './app.routes';
+import { AuthorsListPage } from './features/people/authors-list-page';
+import { PersonPage } from './features/people/person-page';
 import { ReaderPage } from './features/reader/reader-page';
 import {
   FakeReaderEngine,
@@ -24,7 +26,9 @@ import { openRequests } from './testing/open-requests';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type SectionResponse = components['schemas']['SectionResponse'];
+type PageOfPersonSummaryResponse = components['schemas']['PageOfPersonSummaryResponse'];
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
+type PersonDetailResponse = components['schemas']['PersonDetailResponse'];
 type UploadResponse = components['schemas']['UploadResponse'];
 type UserRole = components['schemas']['UserRole'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
@@ -43,6 +47,13 @@ describe('routes', () => {
     role: 'admin',
   };
   const noWorks: PageOfWorkSummaryResponse = { items: [], total: 0, offset: 0, limit: 50 };
+  const noPeople: PageOfPersonSummaryResponse = { items: [], total: 0, offset: 0, limit: 50 };
+  const herbert: PersonDetailResponse = {
+    id: '42',
+    name: 'Frank Herbert',
+    sortName: 'Herbert, Frank',
+    roles: [],
+  };
   const dune: WorkDetailResponse = {
     id: '42',
     sectionId: '0198a1b2-0000-7000-8000-00000000000a',
@@ -69,6 +80,8 @@ describe('routes', () => {
       '/api/sections': [],
       '/api/works': noWorks,
       '/api/works/42': dune,
+      '/api/people': noPeople,
+      '/api/people/42': herbert,
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
     };
   }
@@ -138,6 +151,19 @@ describe('routes', () => {
     });
     expect(await open('/works/42', signedIn, WorkDetailPage)).toEqual({
       landedOn: '/works/42',
+      shown: true,
+    });
+  });
+
+  it('the authors list is at /authors', async () => {
+    expect(
+      await open('/authors', { signedIn: true, setupRequired: false }, AuthorsListPage),
+    ).toEqual({ landedOn: '/authors', shown: true });
+  });
+
+  it("a person's page is at /people/:id", async () => {
+    expect(await open('/people/42', { signedIn: true, setupRequired: false }, PersonPage)).toEqual({
+      landedOn: '/people/42',
       shown: true,
     });
   });
