@@ -6,7 +6,7 @@ import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
 import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
-import { LibraryArea, readArea, sameArea } from '../../core/default-area';
+import { LibraryArea, readArea, sameArea } from '../../core/library-area';
 import { somethingWentWrong } from '../../core/messages';
 import { WorkCover } from './work-cover';
 

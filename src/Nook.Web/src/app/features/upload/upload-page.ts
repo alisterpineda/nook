@@ -8,7 +8,7 @@ import { HlmLabelImports } from '@spartan-ng/helm/label';
 import { map } from 'rxjs';
 import { SectionsApi } from '../../api/sections-api';
 import { components } from '../../api/schema';
-import { defaultArea, readArea } from '../../core/default-area';
+import { defaultArea, readArea } from '../../core/library-area';
 import { somethingWentWrong } from '../../core/messages';
 import { UploadQueue, UploadRow, UploadStatus, isFinished } from './upload-queue';
 

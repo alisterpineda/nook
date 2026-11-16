@@ -5,7 +5,7 @@ import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { SectionsApi } from '../api/sections-api';
 import { components } from '../api/schema';
-import { LibraryArea, areaParam, readArea, sameArea } from '../core/default-area';
+import { LibraryArea, areaParam, readArea, sameArea } from '../core/library-area';
 import { Session } from '../core/session';
 import { UploadQueue } from '../features/upload/upload-queue';
 
