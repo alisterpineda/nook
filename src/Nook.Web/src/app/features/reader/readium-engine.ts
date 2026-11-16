@@ -82,8 +82,14 @@ export class ReadiumEngine implements ReaderEngine {
 
   // The navigator catches most of its own failures and only logs them. What escapes it lands on the window: the
   // handlers it registers inside a chapter frame are functions from this window, so their exceptions report here.
-  private readonly onWindowError = (event: ErrorEvent): void =>
+  private readonly onWindowError = (event: ErrorEvent): void => {
+    // Not an exception: the browser's notice that a resize observer's changes were put off to the next frame, which
+    // it sends as an error event with no error object when the book or the window is resized.
+    if (event.error == null && event.message.startsWith('ResizeObserver loop')) {
+      return;
+    }
     this.fail(event.error ?? event.message);
+  };
   private readonly onRejection = (event: PromiseRejectionEvent): void => this.fail(event.reason);
 
   async open(
