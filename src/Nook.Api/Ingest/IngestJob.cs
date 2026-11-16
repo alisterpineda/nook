@@ -8,8 +8,8 @@ using Nook.Api.Storage;
 namespace Nook.Api.Ingest;
 
 /// <summary>
-/// Ingests one staged file into a library. The staged file is the run's input and outlives the run: filing copies
-/// it into the library, and it is deleted only once the job is recorded as succeeded, so a run that fails or whose
+/// Ingests one staged file into a section, or into the Default area when the payload names none. The staged file is the run's input and outlives the run: filing copies
+/// it into the library folder, and it is deleted only once the job is recorded as succeeded, so a run that fails or whose
 /// worker dies at any point can run again from the top. The last step finds or makes the rows, files a copy and
 /// saves every row at once, all under <see cref="IngestLock"/>, so ingests running side by side take turns there and
 /// see each other's rows.
@@ -40,7 +40,6 @@ public sealed class IngestJob : JobType
         long size = 0;
         BookMetadata? metadata = null;
         BookCover? cover = null;
-        Library? library = null;
         WorkDraft? draft = null;
 
         // The item the last step built and went on to save, and its work. They outlive a pass of the retry strategy,
@@ -74,10 +73,11 @@ public sealed class IngestJob : JobType
                 sha256 = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
                 size = stream.Length;
 
-                // The same bytes already in this library: the oldest item holding them stands for the upload. A copy
-                // being filed at the same moment is caught again under the lock in the last step. A run whose worker
-                // died after saving ends here too, as a duplicate of the item it made.
-                if (await matcher.FindItemWithHashAsync(payload.LibraryId, sha256, cancellationToken) is { } found)
+                // The same bytes already in this section, or in the Default area when the payload names none: the
+                // oldest item holding them stands for the upload. A copy being filed at the same moment is caught again
+                // under the lock in the last step. A run whose worker died after saving ends here too, as a duplicate
+                // of the item it made.
+                if (await matcher.FindItemWithHashAsync(payload.SectionId, sha256, cancellationToken) is { } found)
                 {
                     run.Complete(new IngestResult(IngestOutcome.Duplicate, found.ItemId, found.WorkId));
                 }
@@ -93,8 +93,12 @@ public sealed class IngestJob : JobType
             .AddStep("match-work", async cancellationToken =>
             {
                 // What the file says the work is. Finding or making its rows waits for the lock in the next step.
-                library = await db.Libraries.SingleOrDefaultAsync(l => l.Id == payload.LibraryId, cancellationToken)
-                    ?? throw new InvalidOperationException("The library the file was uploaded to no longer exists.");
+                if (payload.SectionId is { } sectionId
+                    && !await db.Sections.AnyAsync(s => s.Id == sectionId, cancellationToken))
+                {
+                    throw new InvalidOperationException("The section the file was uploaded to no longer exists.");
+                }
+
                 draft = WorkDraft.From(metadata!, payload.FileName);
             })
             .AddStep("file-item", cancellationToken =>
@@ -119,19 +123,19 @@ public sealed class IngestJob : JobType
         async Task FileUnderLockAsync(IDbContextTransaction transaction, CancellationToken cancellationToken)
         {
             // Two copies of one file uploaded together both pass check-duplicate, so it is asked again here.
-            if (await matcher.FindItemWithHashAsync(library!.Id, sha256!, cancellationToken) is { } existing)
+            if (await matcher.FindItemWithHashAsync(payload.SectionId, sha256!, cancellationToken) is { } existing)
             {
                 await transaction.CommitAsync(CancellationToken.None);
                 run.Complete(new IngestResult(IngestOutcome.Duplicate, existing.ItemId, existing.WorkId));
                 return;
             }
 
-            var work = await matcher.FindByIsbnAsync(library, draft!, cancellationToken);
+            var work = await matcher.FindByIsbnAsync(payload.SectionId, draft!, cancellationToken);
             var joined = work is not null;
             string? filingAuthor = null;
             if (work is null)
             {
-                (work, filingAuthor) = await matcher.BuildAsync(library, draft!, cancellationToken);
+                (work, filingAuthor) = await matcher.BuildAsync(payload.SectionId, draft!, cancellationToken);
             }
 
             // A copy of a work already here goes beside its other files, under the work's own title, and takes a
@@ -142,8 +146,8 @@ public sealed class IngestJob : JobType
             var workFolder = joined
                 ? await matcher.FindFolderAsync(work, cancellationToken)
                 : Filing.WorkFolder(filingAuthor, work.Title);
-            var claimedPaths = await matcher.ClaimedPathsAsync(library, Filing.FolderOf(workFolder), cancellationToken);
-            var book = new Filing.StagedBook(stagedFile, work.Title, handler!.Extension, library, storage, claimedPaths);
+            var claimedPaths = await matcher.ClaimedPathsAsync(Filing.FolderOf(workFolder), cancellationToken);
+            var book = new Filing.StagedBook(stagedFile, work.Title, handler!.Extension, storage, claimedPaths);
             var filed = joined ? Filing.CopyBesideOthers(book, workFolder) : Filing.CopyIntoNewFolder(book, workFolder);
 
             var item = new Item { WorkId = work.Id, Format = handler.Format };
@@ -237,7 +241,7 @@ public sealed class IngestJob : JobType
                     }
 
                     var claimedPaths = await new WorkMatcher(fresh).ClaimedPathsAsync(
-                        library!, Filing.FolderOf(filed.RelativePath), CancellationToken.None);
+                        Filing.FolderOf(filed.RelativePath), CancellationToken.None);
                     if (!Filing.IsClaimed(claimedPaths, filed.RelativePath))
                     {
                         Undo(filed, coverFile, logger);

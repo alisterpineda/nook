@@ -8,7 +8,7 @@ namespace Nook.Api.Data;
 public class NookDbContext(DbContextOptions<NookDbContext> options)
     : IdentityUserContext<NookUser, Guid>(options)
 {
-    public DbSet<Library> Libraries => Set<Library>();
+    public DbSet<LibrarySection> Sections => Set<LibrarySection>();
 
     public DbSet<Series> Series => Set<Series>();
 
@@ -46,21 +46,10 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
         builder.Entity<IdentityUserLogin<Guid>>().ToTable("asp_net_user_logins");
         builder.Entity<IdentityUserToken<Guid>>().ToTable("asp_net_user_tokens");
 
-        // The single library every install starts with. Seed values are fixed so the migration never changes.
-        var seededAt = new DateTimeOffset(2026, 11, 11, 0, 0, 0, TimeSpan.Zero);
-        builder.Entity<Library>().HasData(new Library
-        {
-            Id = Library.DefaultId,
-            Name = "Library",
-            FolderName = "Library",
-            CreatedAt = seededAt,
-            UpdatedAt = seededAt,
-        });
-
         builder.Entity<Work>(work =>
         {
-            // A library or series that still has works cannot be deleted.
-            work.HasOne<Library>().WithMany().HasForeignKey(w => w.LibraryId).OnDelete(DeleteBehavior.Restrict);
+            // A section or series that still has works cannot be deleted.
+            work.HasOne<LibrarySection>().WithMany().HasForeignKey(w => w.SectionId).OnDelete(DeleteBehavior.Restrict);
             work.HasOne<Series>().WithMany().HasForeignKey(w => w.SeriesId).OnDelete(DeleteBehavior.Restrict);
             work.HasIndex(w => w.SearchVector).HasMethod("GIN");
 

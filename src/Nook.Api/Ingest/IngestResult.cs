@@ -6,7 +6,7 @@ public enum IngestOutcome
     /// <summary>The file became a new item.</summary>
     Created,
 
-    /// <summary>The library already held the file, so nothing was added.</summary>
+    /// <summary>The section already held the file, so nothing was added.</summary>
     Duplicate,
 }
 

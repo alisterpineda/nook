@@ -2,11 +2,11 @@ using NpgsqlTypes;
 
 namespace Nook.Api.Data;
 
-/// <summary>A book as people think of it, in one library, whatever files it comes in.</summary>
+/// <summary>A book as people think of it, in at most one section, whatever files it comes in.</summary>
 public class Work : Entity
 {
-    /// <summary>The library the work belongs to. Every work has one.</summary>
-    public Guid LibraryId { get; set; }
+    /// <summary>The section the work belongs to, if any.</summary>
+    public Guid? SectionId { get; set; }
 
     /// <summary>The title people see.</summary>
     public required string Title { get; set; }

@@ -266,7 +266,7 @@ namespace Nook.Api.Data.Migrations
                     b.ToTable("job_steps", (string)null);
                 });
 
-            modelBuilder.Entity("Nook.Api.Data.Library", b =>
+            modelBuilder.Entity("Nook.Api.Data.LibrarySection", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -275,11 +275,6 @@ namespace Nook.Api.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
-
-                    b.Property<string>("FolderName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("folder_name");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -291,19 +286,9 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
-                        .HasName("pk_libraries");
+                        .HasName("pk_sections");
 
-                    b.ToTable("libraries", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("01a1c7e7-8000-7000-8000-000000000001"),
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 11, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            FolderName = "Library",
-                            Name = "Library",
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 11, 11, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
-                        });
+                    b.ToTable("sections", (string)null);
                 });
 
             modelBuilder.Entity("Nook.Api.Data.NookUser", b =>
@@ -582,10 +567,6 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("language");
 
-                    b.Property<Guid>("LibraryId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("library_id");
-
                     b.Property<DateOnly?>("PublicationDate")
                         .HasColumnType("date")
                         .HasColumnName("publication_date");
@@ -597,6 +578,10 @@ namespace Nook.Api.Data.Migrations
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .HasColumnType("tsvector")
                         .HasColumnName("search_vector");
+
+                    b.Property<Guid?>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
 
                     b.Property<Guid?>("SeriesId")
                         .HasColumnType("uuid")
@@ -623,13 +608,13 @@ namespace Nook.Api.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_works");
 
-                    b.HasIndex("LibraryId")
-                        .HasDatabaseName("ix_works_library_id");
-
                     b.HasIndex("SearchVector")
                         .HasDatabaseName("ix_works_search_vector");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
+
+                    b.HasIndex("SectionId")
+                        .HasDatabaseName("ix_works_section_id");
 
                     b.HasIndex("SeriesId")
                         .HasDatabaseName("ix_works_series_id");
@@ -811,12 +796,11 @@ namespace Nook.Api.Data.Migrations
 
             modelBuilder.Entity("Nook.Api.Data.Work", b =>
                 {
-                    b.HasOne("Nook.Api.Data.Library", null)
+                    b.HasOne("Nook.Api.Data.LibrarySection", null)
                         .WithMany()
-                        .HasForeignKey("LibraryId")
+                        .HasForeignKey("SectionId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_works_libraries_library_id");
+                        .HasConstraintName("fk_works_sections_section_id");
 
                     b.HasOne("Nook.Api.Data.Series", null)
                         .WithMany()

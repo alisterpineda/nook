@@ -5,7 +5,7 @@ namespace Nook.Api.Ingest;
 
 /// <summary>
 /// The one lock that ingests take turns under while they match a file to its rows and save them. It is global, not
-/// per library, because people, series and tags are shared across libraries.
+/// per section, because people, series and tags are shared across sections.
 /// </summary>
 public static class IngestLock
 {

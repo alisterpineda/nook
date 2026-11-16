@@ -8,19 +8,12 @@ namespace Nook.Api.Tests.Integration;
 public class SeedTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {
     [Fact]
-    public async Task Fresh_database_has_exactly_one_library_named_Library()
+    public async Task Fresh_database_has_no_sections()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
 
-        var libraries = await db.Libraries.AsNoTracking().ToListAsync(cancellationToken);
-
-        var library = Assert.Single(libraries);
-        Assert.Equal("Library", library.Name);
-        Assert.Equal("Library", library.FolderName);
-        Assert.Equal(7, library.Id.Version);
-        Assert.Equal(TimeSpan.Zero, library.CreatedAt.Offset);
-        Assert.Equal(TimeSpan.Zero, library.UpdatedAt.Offset);
+        Assert.Empty(await db.Sections.AsNoTracking().ToListAsync(cancellationToken));
     }
 }

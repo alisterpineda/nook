@@ -29,9 +29,10 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Upload_of_a_file_that_is_not_an_epub_returns_a_job_that_fails_as_an_unsupported_format()
     {
+        var section = await _app.AddSectionAsync();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
 
-        var response = await client.UploadAsync(TestData.NotABook, "notes.epub", Library.DefaultId);
+        var response = await client.UploadAsync(TestData.NotABook, "notes.epub", section.Id);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var upload = await response.ReadAsync<UploadResponse>();
@@ -46,13 +47,19 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Fact]
-    public async Task Upload_without_a_library_id_is_a_validation_error()
+    public async Task Upload_without_a_section_id_is_accepted()
     {
-        await AssertRefusedAsync(client => client.UploadAsync(TestData.NotABook, "notes.txt", libraryId: null));
+        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+
+        var response = await client.UploadAsync(TestData.NotABook, "notes.epub", sectionId: null);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var upload = await response.ReadAsync<UploadResponse>();
+        Assert.NotEqual(Guid.Empty, upload.JobId);
     }
 
     [Fact]
-    public async Task Upload_with_an_unknown_library_id_is_a_validation_error()
+    public async Task Upload_with_an_unknown_section_id_is_a_validation_error()
     {
         await AssertRefusedAsync(client => client.UploadAsync(TestData.NotABook, "notes.txt", Guid.CreateVersion7()));
     }
@@ -60,7 +67,9 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Upload_without_a_file_is_a_validation_error()
     {
-        await AssertRefusedAsync(client => client.UploadAsync(bytes: null, "notes.txt", Library.DefaultId));
+        var section = await _app.AddSectionAsync();
+
+        await AssertRefusedAsync(client => client.UploadAsync(bytes: null, "notes.txt", section.Id));
     }
 
     [Theory]
@@ -68,12 +77,13 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [InlineData(UserRole.Guest)]
     public async Task Member_or_guest_is_forbidden_from_uploading(UserRole role)
     {
+        var section = await _app.AddSectionAsync();
         using var admin = await _app.CreateSignedInClientAsync(UserRole.Admin);
         var jobsBefore = await admin.CountJobsAsync();
         var stagedBefore = _factory.CountStagedFiles();
         using var client = await _app.CreateSignedInClientAsync(role);
 
-        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", Library.DefaultId);
+        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", section.Id);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(jobsBefore, await admin.CountJobsAsync());
@@ -94,25 +104,30 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Upload_just_over_the_limit_is_refused()
     {
+        var section = await _app.AddSectionAsync();
+
         await AssertRefusedAsync(
-            client => client.UploadAsync(new byte[5_000], "big.epub", Library.DefaultId),
+            client => client.UploadAsync(new byte[5_000], "big.epub", section.Id),
             HttpStatusCode.RequestEntityTooLarge);
     }
 
     [Fact]
     public async Task Upload_far_over_the_limit_is_refused()
     {
+        var section = await _app.AddSectionAsync();
+
         await AssertRefusedAsync(
-            client => client.UploadAsync(new byte[3 * 1024 * 1024], "huge.epub", Library.DefaultId),
+            client => client.UploadAsync(new byte[3 * 1024 * 1024], "huge.epub", section.Id),
             HttpStatusCode.RequestEntityTooLarge);
     }
 
     [Fact]
     public async Task Upload_within_the_limit_is_accepted()
     {
+        var section = await _app.AddSectionAsync();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
 
-        var response = await client.UploadAsync(new byte[500], "small.epub", Library.DefaultId);
+        var response = await client.UploadAsync(new byte[500], "small.epub", section.Id);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }

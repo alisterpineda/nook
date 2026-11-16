@@ -30,21 +30,22 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
     [Fact]
     public async Task Ingest_whose_worker_died_before_filing_runs_again_and_creates_the_work()
     {
-        var library = await _app.AddLibraryAsync();
-        var epub = new EpubBuilder().WithTitle("The Word for World Is Forest").WithCreator("Ursula K. Le Guin").Build();
+        var section = await _app.AddSectionAsync();
+        var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
+        var epub = new EpubBuilder().WithTitle("The Word for World Is Forest").WithCreator(author).Build();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
-        var id = await InsertIngestOfADeadWorkerAsync(epub, library, diedIn: "extract-metadata");
+        var id = await InsertIngestOfADeadWorkerAsync(epub, section, diedIn: "extract-metadata");
         var job = await client.WaitForJobAsync(id);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
         Assert.Equal(1, job.ReclaimsMade);
         var result = job.ReadIngestResult();
         Assert.Equal(IngestOutcome.Created, result.Outcome);
-        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
+        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(section));
         var path = _factory.LibraryPath(
-            library, "Books", "Ursula K. Le Guin", "The Word for World Is Forest", "The Word for World Is Forest.epub");
+            "Books", author, "The Word for World Is Forest", "The Word for World Is Forest.epub");
         Assert.Equal(epub, await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken));
         await _factory.WaitForStagedFilesAsync(stagedBefore);
     }
@@ -52,17 +53,17 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
     [Fact]
     public async Task Ingest_whose_worker_died_after_saving_runs_again_as_a_duplicate_of_its_own_item()
     {
-        var library = await _app.AddLibraryAsync();
-        var epub = new EpubBuilder().WithTitle("The Telling").WithCreator("Ursula K. Le Guin").Build();
+        var section = await _app.AddSectionAsync();
+        var epub = new EpubBuilder().WithTitle("The Telling").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
         // The same bytes ingested in full stand for what the dead run saved before it died.
-        var saved = await client.IngestAsync(epub, "telling.epub", library.Id);
+        var saved = await client.IngestAsync(epub, "telling.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, saved.Status);
         var savedItemId = saved.ReadIngestResult().ItemId;
 
-        var id = await InsertIngestOfADeadWorkerAsync(epub, library, diedIn: "file-item");
+        var id = await InsertIngestOfADeadWorkerAsync(epub, section, diedIn: "file-item");
         var job = await client.WaitForJobAsync(id);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
@@ -70,7 +71,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
         var result = job.ReadIngestResult();
         Assert.Equal(IngestOutcome.Duplicate, result.Outcome);
         Assert.Equal(savedItemId, result.ItemId);
-        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
+        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(section));
         await _factory.WaitForStagedFilesAsync(stagedBefore);
     }
 
@@ -80,7 +81,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
     /// Stages the file and writes its ingest job as a worker that died in the named step leaves it: running, its
     /// lease run out, and that step still running after the steps before it succeeded.
     /// </summary>
-    private async Task<Guid> InsertIngestOfADeadWorkerAsync(byte[] bytes, Library library, string diedIn)
+    private async Task<Guid> InsertIngestOfADeadWorkerAsync(byte[] bytes, LibrarySection section, string diedIn)
     {
         var stagedName = Guid.NewGuid().ToString();
         await File.WriteAllBytesAsync(
@@ -93,7 +94,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
         {
             Type = IngestJob.TypeName,
             Status = JobStatus.Running,
-            Payload = JobJson.Serialize(new IngestPayload(library.Id, stagedName, "book.epub")),
+            Payload = JobJson.Serialize(new IngestPayload(section.Id, stagedName, "book.epub")),
             AttemptsAllowed = 1,
             LeaseExpiresAt = died,
         };

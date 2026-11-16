@@ -94,11 +94,11 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     public async Task Cover_with_an_extension_no_image_type_stands_for_is_served_as_plain_bytes()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var library = await factory.AddLibraryAsync();
-        var folder = factory.LibraryPath(library, "Books");
+        var section = await factory.AddSectionAsync();
+        var folder = factory.LibraryPath("Books");
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(Path.Combine(folder, "cover.bmp"), TestData.PngCover, cancellationToken);
-        var work = TestData.NewWork("Dawn", library.Id);
+        var work = TestData.NewWork("Dawn", section.Id);
         work.CoverHash = "0123456789abcdef";
         work.CoverPath = "Books/cover.bmp";
         await factory.AddRowsAsync(work);
@@ -367,7 +367,7 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var cancellationToken = TestContext.Current.CancellationToken;
         // Dimensions no other test uses, so no cached file for this cover's hash is already there.
         var work = await factory.IngestWithCoverAsync(TestImages.Png(640, 940));
-        File.Delete(await CoverFileAsync(work));
+        File.Delete(CoverFile(work));
         using var client = await factory.CreateSignedInClientAsync();
         var url = size is null ? $"/api/works/{work.Id}/cover" : $"/api/works/{work.Id}/cover?size={size}";
 
@@ -378,13 +378,7 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     /// <summary>Where the work's cover file is on disk.</summary>
-    private async Task<string> CoverFileAsync(Work work)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        var library = await db.Libraries.SingleAsync(l => l.Id == work.LibraryId, TestContext.Current.CancellationToken);
-        return factory.LibraryPath(library, work.CoverPath!.Split('/'));
-    }
+    private string CoverFile(Work work) => factory.LibraryPath(work.CoverPath!.Split('/'));
 
     [Fact]
     public async Task Cover_too_large_to_decode_is_served_as_it_is_at_a_size()

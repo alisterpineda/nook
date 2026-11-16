@@ -1,9 +1,8 @@
 using Microsoft.Extensions.Options;
-using Nook.Api.Data;
 
 namespace Nook.Api.Storage;
 
-/// <summary>The folders under the data root: <c>library/</c>, which holds one folder per library, <c>staging/</c>, which holds uploads waiting to be ingested, <c>cache/</c>, which holds files that can be made again from the library, and <c>keys/</c>, which holds the app's secrets.</summary>
+/// <summary>The folders under the data root: <c>library/</c>, which holds every book file and cover, <c>staging/</c>, which holds uploads waiting to be ingested, <c>cache/</c>, which holds files that can be made again from the library, and <c>keys/</c>, which holds the app's secrets.</summary>
 public sealed class NookStorage(IOptions<StorageOptions> options)
 {
     /// <summary>The buffer files are copied through, the size <see cref="Stream.CopyToAsync(Stream)"/> uses.</summary>
@@ -17,8 +16,8 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
     /// <summary>The path of one staged file, from its name inside the staging folder.</summary>
     public string StagedFile(string name) => Path.Combine(StagingFolder, name);
 
-    /// <summary>The folder that holds every library's folder.</summary>
-    public string LibrariesFolder => Path.Combine(Root, "library");
+    /// <summary>The one folder that holds every book file and cover, whatever section its work is in.</summary>
+    public string LibraryFolder => Path.Combine(Root, "library");
 
     /// <summary>Where resized covers are kept. Everything in it can be made again from the covers in the library.</summary>
     public string CoversCacheFolder => Path.Combine(Root, "cache", "covers");
@@ -26,29 +25,26 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
     /// <summary>Where the app's own secrets are kept, such as the key that signs publication tokens.</summary>
     public string KeysFolder => Path.Combine(Root, "keys");
 
-    /// <summary>The folder that holds one library's files.</summary>
-    public string LibraryFolder(Library library) => Path.Combine(LibrariesFolder, library.FolderName);
-
-    /// <summary>The full path of a file in a library, from its <c>/</c>-separated path relative to the library's folder, as a part stores it.</summary>
-    /// <exception cref="InvalidOperationException">The path leads outside the library's folder.</exception>
-    public string LibraryFile(Library library, string relativePath)
+    /// <summary>The full path of a file in the library folder, from its <c>/</c>-separated path relative to that folder, as a part stores it.</summary>
+    /// <exception cref="InvalidOperationException">The path leads outside the library folder.</exception>
+    public string LibraryFile(string relativePath)
     {
-        var folder = Path.GetFullPath(LibraryFolder(library));
+        var folder = Path.GetFullPath(LibraryFolder);
         var path = Path.GetFullPath(Path.Combine([folder, .. relativePath.Split('/')]));
 
         // A path built from a book's own words can hold ".." or a rooted segment, and must not reach other folders.
         if (!path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"The path '{relativePath}' leads outside the library's folder.");
+            throw new InvalidOperationException($"The path '{relativePath}' leads outside the library folder.");
         }
 
         return path;
     }
 
-    /// <summary>The full path of a folder in a library, from its <c>/</c>-separated path relative to the library's folder. An empty path is the library's folder itself.</summary>
-    /// <exception cref="InvalidOperationException">The path leads outside the library's folder.</exception>
-    public string LibrarySubfolder(Library library, string relativeFolder) =>
-        relativeFolder.Length == 0 ? Path.GetFullPath(LibraryFolder(library)) : LibraryFile(library, relativeFolder);
+    /// <summary>The full path of a folder in the library folder, from its <c>/</c>-separated path relative to that folder. An empty path is the library folder itself.</summary>
+    /// <exception cref="InvalidOperationException">The path leads outside the library folder.</exception>
+    public string LibrarySubfolder(string relativeFolder) =>
+        relativeFolder.Length == 0 ? Path.GetFullPath(LibraryFolder) : LibraryFile(relativeFolder);
 
     /// <summary>Opens a new file for writing. It fails when the file is already there, so nothing is overwritten.</summary>
     public static FileStream CreateFile(string path) =>
@@ -66,7 +62,7 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
     public void CreateFolders()
     {
         Directory.CreateDirectory(StagingFolder);
-        Directory.CreateDirectory(LibrariesFolder);
+        Directory.CreateDirectory(LibraryFolder);
         Directory.CreateDirectory(CoversCacheFolder);
         Directory.CreateDirectory(KeysFolder);
     }

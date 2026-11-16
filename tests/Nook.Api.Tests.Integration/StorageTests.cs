@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Nook.Api.Data;
 using Nook.Api.Storage;
 
 namespace Nook.Api.Tests.Integration;
@@ -37,23 +36,21 @@ public class StorageTests(NookApiFactory factory) : IClassFixture<NookApiFactory
     public void Path_that_leads_outside_the_library_folder_is_refused(string relativePath)
     {
         var storage = factory.Services.GetRequiredService<NookStorage>();
-        var library = new Library { Name = "Test", FolderName = "Test" };
 
-        var exception = Assert.Throws<InvalidOperationException>(() => storage.LibraryFile(library, relativePath));
+        var exception = Assert.Throws<InvalidOperationException>(() => storage.LibraryFile(relativePath));
 
-        Assert.Contains("outside the library's folder", exception.Message);
+        Assert.Contains("outside the library folder", exception.Message);
     }
 
     [Fact]
     public void Path_inside_the_library_folder_is_resolved_under_it()
     {
         var storage = factory.Services.GetRequiredService<NookStorage>();
-        var library = new Library { Name = "Test", FolderName = "Test" };
 
-        var path = storage.LibraryFile(library, "Books/Author/Title/Title.epub");
+        var path = storage.LibraryFile("Books/Author/Title/Title.epub");
 
         Assert.Equal(
-            Path.GetFullPath(Path.Combine(factory.DataPath, "library", "Test", "Books", "Author", "Title", "Title.epub")),
+            Path.GetFullPath(Path.Combine(factory.DataPath, "library", "Books", "Author", "Title", "Title.epub")),
             path);
     }
 

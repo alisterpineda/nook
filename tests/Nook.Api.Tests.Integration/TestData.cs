@@ -9,9 +9,9 @@ namespace Nook.Api.Tests.Integration;
 /// <summary>Rows and catalog queries that several test classes share.</summary>
 internal static class TestData
 {
-    /// <summary>A work with only its required values set, in the seeded library and sorted by its title unless told otherwise.</summary>
-    public static Work NewWork(string title, Guid? libraryId = null, string? sortTitle = null) =>
-        new() { LibraryId = libraryId ?? Library.DefaultId, Title = title, SortTitle = sortTitle ?? title };
+    /// <summary>A work with only its required values set, in no section and sorted by its title unless told otherwise.</summary>
+    public static Work NewWork(string title, Guid? sectionId = null, string? sortTitle = null) =>
+        new() { SectionId = sectionId, Title = title, SortTitle = sortTitle ?? title };
 
     /// <summary>A file that is no book format at all.</summary>
     public static readonly byte[] NotABook = Encoding.UTF8.GetBytes("This is a plain text file, not a book.");
@@ -19,15 +19,16 @@ internal static class TestData
     /// <summary>A stand-in for a PNG cover: the PNG signature and a few bytes. Nothing decodes it.</summary>
     public static readonly byte[] PngCover = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4];
 
-    /// <summary>Adds a library of its own for one test, so rows from other tests stay out of it.</summary>
-    public static async Task<Library> AddLibraryAsync(this WebApplicationFactory<Program> factory)
+    /// <summary>Adds a section of its own for one test, so rows from other tests stay out of it.</summary>
+    public static async Task<LibrarySection> AddSectionAsync(
+        this WebApplicationFactory<Program> factory, string name = "Test")
     {
-        var library = new Library { Name = "Test", FolderName = $"Test-{Guid.NewGuid():N}" };
+        var section = new LibrarySection { Name = name };
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        db.Libraries.Add(library);
+        db.Sections.Add(section);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return library;
+        return section;
     }
 
     /// <summary>The definition of every index on a table, as PostgreSQL reports it.</summary>

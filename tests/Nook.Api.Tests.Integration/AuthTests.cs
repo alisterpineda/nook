@@ -13,7 +13,7 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {
     [Theory]
     [InlineData("/api/auth/me")]
-    [InlineData("/api/libraries")]
+    [InlineData("/api/sections")]
     [InlineData("/api/works")]
     [InlineData("/api/works/01a1c7e7-8000-7000-8000-000000000001")]
     public async Task Endpoints_refuse_a_client_that_is_not_signed_in(string url)

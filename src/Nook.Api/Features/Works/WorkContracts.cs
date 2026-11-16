@@ -13,10 +13,13 @@ public enum WorkSort
     Added,
 }
 
-public class WorkListQuery
+public class WorkListQuery : IValidatableObject
 {
-    /// <summary>Only works in this library.</summary>
-    public Guid? LibraryId { get; set; }
+    /// <summary>Only works in this section.</summary>
+    public Guid? SectionId { get; set; }
+
+    /// <summary>Only works in no section. It cannot be set together with <see cref="SectionId"/>.</summary>
+    public bool NoSection { get; set; }
 
     public WorkSort Sort { get; set; } = WorkSort.Title;
 
@@ -25,6 +28,16 @@ public class WorkListQuery
 
     [Range(1, 200)]
     public int Limit { get; set; } = 50;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (NoSection && SectionId is not null)
+        {
+            yield return new ValidationResult(
+                "A list is of one section or of the works in no section, not both.",
+                [nameof(SectionId), nameof(NoSection)]);
+        }
+    }
 }
 
 /// <summary>A work's series and its place in it.</summary>
@@ -33,7 +46,7 @@ public record WorkSeriesResponse(Guid Id, string Name, decimal? Position);
 /// <summary>A work as a list shows it.</summary>
 public record WorkSummaryResponse(
     Guid Id,
-    Guid LibraryId,
+    Guid? SectionId,
     string Title,
     IReadOnlyList<string> Authors,
     WorkSeriesResponse? Series,
@@ -54,7 +67,7 @@ public record WorkItemResponse(Guid Id, ItemFormat Format, IReadOnlyList<WorkPar
 /// <summary>Everything Nook knows about one work. Contributors and parts come in display order.</summary>
 public record WorkDetailResponse(
     Guid Id,
-    Guid LibraryId,
+    Guid? SectionId,
     string Title,
     string SortTitle,
     string? Description,

@@ -42,16 +42,16 @@ internal static class JobTestExtensions
         client.DeleteAsync($"/api/jobs/{id}", TestContext.Current.CancellationToken);
 
     /// <summary>
-    /// Posts a file to the upload endpoint, and returns the answer whatever it is. A null file or library id leaves
+    /// Posts a file to the upload endpoint, and returns the answer whatever it is. A null file or section id leaves
     /// that part out of the form.
     /// </summary>
     public static Task<HttpResponseMessage> UploadAsync(
-        this HttpClient client, byte[]? bytes, string fileName, Guid? libraryId)
+        this HttpClient client, byte[]? bytes, string fileName, Guid? sectionId)
     {
         var form = new MultipartFormDataContent();
-        if (libraryId is { } id)
+        if (sectionId is { } id)
         {
-            form.Add(new StringContent(id.ToString()), "libraryId");
+            form.Add(new StringContent(id.ToString()), "sectionId");
         }
 
         if (bytes is not null)
@@ -62,11 +62,14 @@ internal static class JobTestExtensions
         return client.PostAsync("/api/uploads", form, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>Uploads a file, checks it was accepted, and returns its job once that has succeeded or failed.</summary>
+    /// <summary>
+    /// Uploads a file into the section, or into the Default area when the section id is null, checks it was accepted,
+    /// and returns its job once that has succeeded or failed.
+    /// </summary>
     public static async Task<JobDetailResponse> IngestAsync(
-        this HttpClient client, byte[] bytes, string fileName, Guid libraryId)
+        this HttpClient client, byte[] bytes, string fileName, Guid? sectionId)
     {
-        var response = await client.UploadAsync(bytes, fileName, libraryId);
+        var response = await client.UploadAsync(bytes, fileName, sectionId);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var upload = await response.ReadAsync<UploadResponse>();
         return await client.WaitForJobAsync(upload.JobId);
@@ -76,9 +79,9 @@ internal static class JobTestExtensions
     public static async Task<int> CountJobsAsync(this HttpClient admin) =>
         (await admin.GetAsync<Page<JobSummaryResponse>>("/api/jobs?limit=1")).Total;
 
-    /// <summary>The path of a file or folder inside a library's folder under the app's data root.</summary>
-    public static string LibraryPath(this NookApiFactory factory, Library library, params string[] parts) =>
-        Path.Combine([factory.DataPath, "library", library.FolderName, .. parts]);
+    /// <summary>The path of a file or folder inside the library folder under the app's data root.</summary>
+    public static string LibraryPath(this NookApiFactory factory, params string[] parts) =>
+        Path.Combine([factory.DataPath, "library", .. parts]);
 
     /// <summary>How many files wait in the app's staging folder.</summary>
     public static int CountStagedFiles(this NookApiFactory factory) =>

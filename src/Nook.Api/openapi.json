@@ -12,11 +12,18 @@
         ],
         "parameters": [
           {
-            "name": "LibraryId",
+            "name": "SectionId",
             "in": "query",
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "NoSection",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -251,7 +258,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "LibraryId": {
+                  "SectionId": {
                     "type": "string",
                     "format": "uuid"
                   },
@@ -477,6 +484,44 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sections": {
+      "get": {
+        "tags": [
+          "Sections"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SectionResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SectionResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SectionResponse"
+                  }
                 }
               }
             }
@@ -759,44 +804,6 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/libraries": {
-      "get": {
-        "tags": [
-          "Libraries"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LibraryResponse"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LibraryResponse"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LibraryResponse"
-                  }
                 }
               }
             }
@@ -1551,22 +1558,6 @@
         }
       },
       "JsonElement": { },
-      "LibraryResponse": {
-        "required": [
-          "id",
-          "name"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
       "LoginRequest": {
         "required": [
           "email",
@@ -1856,6 +1847,22 @@
           }
         }
       },
+      "SectionResponse": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "SetupRequest": {
         "required": [
           "email",
@@ -1973,7 +1980,7 @@
       "WorkDetailResponse": {
         "required": [
           "id",
-          "libraryId",
+          "sectionId",
           "title",
           "sortTitle",
           "description",
@@ -1995,8 +2002,11 @@
             "type": "string",
             "format": "uuid"
           },
-          "libraryId": {
-            "type": "string",
+          "sectionId": {
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "title": {
@@ -2172,7 +2182,7 @@
       "WorkSummaryResponse": {
         "required": [
           "id",
-          "libraryId",
+          "sectionId",
           "title",
           "authors",
           "series",
@@ -2186,8 +2196,11 @@
             "type": "string",
             "format": "uuid"
           },
-          "libraryId": {
-            "type": "string",
+          "sectionId": {
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "title": {
@@ -2256,13 +2269,13 @@
       "name": "Setup"
     },
     {
+      "name": "Sections"
+    },
+    {
       "name": "Publications"
     },
     {
       "name": "Parts"
-    },
-    {
-      "name": "Libraries"
     },
     {
       "name": "Jobs"

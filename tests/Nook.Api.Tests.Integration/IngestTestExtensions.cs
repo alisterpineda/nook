@@ -17,18 +17,18 @@ internal static class IngestTestExtensions
 
     /// <summary>
     /// A tail for names that no other test's people, series or tags can match, since they are shared across
-    /// libraries and matched by name.
+    /// sections and matched by name.
     /// </summary>
     public static string UniqueSuffix() => Guid.NewGuid().ToString("N")[..12];
 
-    /// <summary>How many works, items and parts the library holds.</summary>
+    /// <summary>How many works, items and parts the section holds.</summary>
     public static async Task<(int Works, int Items, int Parts)> CountRowsAsync(
-        this WebApplicationFactory<Program> app, Library library)
+        this WebApplicationFactory<Program> app, LibrarySection section)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
         var cancellationToken = TestContext.Current.CancellationToken;
-        var works = db.Works.Where(w => w.LibraryId == library.Id);
+        var works = db.Works.Where(w => w.SectionId == section.Id);
         var items = db.Items.Where(i => works.Any(w => w.Id == i.WorkId));
         var parts = db.Parts.Where(p => items.Any(i => i.Id == p.ItemId));
         return (
@@ -37,8 +37,8 @@ internal static class IngestTestExtensions
             await parts.CountAsync(cancellationToken));
     }
 
-    /// <summary>The library's parts, oldest first.</summary>
-    public static async Task<List<Part>> ReadPartsAsync(this WebApplicationFactory<Program> app, Library library)
+    /// <summary>The section's parts, oldest first.</summary>
+    public static async Task<List<Part>> ReadPartsAsync(this WebApplicationFactory<Program> app, LibrarySection section)
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
@@ -46,25 +46,25 @@ internal static class IngestTestExtensions
             from part in db.Parts
             join item in db.Items on part.ItemId equals item.Id
             join work in db.Works on item.WorkId equals work.Id
-            where work.LibraryId == library.Id
+            where work.SectionId == section.Id
             orderby part.CreatedAt, part.Id
             select part).AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
     }
 
     /// <summary>
-    /// Uploads the EPUB into the library given, or a library of its own, and returns its one part as the database
+    /// Uploads the EPUB into the section given, or a section of its own, and returns its one part as the database
     /// holds it.
     /// </summary>
     public static async Task<Part> IngestOnePartAsync(
-        this NookApiFactory factory, byte[] epub, Library? library = null, string fileName = "book.epub")
+        this NookApiFactory factory, byte[] epub, LibrarySection? section = null, string fileName = "book.epub")
     {
-        library ??= await factory.AddLibraryAsync();
+        section ??= await factory.AddSectionAsync();
         using var admin = await factory.CreateSignedInClientAsync(UserRole.Admin);
 
-        var job = await admin.IngestAsync(epub, fileName, library.Id);
+        var job = await admin.IngestAsync(epub, fileName, section.Id);
         Assert.Equal(JobStatus.Succeeded, job.Status);
 
-        return Assert.Single(await factory.ReadPartsAsync(library));
+        return Assert.Single(await factory.ReadPartsAsync(section));
     }
 
     /// <summary>The id of the work the item belongs to.</summary>
@@ -76,9 +76,9 @@ internal static class IngestTestExtensions
             .SingleAsync(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>The paths of the library's parts, oldest first.</summary>
-    public static async Task<List<string>> ReadPartPathsAsync(this WebApplicationFactory<Program> app, Library library) =>
-        (await app.ReadPartsAsync(library)).Select(part => part.Path).ToList();
+    /// <summary>The paths of the section's parts, oldest first.</summary>
+    public static async Task<List<string>> ReadPartPathsAsync(this WebApplicationFactory<Program> app, LibrarySection section) =>
+        (await app.ReadPartsAsync(section)).Select(part => part.Path).ToList();
 
     /// <summary>The work row with the id, as the database holds it.</summary>
     public static async Task<Work> ReadWorkAsync(this WebApplicationFactory<Program> app, Guid workId)

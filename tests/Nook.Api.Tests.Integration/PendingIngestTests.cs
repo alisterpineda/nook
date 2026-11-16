@@ -24,8 +24,9 @@ public sealed class PendingIngestTests : IClassFixture<NookApiFactory>, IDisposa
     [Fact]
     public async Task Deleting_a_pending_ingest_removes_its_staged_file()
     {
+        var section = await _app.AddSectionAsync();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
-        var upload = await client.UploadAsync(Encoding.UTF8.GetBytes("Any file will do."), "book.epub", Library.DefaultId);
+        var upload = await client.UploadAsync(Encoding.UTF8.GetBytes("Any file will do."), "book.epub", section.Id);
         Assert.Equal(HttpStatusCode.Accepted, upload.StatusCode);
         var jobId = (await upload.ReadAsync<UploadResponse>()).JobId;
         Assert.Equal(1, _factory.CountStagedFiles());

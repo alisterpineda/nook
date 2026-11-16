@@ -42,73 +42,77 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
     [Fact]
     public async Task Failed_save_removes_the_copy_and_keeps_the_staged_file()
     {
-        var library = await _app.AddLibraryAsync();
-        var epub = new EpubBuilder().WithTitle($"Wild Seed {FailSave}").WithCreator("Octavia E. Butler")
+        var section = await _app.AddSectionAsync();
+        var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
+        var epub = new EpubBuilder().WithTitle($"Wild Seed {FailSave}").WithCreator(author)
             .WithCover(TestData.PngCover)
             .Build();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
-        var job = await client.IngestAsync(epub, "wild-seed.epub", library.Id);
+        var job = await client.IngestAsync(epub, "wild-seed.epub", section.Id);
 
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.Contains("The save failed", job.Error);
-        Assert.Equal((0, 0, 0), await _app.CountRowsAsync(library));
-        Assert.Empty(LibraryFiles(library));
+        Assert.Equal((0, 0, 0), await _app.CountRowsAsync(section));
+        Assert.Empty(LibraryFiles(author));
         Assert.Equal(stagedBefore + 1, _factory.CountStagedFiles());
     }
 
     [Fact]
     public async Task Failed_save_keeps_a_file_that_another_ingest_has_claimed_since()
     {
-        var library = await _app.AddLibraryAsync();
-        var epub = new EpubBuilder().WithTitle($"Adulthood Rites {FailSaveClaimed}").WithCreator("Octavia E. Butler")
+        var section = await _app.AddSectionAsync();
+        var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
+        var epub = new EpubBuilder().WithTitle($"Adulthood Rites {FailSaveClaimed}").WithCreator(author)
             .Build();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
 
-        var job = await client.IngestAsync(epub, "adulthood-rites.epub", library.Id);
+        var job = await client.IngestAsync(epub, "adulthood-rites.epub", section.Id);
 
         // The failed run's own rows are gone, and the part the other ingest saved still has its file.
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.Contains("The save failed", job.Error);
-        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
-        await AssertBookIsAtItsPartPathAsync(library, epub);
+        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(section));
+        await AssertBookIsAtItsPartPathAsync(section, author, epub);
     }
 
     [Fact]
     public async Task Commit_that_lands_but_reports_failure_keeps_the_book()
     {
-        var library = await _app.AddLibraryAsync();
-        var epub = new EpubBuilder().WithTitle($"Mind of My Mind {FailCommit}").WithCreator("Octavia E. Butler")
+        var section = await _app.AddSectionAsync();
+        var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
+        var epub = new EpubBuilder().WithTitle($"Mind of My Mind {FailCommit}").WithCreator(author)
             .WithCover(TestData.PngCover)
             .Build();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
 
-        var job = await client.IngestAsync(epub, "mind.epub", library.Id);
+        var job = await client.IngestAsync(epub, "mind.epub", section.Id);
 
         Assert.Equal(JobStatus.Failed, job.Status);
         Assert.Contains("The commit reported a failure", job.Error);
-        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
-        await AssertBookIsAtItsPartPathAsync(library, epub);
+        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(section));
+        await AssertBookIsAtItsPartPathAsync(section, author, epub);
     }
 
     [Fact]
     public async Task Commit_that_lands_but_reports_a_transient_failure_completes_as_created()
     {
-        var library = await _app.AddLibraryAsync();
-        var epub = new EpubBuilder().WithTitle($"Clay's Ark {FailCommitOnce}").WithCreator("Octavia E. Butler")
+        var section = await _app.AddSectionAsync();
+        var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
+        var epub = new EpubBuilder().WithTitle($"Clay's Ark {FailCommitOnce}").WithCreator(author)
             .Build();
         using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
-        var job = await client.IngestAsync(epub, "clays-ark.epub", library.Id);
+        var job = await client.IngestAsync(epub, "clays-ark.epub", section.Id);
 
         // The retry finds the item the first pass saved, so it neither files the book again nor calls it a duplicate.
         Assert.Equal(JobStatus.Succeeded, job.Status);
         var result = job.ReadIngestResult();
         Assert.Equal(IngestOutcome.Created, result.Outcome);
-        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(library));
-        var itemId = await AssertBookIsAtItsPartPathAsync(library, epub);
+        Assert.Equal((1, 1, 1), await _app.CountRowsAsync(section));
+        var itemId = await AssertBookIsAtItsPartPathAsync(section, author, epub);
         Assert.Equal(itemId, result.ItemId);
         Assert.Equal(await _app.ReadWorkIdOfItemAsync(itemId), result.WorkId);
         await _factory.WaitForStagedFilesAsync(stagedBefore);
@@ -117,25 +121,29 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
     public void Dispose() => _app.Dispose();
 
     /// <summary>
-    /// Checks the library's one part points at a file holding the bytes, and that it is the library's only book file,
-    /// and returns the part's item id.
+    /// Checks the section's one part points at a file holding the bytes, and that it is the only book file in the
+    /// author's folder, and returns the part's item id.
     /// </summary>
-    private async Task<Guid> AssertBookIsAtItsPartPathAsync(Library library, byte[] bytes)
+    private async Task<Guid> AssertBookIsAtItsPartPathAsync(LibrarySection section, string author, byte[] bytes)
     {
-        var part = Assert.Single(await _app.ReadPartsAsync(library));
+        var part = Assert.Single(await _app.ReadPartsAsync(section));
         Assert.Equal(bytes, await File.ReadAllBytesAsync(
-            _factory.LibraryPath(library, part.Path.Split('/')), TestContext.Current.CancellationToken));
-        Assert.Equal([part.Path], LibraryFiles(library).Where(path => path.EndsWith(".epub", StringComparison.Ordinal)));
+            _factory.LibraryPath(part.Path.Split('/')), TestContext.Current.CancellationToken));
+        Assert.Equal([part.Path], LibraryFiles(author).Where(path => path.EndsWith(".epub", StringComparison.Ordinal)));
         return part.ItemId;
     }
 
-    /// <summary>Every file under the library's folder, as a <c>/</c>-separated path relative to it.</summary>
-    private string[] LibraryFiles(Library library)
+    /// <summary>
+    /// Every file under the author's folder, <c>Books/&lt;author&gt;</c>, as a <c>/</c>-separated path relative to the
+    /// library folder.
+    /// </summary>
+    private string[] LibraryFiles(string author)
     {
-        var folder = _factory.LibraryPath(library);
+        var libraryFolder = _factory.LibraryPath();
+        var folder = _factory.LibraryPath("Books", author);
         return Directory.Exists(folder)
             ? Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
-                .Select(file => Path.GetRelativePath(folder, file).Replace(Path.DirectorySeparatorChar, '/'))
+                .Select(file => Path.GetRelativePath(libraryFolder, file).Replace(Path.DirectorySeparatorChar, '/'))
                 .ToArray()
             : [];
     }
@@ -160,7 +168,7 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
                 var path = eventData.Context!.ChangeTracker.Entries<Part>().Single().Entity.Path;
                 await using var scope = services().CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-                var work = TestData.NewWork("Another ingest's work", claimed.LibraryId);
+                var work = TestData.NewWork("Another ingest's work", claimed.SectionId);
                 var item = new Item { WorkId = work.Id, Format = ItemFormat.Epub };
                 db.AddRange(work, item, new Part
                 {

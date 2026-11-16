@@ -1,17 +1,16 @@
 using System.Buffers;
 using System.Globalization;
 using System.Text;
-using Nook.Api.Data;
 using Nook.Api.Storage;
 
 namespace Nook.Api.Ingest;
 
 /// <summary>
-/// Where ingest files a book inside a library's folder. Paths here are <c>/</c>-separated and relative to the
-/// library's folder, as a part stores them. Filing copies the staged file, which stays in staging. A path is taken
-/// only when a part claims it, compared ignoring case and Unicode form, as a file system that folds either does. A
-/// book file no part points at, such as one a run that died left behind, is overwritten, and a folder no part points
-/// into is used as it is, with anything else in it left alone.
+/// Where ingest files a book inside the library folder, which every section shares. Paths here are <c>/</c>-separated
+/// and relative to the library folder, as a part stores them. Filing copies the staged file, which stays in staging. A
+/// path is taken only when a part claims it, compared ignoring case and Unicode form, as a file system that folds
+/// either does. A book file no part points at, such as one a run that died left behind, is overwritten, and a folder no
+/// part points into is used as it is, with anything else in it left alone.
 /// </summary>
 public static class Filing
 {
@@ -125,12 +124,12 @@ public static class Filing
     /// </summary>
     public static FiledBook CopyIntoNewFolder(StagedBook book, string folder)
     {
-        var (stagedFile, _, _, library, storage, claimedPaths) = book;
+        var (stagedFile, _, _, storage, claimedPaths) = book;
         var fileName = Segment(book.Title) + book.Extension;
         return FirstFree(number =>
         {
             var candidate = Numbered(folder, number);
-            var folderPath = storage.LibraryFile(library, candidate);
+            var folderPath = storage.LibraryFile(candidate);
 
             // A plain file where the folder would go is not ingest's to replace.
             if (File.Exists(folderPath) || HoldsClaimedPath(claimedPaths, candidate))
@@ -179,16 +178,16 @@ public static class Filing
     /// </summary>
     public static FiledBook CopyBesideOthers(StagedBook book, string folder)
     {
-        var (stagedFile, _, extension, library, storage, claimedPaths) = book;
+        var (stagedFile, _, extension, storage, claimedPaths) = book;
         var title = Segment(book.Title);
-        var folderPath = storage.LibrarySubfolder(library, folder);
+        var folderPath = storage.LibrarySubfolder(folder);
         var created = folder.Length > 0 && !Directory.Exists(folderPath);
         Directory.CreateDirectory(folderPath);
         return FirstFree(number =>
         {
             var name = Numbered(title, number) + extension;
             var relativePath = Join(folder, name);
-            var path = storage.LibraryFile(library, relativePath);
+            var path = storage.LibraryFile(relativePath);
             return TryCopy(stagedFile, path, IsClaimed(claimedPaths, relativePath))
                 ? new FiledBook(relativePath, path, created ? folderPath : null)
                 : null;
@@ -293,26 +292,24 @@ public static class Filing
         }
     }
 
-    /// <summary>A staged file on its way into a library.</summary>
+    /// <summary>A staged file on its way into the library folder.</summary>
     /// <param name="StagedFile">The full path of the file in staging.</param>
     /// <param name="Title">The title the file is named after, made safe as a segment when it is filed.</param>
     /// <param name="Extension">The file's extension, with its dot.</param>
-    /// <param name="Library">The library the file goes into.</param>
-    /// <param name="Storage">Where the library's folder is.</param>
+    /// <param name="Storage">Where the library folder is.</param>
     /// <param name="ClaimedPaths">
-    /// The paths the library's parts point at, at least those inside the folder the book is filed into and its
-    /// siblings. A path that exists on disk is taken only when one of these is it or lies inside it.
+    /// The paths parts point at, whatever section their work is in, at least those inside the folder the book is filed
+    /// into and its siblings. A path that exists on disk is taken only when one of these is it or lies inside it.
     /// </param>
     public sealed record StagedBook(
         string StagedFile,
         string Title,
         string Extension,
-        Library Library,
         NookStorage Storage,
         IReadOnlyCollection<string> ClaimedPaths);
 
-    /// <summary>A book copied into a library.</summary>
-    /// <param name="RelativePath">Its path relative to the library's folder, as a part stores it.</param>
+    /// <summary>A book copied into the library folder.</summary>
+    /// <param name="RelativePath">Its path relative to the library folder, as a part stores it.</param>
     /// <param name="FullPath">Its full path on disk.</param>
     /// <param name="CreatedFolder">The full path of the folder the copy created for it, or null when the folder was already there.</param>
     public sealed record FiledBook(string RelativePath, string FullPath, string? CreatedFolder);

@@ -1,6 +1,5 @@
 using System.Text;
 using Microsoft.Extensions.Options;
-using Nook.Api.Data;
 using Nook.Api.Ingest;
 using Nook.Api.Storage;
 
@@ -11,7 +10,6 @@ public sealed class FilingTests : IDisposable
     private const string Folder = "Books/Ursula K. Le Guin/The Dispossessed";
 
     private readonly string dataPath = Path.Combine(Path.GetTempPath(), $"nook-filing-{Guid.NewGuid():N}");
-    private readonly Library library = new() { Name = "Books", FolderName = "books" };
     private readonly NookStorage storage;
 
     public FilingTests()
@@ -198,7 +196,7 @@ public sealed class FilingTests : IDisposable
         var filed = Filing.CopyIntoNewFolder(book, Folder);
 
         Assert.Equal($"{Folder} (2)/The Dispossessed.epub", filed.RelativePath);
-        Assert.Equal(storage.LibraryFile(library, $"{Folder} (2)"), filed.CreatedFolder);
+        Assert.Equal(storage.LibraryFile($"{Folder} (2)"), filed.CreatedFolder);
         Assert.Equal("uploaded", File.ReadAllText(filed.FullPath));
         Assert.Equal("already filed", File.ReadAllText(taken));
         Assert.Equal("uploaded", File.ReadAllText(book.StagedFile));
@@ -273,36 +271,36 @@ public sealed class FilingTests : IDisposable
         Assert.Equal(before, LibraryEntries());
     }
 
-    /// <summary>Stages a file to be filed as "The Dispossessed", with the library's parts at the claimed paths.</summary>
+    /// <summary>Stages a file to be filed as "The Dispossessed", with parts at the claimed paths.</summary>
     private Filing.StagedBook Stage(string content, params string[] claimedPaths)
     {
         var stagedFile = storage.StagedFile(Guid.NewGuid().ToString());
         File.WriteAllText(stagedFile, content);
-        return new Filing.StagedBook(stagedFile, "The Dispossessed", ".epub", library, storage, claimedPaths);
+        return new Filing.StagedBook(stagedFile, "The Dispossessed", ".epub", storage, claimedPaths);
     }
 
     private string WriteLibraryFile(string relativePath, string content)
     {
-        var path = storage.LibraryFile(library, relativePath);
+        var path = storage.LibraryFile(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         return path;
     }
 
-    /// <summary>Every file under the library's folder, as a <c>/</c>-separated path relative to it, in order.</summary>
+    /// <summary>Every file under the library folder, as a <c>/</c>-separated path relative to it, in order.</summary>
     private string[] LibraryFiles()
     {
-        var folder = storage.LibraryFolder(library);
+        var folder = storage.LibraryFolder;
         return Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
             .Select(file => Path.GetRelativePath(folder, file).Replace(Path.DirectorySeparatorChar, '/'))
             .Order(StringComparer.Ordinal)
             .ToArray();
     }
 
-    /// <summary>Every file and folder under the library's folder, relative to it, in order.</summary>
+    /// <summary>Every file and folder under the library folder, relative to it, in order.</summary>
     private string[] LibraryEntries()
     {
-        var folder = storage.LibraryFolder(library);
+        var folder = storage.LibraryFolder;
         return Directory.Exists(folder)
             ? Directory.EnumerateFileSystemEntries(folder, "*", SearchOption.AllDirectories)
                 .Select(entry => Path.GetRelativePath(folder, entry))

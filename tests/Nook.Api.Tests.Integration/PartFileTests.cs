@@ -81,10 +81,10 @@ public class PartFileTests(NookApiFactory factory) : IClassFixture<NookApiFactor
     [Fact]
     public async Task Part_whose_file_is_gone_is_not_found_and_logged()
     {
-        var library = await factory.AddLibraryAsync();
+        var section = await factory.AddSectionAsync();
         var part = await factory.IngestOnePartAsync(
-            new EpubBuilder().WithTitle("Kindred").WithCreator("Octavia E. Butler").Build(), library);
-        File.Delete(factory.LibraryPath(library, part.Path.Split('/')));
+            new EpubBuilder().WithTitle("Kindred").WithCreator("Octavia E. Butler").Build(), section);
+        File.Delete(factory.LibraryPath(part.Path.Split('/')));
         using var client = await factory.CreateSignedInClientAsync();
 
         var response = await client.GetAsync($"/api/parts/{part.Id}/file", TestContext.Current.CancellationToken);

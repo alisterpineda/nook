@@ -9,6 +9,9 @@ public class CoverPathMigrationTests(NookApiFactory factory) : IClassFixture<Noo
 {
     private const string MigrationBeforeCoverPaths = "20261113144148_AddNameKeys";
 
+    /// <summary>The library row the first migration seeded, which every work belonged to before sections.</summary>
+    private static readonly Guid SeededLibraryId = new("01a1c7e7-8000-7000-8000-000000000001");
+
     [Fact]
     public async Task Work_that_existed_before_cover_paths_loses_its_cover_hash()
     {
@@ -23,7 +26,7 @@ public class CoverPathMigrationTests(NookApiFactory factory) : IClassFixture<Noo
         await db.Database.ExecuteSqlAsync(
             $"""
             INSERT INTO works (id, library_id, title, sort_title, cover_hash, created_at, updated_at)
-            VALUES ({workId}, {Library.DefaultId}, 'The Dispossessed', 'Dispossessed, The', 'a1b2c3', {now}, {now})
+            VALUES ({workId}, {SeededLibraryId}, 'The Dispossessed', 'Dispossessed, The', 'a1b2c3', {now}, {now})
             """,
             cancellationToken);
 

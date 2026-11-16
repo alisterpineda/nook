@@ -189,9 +189,9 @@ public class PublicationTests(NookApiFactory factory) : IClassFixture<NookApiFac
     [Fact]
     public async Task Manifest_of_a_missing_file_is_not_found()
     {
-        var library = await factory.AddLibraryAsync();
-        var part = await factory.IngestOnePartAsync(new EpubBuilder().WithTitle("Kindred").Build(), library: library);
-        File.Delete(factory.LibraryPath(library, part.Path.Split('/')));
+        var section = await factory.AddSectionAsync();
+        var part = await factory.IngestOnePartAsync(new EpubBuilder().WithTitle("Kindred").Build(), section: section);
+        File.Delete(factory.LibraryPath(part.Path.Split('/')));
         using var client = await factory.CreateSignedInClientAsync();
 
         var response = await client.GetAsync(ManifestUrl(part.ItemId), CancellationToken);
@@ -203,10 +203,10 @@ public class PublicationTests(NookApiFactory factory) : IClassFixture<NookApiFac
     [Fact]
     public async Task Manifest_of_a_file_that_is_no_longer_a_book_is_not_found()
     {
-        var library = await factory.AddLibraryAsync();
-        var part = await factory.IngestOnePartAsync(new EpubBuilder().WithTitle("Kindred").Build(), library: library);
+        var section = await factory.AddSectionAsync();
+        var part = await factory.IngestOnePartAsync(new EpubBuilder().WithTitle("Kindred").Build(), section: section);
         await File.WriteAllTextAsync(
-            factory.LibraryPath(library, part.Path.Split('/')), "not a zip", CancellationToken);
+            factory.LibraryPath(part.Path.Split('/')), "not a zip", CancellationToken);
         using var client = await factory.CreateSignedInClientAsync();
 
         var response = await client.GetAsync(ManifestUrl(part.ItemId), CancellationToken);

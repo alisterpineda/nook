@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
-using Nook.Api.Features.Libraries;
+using Nook.Api.Features.Sections;
 using Nook.Api.Storage;
 
 namespace Nook.Api.Features.Parts;
@@ -25,9 +25,8 @@ public partial class PartsController(NookDbContext db, NookStorage storage, ILog
                 from p in db.Parts
                 join i in db.Items on p.ItemId equals i.Id
                 join w in db.Works.VisibleTo(User) on i.WorkId equals w.Id
-                join l in db.Libraries on w.LibraryId equals l.Id
                 where p.Id == id
-                select new { p.Path, p.MediaType, Library = l })
+                select new { p.Path, p.MediaType })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (part is null)
@@ -35,7 +34,7 @@ public partial class PartsController(NookDbContext db, NookStorage storage, ILog
             return NotFound();
         }
 
-        var path = storage.LibraryFile(part.Library, part.Path);
+        var path = storage.LibraryFile(part.Path);
 
         // PhysicalFile reads the disk only when the response is written, which is too late for a 404.
         if (!System.IO.File.Exists(path))

@@ -2,12 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Nook.Api.Features.Uploads;
 
-/// <summary>A file to ingest into a library, sent as a multipart form.</summary>
+/// <summary>A file to ingest into a section or the Default area, sent as a multipart form.</summary>
 public class UploadRequest
 {
-    /// <summary>The library the file goes into.</summary>
-    [Required]
-    public Guid? LibraryId { get; set; }
+    /// <summary>The section the file goes into, or none for the Default area.</summary>
+    public Guid? SectionId { get; set; }
 
     /// <summary>The file. Any file is accepted here; its job decides whether Nook can read it.</summary>
     [Required]

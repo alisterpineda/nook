@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
-using Nook.Api.Features.Libraries;
+using Nook.Api.Features.Sections;
 using Nook.Api.Ingest;
 using Nook.Api.Ingest.Epub;
 using Nook.Api.Storage;
@@ -233,12 +233,10 @@ public partial class PublicationsController(
         var item = await (
                 from i in db.Items
                 join w in db.Works.VisibleTo(user) on i.WorkId equals w.Id
-                join l in db.Libraries on w.LibraryId equals l.Id
                 where i.Id == itemId && i.Format == ItemFormat.Epub
                 select new
                 {
                     WorkTitle = w.Title,
-                    Library = l,
                     Paths = db.Parts.Where(p => p.ItemId == i.Id).Select(p => p.Path).Take(2).ToList(),
                 })
             .SingleOrDefaultAsync(cancellationToken);
@@ -248,7 +246,7 @@ public partial class PublicationsController(
             return null;
         }
 
-        var path = storage.LibraryFile(item.Library, partPath);
+        var path = storage.LibraryFile(partPath);
         try
         {
             return new Book(await publications.GetAsync(path, cancellationToken), item.WorkTitle, path);

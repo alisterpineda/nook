@@ -8,19 +8,19 @@ namespace Nook.Api.Tests.Integration;
 internal static class CoverTestExtensions
 {
     /// <summary>
-    /// Uploads an EPUB whose cover holds the bytes given, into a library of its own, and returns its work as the
+    /// Uploads an EPUB whose cover holds the bytes given, into a section of its own, and returns its work as the
     /// database holds it.
     /// </summary>
     public static async Task<Work> IngestWithCoverAsync(
         this NookApiFactory factory, byte[] cover, string fileName = "cover.png", string mediaType = "image/png")
     {
-        var library = await factory.AddLibraryAsync();
+        var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("Kindred").WithCreator("Octavia E. Butler")
             .WithCover(cover, fileName, mediaType)
             .Build();
         using var admin = await factory.CreateSignedInClientAsync(UserRole.Admin);
 
-        var job = await admin.IngestAsync(epub, "kindred.epub", library.Id);
+        var job = await admin.IngestAsync(epub, "kindred.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, job.Status);
 
         var itemId = job.ReadIngestResult().ItemId;

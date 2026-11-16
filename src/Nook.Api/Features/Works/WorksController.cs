@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
-using Nook.Api.Features.Libraries;
+using Nook.Api.Features.Sections;
 using Nook.Api.Storage;
 
 namespace Nook.Api.Features.Works;
@@ -22,9 +22,13 @@ public partial class WorksController(
         [FromQuery] WorkListQuery query, CancellationToken cancellationToken)
     {
         var works = db.Works.VisibleTo(User);
-        if (query.LibraryId is { } libraryId)
+        if (query.SectionId is { } sectionId)
         {
-            works = works.Where(w => w.LibraryId == libraryId);
+            works = works.Where(w => w.SectionId == sectionId);
+        }
+        else if (query.NoSection)
+        {
+            works = works.Where(w => w.SectionId == null);
         }
 
         var total = await works.CountAsync(cancellationToken);
@@ -41,7 +45,7 @@ public partial class WorksController(
             .Take(query.Limit)
             .Select(w => new WorkSummaryResponse(
                 w.Id,
-                w.LibraryId,
+                w.SectionId,
                 w.Title,
                 (from c in w.Contributors
                  join p in db.People on c.PersonId equals p.Id
@@ -72,7 +76,7 @@ public partial class WorksController(
             .Where(w => w.Id == id)
             .Select(w => new WorkDetailResponse(
                 w.Id,
-                w.LibraryId,
+                w.SectionId,
                 w.Title,
                 w.SortTitle,
                 w.Description,
@@ -154,9 +158,8 @@ public partial class WorksController(
         // A work the user cannot see is reported the same way as one that does not exist.
         var cover = await (
                 from w in db.Works.VisibleTo(User)
-                join l in db.Libraries on w.LibraryId equals l.Id
                 where w.Id == id
-                select new { w.CoverPath, w.CoverHash, Library = l })
+                select new { w.CoverPath, w.CoverHash })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (cover?.CoverPath is not { } coverPath)
@@ -167,7 +170,7 @@ public partial class WorksController(
         // The caching header goes only on a cover that is served, so a 404 is never kept.
         var keepForGood = v is not null && v == cover.CoverHash;
 
-        var path = storage.LibraryFile(cover.Library, coverPath);
+        var path = storage.LibraryFile(coverPath);
         var cachedPath = coverSize is { } cachedSize && cover.CoverHash is { } coverHash
             ? coverCache.PathOf(coverHash, cachedSize)
             : null;
