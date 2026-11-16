@@ -34,13 +34,16 @@
   </PropertyGroup>
 
   <!-- Publishing builds the web app and puts it in the output's wwwroot, so a published API is the whole app.
-       This runs only during publish: an ordinary build or test run never calls npm. -->
+       This runs only during publish: an ordinary build or test run never calls npm.
+       SkipWebAppBuild=true publishes the web app that is already built, without calling npm. It is for a
+       publish that runs this target more than once at the same time, as one for several architectures does. -->
   <Target Name="PublishWebApp" AfterTargets="ComputeFilesToPublish">
     <PropertyGroup>
       <WebAppDirectory>$(MSBuildProjectDirectory)/../Nook.Web/</WebAppDirectory>
     </PropertyGroup>
-    <Exec WorkingDirectory="$(WebAppDirectory)" Command="npm ci" />
-    <Exec WorkingDirectory="$(WebAppDirectory)" Command="npm run build" />
+    <Exec WorkingDirectory="$(WebAppDirectory)" Command="npm ci" Condition="'$(SkipWebAppBuild)' != 'true'" />
+    <Exec WorkingDirectory="$(WebAppDirectory)" Command="npm run build" Condition="'$(SkipWebAppBuild)' != 'true'" />
+    <Error Condition="!Exists('$(WebAppDirectory)dist/nook-web/browser/index.html')" Text="The web app is not built. Run npm ci and npm run build in src/Nook.Web, or publish without SkipWebAppBuild." />
     <ItemGroup>
       <WebAppFile Include="$(WebAppDirectory)dist/nook-web/browser/**" />
       <ResolvedFileToPublish Include="@(WebAppFile->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
@@ -49,5 +52,10 @@
       </ResolvedFileToPublish>
     </ItemGroup>
   </Target>
+
+  <!-- The container image keeps its files in /data, where a volume is mounted. -->
+  <ItemGroup>
+    <ContainerEnvironmentVariable Include="Nook__DataPath" Value="/data" />
+  </ItemGroup>
 
 </Project>

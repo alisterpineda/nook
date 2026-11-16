@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace Nook.Api.Storage;
 
-/// <summary>The folders under the data root: <c>library/</c>, which holds every book file and cover, <c>staging/</c>, which holds uploads waiting to be ingested, <c>cache/</c>, which holds files that can be made again from the library, and <c>keys/</c>, which holds the app's secrets.</summary>
+/// <summary>The folders under the data root: <c>library/</c>, which holds every book file and cover, <c>staging/</c>, which holds uploads waiting to be ingested, <c>cache/</c>, which holds files that can be made again from the library, and <c>keys/</c>, which holds the app's secrets, with the keys that protect sign-in cookies in <c>keys/data-protection/</c>.</summary>
 public sealed class NookStorage(IOptions<StorageOptions> options)
 {
     /// <summary>The buffer files are copied through, the size <see cref="Stream.CopyToAsync(Stream)"/> uses.</summary>
@@ -24,6 +24,9 @@ public sealed class NookStorage(IOptions<StorageOptions> options)
 
     /// <summary>Where the app's own secrets are kept, such as the key that signs publication tokens.</summary>
     public string KeysFolder => Path.Combine(Root, "keys");
+
+    /// <summary>Where the keys that protect sign-in cookies are kept, so a sign-in outlasts a restart or an upgrade.</summary>
+    public string DataProtectionKeysFolder => Path.Combine(KeysFolder, "data-protection");
 
     /// <summary>The full path of a file in the library folder, from its <c>/</c>-separated path relative to that folder, as a part stores it.</summary>
     /// <exception cref="InvalidOperationException">The path leads outside the library folder.</exception>

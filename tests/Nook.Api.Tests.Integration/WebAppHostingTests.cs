@@ -157,14 +157,15 @@ public sealed class WebAppHostingTests : IClassFixture<NookApiFactory>, IDisposa
     [Theory]
     [InlineData("/health")]
     [InlineData("/alive")]
-    public async Task Health_path_does_not_return_the_web_app_outside_development(string path)
+    public async Task Health_path_answers_healthy_outside_development(string path)
     {
         using var production = _app.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
         using var client = production.CreateClient();
 
         var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
 
-        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotEqual(IndexHtml, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     public void Dispose()

@@ -1,6 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
@@ -35,6 +38,17 @@ if (!buildingOpenApiDocument)
     storageOptions.ValidateDataAnnotations().ValidateOnStart();
 }
 builder.Services.AddSingleton<NookStorage>();
+
+// The keys that protect sign-in cookies live in the data folder, so a sign-in outlasts a restart or an upgrade.
+// The build has no data folder, so it keeps the default keys.
+if (!buildingOpenApiDocument)
+{
+    builder.Services.AddDataProtection();
+    builder.Services.AddOptions<KeyManagementOptions>()
+        .Configure<NookStorage, ILoggerFactory>((options, storage, loggers) =>
+            options.XmlRepository = new FileSystemXmlRepository(new DirectoryInfo(storage.DataProtectionKeysFolder), loggers));
+}
+
 builder.Services.AddSingleton<CoverResizer>();
 builder.Services.AddSingleton<CoverCache>();
 builder.Services.AddSingleton<PublicationTokens>();
@@ -109,7 +123,7 @@ app.MapControllers();
 
 // The web app routes in the browser, so any other path that is not a file gets its index.html.
 // Paths under /api are left out, so an unknown API path still answers as an API. So are the health
-// paths, which are mapped only in development: elsewhere a probe must not pass by getting the web app.
+// paths, so a probe always gets a health answer and can never pass by getting the web app.
 // The regex refuses an empty path, so the root has its own fallback.
 app.MapFallbackToFile("/", "index.html").AllowAnonymous().ExcludeFromDescription();
 app.MapFallbackToFile("{*path:nonfile:regex(^(?!(api|health|alive)(/|$)))}", "index.html").AllowAnonymous().ExcludeFromDescription();

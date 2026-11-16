@@ -72,9 +72,20 @@ internal static class ApiTestExtensions
     public static IEnumerable<string> SetCookies(this HttpResponseMessage response) =>
         response.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies : [];
 
+    /// <summary>The cookies a response sets, each as the <c>name=value</c> pair a request sends back in its <c>Cookie</c> header.</summary>
+    public static IEnumerable<string> CookiePairs(this HttpResponseMessage response) =>
+        response.SetCookies().Select(cookie => cookie.Split(';')[0]);
+
     /// <summary>Whether a response sets the session cookie.</summary>
     public static bool SetsSessionCookie(this HttpResponseMessage response) =>
-        response.SetCookies().Any(cookie => cookie.StartsWith($"{SessionCookie}=", StringComparison.Ordinal));
+        response.CookiePairs().Any(IsSessionCookie);
+
+    /// <summary>The session cookie a response sets, as its <c>name=value</c> pair.</summary>
+    public static string SessionCookiePair(this HttpResponseMessage response) =>
+        response.CookiePairs().Single(IsSessionCookie);
+
+    private static bool IsSessionCookie(string pair) =>
+        pair.StartsWith($"{SessionCookie}=", StringComparison.Ordinal);
 
     /// <summary>An exception with every exception inside it, for finding the message of a failed start.</summary>
     public static IEnumerable<Exception> Flatten(this Exception exception)

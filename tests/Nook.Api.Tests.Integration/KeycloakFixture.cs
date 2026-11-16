@@ -62,7 +62,7 @@ public sealed partial class KeycloakFixture : IAsyncLifetime
                 ["credentialId"] = "",
             }),
         };
-        post.Headers.Add("Cookie", string.Join("; ", page.SetCookies().Select(cookie => cookie.Split(';')[0])));
+        post.Headers.Add("Cookie", string.Join("; ", page.CookiePairs()));
 
         var answer = await _browser.SendAsync(post, cancellationToken);
         Assert.True(

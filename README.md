@@ -18,6 +18,60 @@ On an empty database the stack creates an admin, so there is no setup form to fi
 
 A database that was set up before the stack created this admin keeps its own admin until its volume is removed.
 
+## Installing
+
+Nook runs from a container image, `ghcr.io/alisterpineda/nook`, next to a Postgres database. You need Docker
+with Compose, on an amd64 or arm64 machine.
+
+In a new folder, download the compose file:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/alisterpineda/nook/main/compose.yaml
+```
+
+Set the database's password in a `.env` file beside it. Use a long random value made only of letters and
+digits, because the value goes into a connection string:
+
+```sh
+echo "POSTGRES_PASSWORD=<a long random value>" > .env
+```
+
+Create the folder Nook keeps its files in, and give it to the user Nook runs as. Nook does not run as root: it
+runs as a user with the id 1654.
+
+```sh
+mkdir data
+sudo chown 1654:1654 data
+```
+
+Start Nook:
+
+```sh
+docker compose up -d
+```
+
+Nook then answers at <http://localhost:8080>. The first visit shows the setup page, which creates the admin.
+
+Keep two things to be able to restore Nook: the `data` folder, which holds the library and Nook's keys, and
+the `postgres-data` volume, which holds the database. Both are needed.
+
+To upgrade, pull the new image and start it:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+The `latest` image follows main, and Nook migrates the database when it starts. To stay on one build, set
+`NOOK_IMAGE=ghcr.io/alisterpineda/nook:<commit SHA>` in `.env`, with the commit's full SHA.
+
+To check on Nook, `/health` answers 200 when Nook and its database are up, and `/alive` answers 200 when the
+process is up. Neither needs a sign-in.
+
+The compose file serves Nook over http. To serve it over https, put it behind a reverse proxy, as
+[Behind a reverse proxy](#behind-a-reverse-proxy) describes. [Single sign-on](#single-sign-on) covers signing
+in through a provider.
+
 ## Single sign-on
 
 Nook can sign people in through an OpenID Connect provider, such as Authentik or Keycloak, next to the email
@@ -108,3 +162,7 @@ as http, and sends the provider a callback URL that starts with `http://`, which
 
 With the variable set, Nook accepts those headers from any sender. Keep Nook's port reachable only from the
 proxy, so that nobody else can send them.
+
+## Licence
+
+Nook is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).

@@ -108,20 +108,18 @@ public static class Extensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        // Adding health checks endpoints to applications in non-development environments has security implications.
-        // See https://aka.ms/aspire/healthchecks for details before enabling these endpoints in non-development environments.
-        if (app.Environment.IsDevelopment())
-        {
-            // All health checks must pass for app to be considered ready to accept traffic after starting
-            // Anonymous, because the API requires a signed-in user everywhere unless told otherwise.
-            app.MapHealthChecks(HealthEndpointPath).AllowAnonymous();
+        // Mapped in every environment, because a deployed Nook needs something to probe. They are safe to leave
+        // open: they report only healthy or unhealthy, with no details of the checks behind the answer.
+        // Anonymous, because the API requires a signed-in user everywhere unless told otherwise.
 
-            // Only health checks tagged with the "live" tag must pass for app to be considered alive
-            app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
-            {
-                Predicate = r => r.Tags.Contains("live")
-            }).AllowAnonymous();
-        }
+        // All health checks must pass for app to be considered ready to accept traffic after starting
+        app.MapHealthChecks(HealthEndpointPath).AllowAnonymous();
+
+        // Only health checks tagged with the "live" tag must pass for app to be considered alive
+        app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
+        {
+            Predicate = r => r.Tags.Contains("live")
+        }).AllowAnonymous();
 
         return app;
     }
