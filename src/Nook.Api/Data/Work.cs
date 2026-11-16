@@ -14,6 +14,7 @@ public class Work : Entity
     /// <summary>The title used for sorting, such as "Hobbit, The".</summary>
     public required string SortTitle { get; set; }
 
+    /// <summary>What the book is about, as plain text.</summary>
     public string? Description { get; set; }
 
     /// <summary>The language the work is written in.</summary>

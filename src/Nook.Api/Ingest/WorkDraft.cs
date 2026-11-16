@@ -6,7 +6,7 @@ namespace Nook.Api.Ingest;
 /// <summary>What a book file says its Work is, before anything in the database is looked at.</summary>
 /// <param name="Title">The file's title, or one made from the uploaded file name when the file gives none.</param>
 /// <param name="SortTitle">The file's sort title, or the title.</param>
-/// <param name="Description">The file's first description.</param>
+/// <param name="Description">The file's first description, as plain text.</param>
 /// <param name="Publisher">The file's first publisher.</param>
 /// <param name="Language">The file's first language.</param>
 /// <param name="PublicationDate">The publication date, only when the file gives a complete date.</param>
@@ -53,7 +53,7 @@ public sealed record WorkDraft(
         return new WorkDraft(
             title,
             metadata.SortTitle ?? title,
-            metadata.Description,
+            DescriptionText.ToPlainText(metadata.Description),
             metadata.Publisher,
             metadata.Language,
             metadata.PublicationDate,

@@ -60,6 +60,26 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Fact]
+    public async Task Html_in_an_epub_description_is_stored_as_plain_text()
+    {
+        var library = await factory.AddLibraryAsync();
+        var epub = new EpubBuilder()
+            .WithTitle("Come as You Are")
+            .WithDescription(
+                "<b>How it works&#8212;based on research.</b><BR>Researchers explain <i>Come as You Are</i>.<BR> <BR>The first lesson.")
+            .Build();
+        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+
+        var job = await client.IngestAsync(epub, "come-as-you-are.epub", library.Id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        var work = await GetOnlyWorkAsync(client, library);
+        Assert.Equal(
+            "How it works—based on research.\nResearchers explain Come as You Are.\n\nThe first lesson.",
+            work.Description);
+    }
+
+    [Fact]
     public async Task Work_shows_the_epub_title_contributors_series_tags_and_external_ids()
     {
         var library = await factory.AddLibraryAsync();

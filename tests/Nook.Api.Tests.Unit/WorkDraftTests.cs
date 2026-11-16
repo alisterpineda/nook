@@ -103,11 +103,63 @@ public class WorkDraftTests
         Assert.Equal(["9780441478125"], draft.Isbns);
     }
 
+    [Theory]
+    [InlineData("<p>One.</p><p>Two.</p>", "One.\n\nTwo.")]
+    [InlineData("<div>One.</div>\n<div>Two.</div>", "One.\n\nTwo.")]
+    [InlineData("<p>One\n   line.</p>", "One line.")]
+    [InlineData("Intro<ul><li>First</li><li>Second</li></ul>", "Intro\n\nFirst\nSecond")]
+    [InlineData("One.<br/><br/><br/><br/>Two.", "One.\n\nTwo.")]
+    [InlineData("<!-- note -->Kept <span class=\"x\">text</span>.", "Kept text.")]
+    [InlineData("<P>Upper <B>case</B>.</P>", "Upper case.")]
+    [InlineData("One<pre>two</pre>", "Onetwo")]
+    [InlineData("<p>Non breaking  space</p>", "Non breaking space")]
+    public void Html_description_becomes_plain_text(string description, string expected)
+    {
+        var draft = WorkDraft.From(Metadata(description: description), "book.epub");
+
+        Assert.Equal(expected, draft.Description);
+    }
+
+    [Theory]
+    [InlineData("<p></p>")]
+    [InlineData("<br>")]
+    [InlineData("<p> &nbsp; </p>")]
+    [InlineData("<!-- only -->")]
+    public void Description_with_no_text_is_no_description(string description)
+    {
+        var draft = WorkDraft.From(Metadata(description: description), "book.epub");
+
+        Assert.Null(draft.Description);
+    }
+
+    [Theory]
+    [InlineData("<b>Fast&mdash;and &ldquo;propulsive&rdquo; &amp; fun</b>", "Fast—and “propulsive” & fun")]
+    [InlineData("Dash &#8212; and &#x2014; again", "Dash — and — again")]
+    [InlineData("<p>Write &lt;b&gt; for bold</p>", "Write <b> for bold")]
+    public void Character_references_in_a_description_become_characters(string description, string expected)
+    {
+        var draft = WorkDraft.From(Metadata(description: description), "book.epub");
+
+        Assert.Equal(expected, draft.Description);
+    }
+
+    [Theory]
+    [InlineData("A desert planet.\nA spice.")]
+    [InlineData("AT&T and a < b, or 3 > 2.")]
+    [InlineData("First.\n\n\n\nSecond.   Third.")]
+    public void Description_without_html_is_kept_as_written(string description)
+    {
+        var draft = WorkDraft.From(Metadata(description: description), "book.epub");
+
+        Assert.Equal(description, draft.Description);
+    }
+
     private static BookMetadata Metadata(
         string? title = "Title",
         string? sortTitle = null,
         IReadOnlyList<BookCreator>? creators = null,
         IReadOnlyList<string>? subjects = null,
-        IReadOnlyList<BookIdentifier>? identifiers = null) =>
-        new(title, sortTitle, creators ?? [], subjects ?? [], null, null, null, null, null, identifiers ?? []);
+        IReadOnlyList<BookIdentifier>? identifiers = null,
+        string? description = null) =>
+        new(title, sortTitle, creators ?? [], subjects ?? [], description, null, null, null, null, identifiers ?? []);
 }
