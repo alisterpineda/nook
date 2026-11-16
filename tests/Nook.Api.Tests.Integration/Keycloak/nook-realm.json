@@ -283,6 +283,54 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "ivy",
+      "enabled": true,
+      "firstName": "Ivy",
+      "lastName": "Taken",
+      "email": "ivy@sso.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nook-test-password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "zed",
+      "enabled": true,
+      "firstName": "Zed",
+      "lastName": "Early",
+      "email": "zed@sso.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nook-test-password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "amy",
+      "enabled": true,
+      "firstName": "Amy",
+      "lastName": "Opener",
+      "email": "amy@sso.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nook-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/nook-admins"
+      ]
     }
   ]
 }

@@ -71,10 +71,18 @@ sign-on.
 
 When the provider's email is the email of a Nook account that has not used single sign-on yet, Nook links the
 two only when the provider sends `email_verified` as true. Otherwise the sign-in is refused. Once linked, the
-account's password still works.
+account's password still works. An account that is already linked to one provider account is never linked to a
+second: that sign-in is refused too.
 
 Password sign-in and first-run setup stay available when single sign-on is on. Signing out of Nook does not
 sign out of the provider.
+
+### Before Nook is set up
+
+While Nook has no accounts, single sign-on only lets in someone who is in `AdminGroup`, who then is the first
+admin in place of first-run setup. Anyone else is refused until an admin exists, because the first account
+closes setup, and a first account that is not an admin would leave Nook with no admin. With no `AdminGroup`
+set, create the first admin on the setup page.
 
 ### Authentik
 

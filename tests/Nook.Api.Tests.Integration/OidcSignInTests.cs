@@ -9,11 +9,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
+using Nook.Api.Features.Setup;
 
 namespace Nook.Api.Tests.Integration;
 
 /// <summary>Single sign-on through a real OpenID Connect provider, a Keycloak with the realm <c>nook</c>.</summary>
-public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak)
+public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, PostgresFixture postgres)
     : IClassFixture<NookApiFactory>, IClassFixture<KeycloakFixture>, IAsyncLifetime
 {
     private readonly Dictionary<(string? AdminGroup, string? MemberGroup), WebApplicationFactory<Program>> _apps = [];
@@ -42,7 +43,7 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak)
     [Fact]
     public async Task Single_sign_on_login_returns_to_sign_in_when_the_provider_cannot_be_reached()
     {
-        await using var app = CreateApp("https://localhost:1/", adminGroup: null, memberGroup: null);
+        await using var app = CreateApp(factory, "https://localhost:1/", adminGroup: null, memberGroup: null);
         using var client = CreateClient(app);
 
         var response = await client.GetAsync("/api/auth/oidc/login", TestContext.Current.CancellationToken);
@@ -211,6 +212,73 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak)
     }
 
     [Fact]
+    public async Task A_verified_email_does_not_link_to_a_user_another_provider_account_has()
+    {
+        var app = App();
+        var user = await app.CreateUserAsync(UserRole.Member, "ivy@sso.test");
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
+            var stored = await users.FindByIdAsync(user.Id.ToString());
+            var added = await users.AddLoginAsync(stored!, new UserLoginInfo(OidcSignIn.Scheme, "someone-else", OidcSignIn.Scheme));
+            Assert.True(added.Succeeded);
+        }
+
+        using var client = CreateClient(app);
+
+        var response = await keycloak.SignInAsync(client, "ivy");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/sign-in?error=sso-failed", response.Headers.Location?.OriginalString);
+        Assert.False(response.SetsSessionCookie());
+        Assert.Equal("someone-else", Assert.Single(await GetLoginsAsync(app, user.Id)).ProviderKey);
+    }
+
+    [Fact]
+    public async Task Someone_who_is_not_an_admin_cannot_be_the_first_user()
+    {
+        await using var nook = await CreateEmptyNookAsync(adminGroup: "nook-admins");
+        var app = nook.App;
+        using var client = CreateClient(app);
+
+        var response = await keycloak.SignInAsync(client, "zed");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/sign-in?error=sso-setup-required", response.Headers.Location?.OriginalString);
+        Assert.False(response.SetsSessionCookie());
+        Assert.Equal(0, await CountUsersAsync(app));
+        Assert.True((await client.GetAsync<SetupStatusResponse>("/api/setup")).Required);
+    }
+
+    [Fact]
+    public async Task Nobody_can_be_the_first_user_when_no_admin_group_is_named()
+    {
+        await using var nook = await CreateEmptyNookAsync(adminGroup: null);
+        var app = nook.App;
+        using var client = CreateClient(app);
+
+        // amy is in the provider's admin group, which this app does not name.
+        var response = await keycloak.SignInAsync(client, "amy");
+
+        Assert.Equal("/sign-in?error=sso-setup-required", response.Headers.Location?.OriginalString);
+        Assert.Equal(0, await CountUsersAsync(app));
+    }
+
+    [Fact]
+    public async Task An_admin_from_the_provider_groups_can_be_the_first_user()
+    {
+        await using var nook = await CreateEmptyNookAsync(adminGroup: "nook-admins");
+        var app = nook.App;
+        using var client = CreateClient(app);
+
+        var response = await keycloak.SignInAsync(client, "amy");
+
+        Assert.Equal("/", response.Headers.Location?.OriginalString);
+        Assert.Equal(UserRole.Admin, (await client.GetAsync<CurrentUserResponse>("/api/auth/me")).Role);
+        Assert.False((await client.GetAsync<SetupStatusResponse>("/api/setup")).Required);
+    }
+
+    [Fact]
     public async Task A_callback_the_provider_did_not_issue_returns_to_sign_in()
     {
         var app = App();
@@ -226,7 +294,17 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak)
         Assert.True(app.ReadLogs(LogLevel.Warning).Count > warnings, "No warning was logged.");
     }
 
-    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+    /// <summary>
+    /// Gives the class's database a user, so that it is past first-run setup and a test's single sign-on is not
+    /// the first user whichever test runs first.
+    /// </summary>
+    public async ValueTask InitializeAsync()
+    {
+        if (await CountUsersAsync(factory) == 0)
+        {
+            await factory.CreateUserAsync(UserRole.Admin);
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -241,15 +319,16 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak)
     {
         if (!_apps.TryGetValue((adminGroup, memberGroup), out var app))
         {
-            app = CreateApp(keycloak.Authority, adminGroup, memberGroup);
+            app = CreateApp(factory, keycloak.Authority, adminGroup, memberGroup);
             _apps[(adminGroup, memberGroup)] = app;
         }
 
         return app;
     }
 
-    private WebApplicationFactory<Program> CreateApp(string authority, string? adminGroup, string? memberGroup) =>
-        factory.WithWebHostBuilder(builder =>
+    private static WebApplicationFactory<Program> CreateApp(
+        NookApiFactory nook, string authority, string? adminGroup, string? memberGroup) =>
+        nook.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Nook:Oidc:Authority", authority);
             builder.UseSetting("Nook:Oidc:ClientId", "nook");
@@ -269,6 +348,24 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak)
             builder.ConfigureServices(services =>
                 services.Configure<OpenIdConnectOptions>(OidcSignIn.Scheme, options => options.RequireHttpsMetadata = false));
         });
+
+    /// <summary>A Nook with a database of its own that has no users, signing in through the Keycloak.</summary>
+    private async Task<EmptyNook> CreateEmptyNookAsync(string? adminGroup)
+    {
+        var empty = new NookApiFactory(postgres);
+        await empty.InitializeAsync();
+        return new EmptyNook(empty, CreateApp(empty, keycloak.Authority, adminGroup, memberGroup: null));
+    }
+
+    /// <summary>An app and the factory that holds its database, disposed together.</summary>
+    private sealed record EmptyNook(NookApiFactory Factory, WebApplicationFactory<Program> App) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await App.DisposeAsync();
+            await Factory.DisposeAsync();
+        }
+    }
 
     /// <summary>
     /// A client of Nook over https, so the handler's secure cookies are kept, that does not follow redirects,

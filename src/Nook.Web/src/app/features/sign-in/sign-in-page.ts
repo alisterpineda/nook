@@ -21,6 +21,8 @@ const singleSignOnFailures: Readonly<Record<string, string>> = {
   'sso-no-email': 'Your single sign-on account has no email address, and Nook needs one.',
   'sso-email-unverified':
     'A Nook account already uses this email address, and your single sign-on provider has not confirmed that the address is yours.',
+  'sso-setup-required':
+    'Nook has no admin yet. Set up Nook first, or use a single sign-on account that is an admin.',
 };
 
 /** Signs in with an email and password. */

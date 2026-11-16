@@ -25,7 +25,7 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
     /// <summary>Whether Nook still needs its first admin.</summary>
     [HttpGet]
     public async Task<SetupStatusResponse> GetStatus(CancellationToken cancellationToken) =>
-        new(!await db.Users.AnyAsync(cancellationToken));
+        new(await FirstRunSetup.IsRequiredAsync(db, cancellationToken));
 
     /// <summary>Creates the first admin and signs them in.</summary>
     [HttpPost]

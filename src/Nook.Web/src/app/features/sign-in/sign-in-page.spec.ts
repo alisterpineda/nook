@@ -226,6 +226,9 @@ describe('SignInPage after single sign-on', () => {
     expect(await alertsAt('/sign-in?error=sso-email-unverified')).toEqual([
       'A Nook account already uses this email address, and your single sign-on provider has not confirmed that the address is yours.',
     ]);
+    expect(await alertsAt('/sign-in?error=sso-setup-required')).toEqual([
+      'Nook has no admin yet. Set up Nook first, or use a single sign-on account that is an admin.',
+    ]);
   });
 
   it('shows no message for an error it does not know', async () => {

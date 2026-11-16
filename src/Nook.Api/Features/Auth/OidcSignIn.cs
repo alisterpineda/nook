@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Nook.Api.Data;
+using Nook.Api.Features.Setup;
 
 namespace Nook.Api.Features.Auth;
 
@@ -30,6 +31,9 @@ public sealed class OidcSignIn(
 
     /// <summary>A Nook user has the provider's email, and the provider has not confirmed the email is theirs.</summary>
     public const string EmailUnverified = "sso-email-unverified";
+
+    /// <summary>Nook has no users yet, and the person signing in would not be an admin.</summary>
+    public const string SetupRequired = "sso-setup-required";
 
     /// <summary>
     /// Finds the Nook user for the person the provider signed in, creating or linking one when needed, sets their
@@ -60,6 +64,13 @@ public sealed class OidcSignIn(
             user = await users.FindByNameAsync(email);
             if (user is null)
             {
+                // First-run setup closes for good once any user exists. Someone who is not an admin must not be
+                // the first user, or Nook would be left with no admin and no way to create one.
+                if (RoleFromGroups(principal, UserRole.Guest) != UserRole.Admin && await FirstRunSetup.IsRequiredAsync(db))
+                {
+                    return Fail(SetupRequired, "Nook has no users yet and the provider's groups do not make this person an admin");
+                }
+
                 user = new NookUser { UserName = email, Email = email, EmailConfirmed = emailVerified };
 
                 // The login is added before the user is created, so the one save that creates the user writes
@@ -84,6 +95,13 @@ public sealed class OidcSignIn(
                 if (!emailVerified)
                 {
                     return Fail(EmailUnverified, "a Nook user has the email and the provider has not verified it");
+                }
+
+                // Nook signs in through one provider, so a user who already has a login there is someone else's
+                // account, perhaps one created from this address before the provider had verified whose it is.
+                if ((await users.GetLoginsAsync(user)).Any(existing => existing.LoginProvider == Scheme))
+                {
+                    return Fail(Failed, "the Nook user who has the email is already linked to another provider account");
                 }
 
                 var linked = await users.AddLoginAsync(user, login);
