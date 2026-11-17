@@ -78,7 +78,7 @@ public sealed class ConcurrentIngestTests : IClassFixture<NookApiFactory>, IDisp
                 .WithDescription($"Edition {n}.")
                 .Build())
             .ToList();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var jobs = await IngestTogetherAsync(client, epubs, section);
 
@@ -109,7 +109,7 @@ public sealed class ConcurrentIngestTests : IClassFixture<NookApiFactory>, IDisp
                 .WithSubject($"Cyberpunk {suffix}")
                 .Build())
             .ToList();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var jobs = await IngestTogetherAsync(client, epubs, section);
 
@@ -128,7 +128,7 @@ public sealed class ConcurrentIngestTests : IClassFixture<NookApiFactory>, IDisp
         EpubBuilder Edition(int n) => new EpubBuilder().WithTitle("Spook Country").WithCreator($"William Gibson {suffix}")
             .WithIdentifier("9780399154300", scheme: "isbn")
             .WithDescription($"Edition {n}.");
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var first = await client.IngestAsync(Edition(0).Build(), "spook-country.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, first.Status);
 
@@ -156,7 +156,7 @@ public sealed class ConcurrentIngestTests : IClassFixture<NookApiFactory>, IDisp
     {
         var section = await _app.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("Zero History").WithCreator($"William Gibson {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
         var jobs = await IngestTogetherAsync(client, Enumerable.Repeat(epub, FileCount).ToList(), section);

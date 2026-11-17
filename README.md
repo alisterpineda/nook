@@ -129,7 +129,7 @@ and password. It works with one provider at a time and is off until `Nook:Oidc:A
 | `Nook:Oidc:ClientSecret` | `Nook__Oidc__ClientSecret` | none | The client secret Nook is registered with. Required once `Authority` is set. |
 | `Nook:Oidc:DisplayName` | `Nook__Oidc__DisplayName` | `SSO` | The provider's name on the sign-in page, as in "Sign in with SSO". |
 | `Nook:Oidc:AdminGroup` | `Nook__Oidc__AdminGroup` | none | The group whose members are admins. |
-| `Nook:Oidc:MemberGroup` | `Nook__Oidc__MemberGroup` | none | The group whose members are members. |
+| `Nook:Oidc:ContributorGroup` | `Nook__Oidc__ContributorGroup` | none | The group whose members are contributors. |
 | `Nook:Oidc:GroupsClaim` | `Nook__Oidc__GroupsClaim` | `groups` | The claim that lists the groups someone is in. |
 | `Nook:Oidc:Scopes` | `Nook__Oidc__Scopes` | `openid profile email` | The scopes Nook asks the provider for, separated by spaces. |
 
@@ -154,12 +154,12 @@ What the provider must send:
 
 ### Roles
 
-When `AdminGroup` or `MemberGroup` is set, every single sign-on sets the person's role from their groups: admin
-when they are in `AdminGroup`, otherwise member when they are in `MemberGroup`, otherwise guest. The configured
-name must equal a value of the groups claim exactly, including its case. A provider that sends group paths,
-such as `/admins`, does not match `admins`.
+When `AdminGroup` or `ContributorGroup` is set, every single sign-on sets the person's role from their groups:
+admin when they are in `AdminGroup`, otherwise contributor when they are in `ContributorGroup`, otherwise
+viewer. The configured name must equal a value of the groups claim exactly, including its case. A provider that
+sends group paths, such as `/admins`, does not match `admins`.
 
-When neither is set, everyone new is a guest, and single sign-on leaves the role of an existing account as it
+When neither is set, everyone new is a viewer, and single sign-on leaves the role of an existing account as it
 is.
 
 The rule also applies to an account that has a password. An admin who signs in through the provider without

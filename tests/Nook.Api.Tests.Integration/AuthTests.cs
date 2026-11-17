@@ -40,22 +40,22 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     [Fact]
     public async Task Login_with_the_right_password_signs_in()
     {
-        var user = await factory.CreateUserAsync(UserRole.Member);
+        var user = await factory.CreateUserAsync(BuiltInRole.Contributor);
         using var client = factory.CreateClient();
 
         var response = await client.LoginAsync(user.Email!, ApiTestExtensions.Password);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new CurrentUserResponse(user.Id, user.Email!, UserRole.Member), await response.ReadAsync<CurrentUserResponse>());
+        Assert.Equal(new CurrentUserResponse(user.Id, user.Email!, BuiltInRole.Contributor), await response.ReadAsync<CurrentUserResponse>());
         Assert.Equal(
-            new CurrentUserResponse(user.Id, user.Email!, UserRole.Member),
+            new CurrentUserResponse(user.Id, user.Email!, BuiltInRole.Contributor),
             await client.GetAsync<CurrentUserResponse>("/api/auth/me"));
     }
 
     [Fact]
     public async Task Role_travels_as_its_name_in_camel_case()
     {
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var body = await client.GetStringAsync("/api/auth/me", TestContext.Current.CancellationToken);
 
@@ -177,9 +177,9 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Theory]
-    [InlineData(UserRole.Admin)]
-    [InlineData(UserRole.Guest)]
-    public async Task A_user_carries_their_role_as_a_claim(UserRole role)
+    [InlineData(BuiltInRole.Admin)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task A_user_carries_their_role_as_a_claim(BuiltInRole role)
     {
         var user = await factory.CreateUserAsync(role);
         await using var scope = factory.Services.CreateAsyncScope();

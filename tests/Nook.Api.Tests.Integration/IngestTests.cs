@@ -29,7 +29,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithLanguage("en")
             .WithDate("2013-10-01")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "ancillary.epub", section.Id);
 
@@ -68,7 +68,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithDescription(
                 "<b>How it works&#8212;based on research.</b><BR>Researchers explain <i>Come as You Are</i>.<BR> <BR>The first lesson.")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "come-as-you-are.epub", section.Id);
 
@@ -92,7 +92,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithCalibreSeries("Hainish Cycle", "4")
             .WithSubject("Science Fiction")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "left-hand.epub", section.Id);
 
@@ -123,7 +123,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithIdentifier("0-441-47812-3", scheme: "isbn")
             .WithIdentifier("9780441478126", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "catcher.epub", section.Id);
 
@@ -146,7 +146,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithIdentifier("9d2c4e1a-3b5f-4a7c-8e9d-0a1b2c3d4e5f")
             .WithIdentifier("https://example.com/books/dune")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "dune.epub", section.Id);
 
@@ -168,7 +168,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var second = new EpubBuilder().WithTitle("Neuromancer (Reissue)").WithCreator(author)
             .WithIdentifier("978-0-441-56959-5", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var firstJob = await client.IngestAsync(first, "neuromancer.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, firstJob.Status);
 
@@ -194,7 +194,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var first = Edition("First edition.").Build();
         var second = Edition("Second edition.").Build();
         var third = Edition("Third edition.").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "count-zero.epub", section.Id)).Status);
 
         var secondJob = await client.IngestAsync(second, "count-zero-2.epub", section.Id);
@@ -226,7 +226,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle("Mona Lisa Overdrive").WithCreator($"William Gibson {IngestTestExtensions.UniqueSuffix()}")
             .WithIdentifier("9780553281743", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var first = await client.IngestAsync(epub, "mona-lisa.epub", one.Id);
         var second = await client.IngestAsync(epub, "mona-lisa.epub", other.Id);
@@ -268,7 +268,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithIdentifier("0-399-14986-4", scheme: "isbn")
             .WithIdentifier("67890", scheme: "goodreads")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "pattern.epub", section.Id)).Status);
         var before = await GetOnlyWorkAsync(client, section);
 
@@ -295,7 +295,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithIdentifier("9780425190456", scheme: "isbn")
             .WithCover(TestData.PngCover)
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "idoru.epub", section.Id)).Status);
         Assert.Null((await GetOnlyWorkAsync(client, section)).CoverHash);
 
@@ -324,7 +324,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithIdentifier("9780553566062", scheme: "isbn")
             .WithCover(otherCover, "cover.jpg", "image/jpeg")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "virtual-light.epub", section.Id)).Status);
 
         var job = await client.IngestAsync(second, "virtual-light-jpeg.epub", section.Id);
@@ -361,7 +361,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle("Solaris: A Novel").WithCreator("S. Lem")
             .WithIdentifier("0-15-602760-7", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "solaris.epub", section.Id);
 
@@ -387,7 +387,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithIdentifier("9780425276235", scheme: "isbn")
             .WithCover(otherCover)
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var firstJob = await client.IngestAsync(first, "peripheral.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, firstJob.Status);
 
@@ -432,7 +432,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var second = new EpubBuilder().WithTitle("Zero History").WithCreator(author)
             .WithIdentifier("0000000000", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "burning-chrome.epub", section.Id)).Status);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "zero-history.epub", section.Id)).Status);
@@ -451,7 +451,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var author = string.Concat(Enumerable.Repeat("Longname ", 16)) + "Smith.";
         Assert.Equal(150, author.Length);
         var epub = new EpubBuilder().WithTitle(title).WithCreator(author).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "illegal.epub", section.Id);
 
@@ -481,7 +481,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().Build();
         var title = $"mystery-book {IngestTestExtensions.UniqueSuffix()}";
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, $"{title}.epub", section.Id);
 
@@ -501,7 +501,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().Build();
         var title = $"stray-book {IngestTestExtensions.UniqueSuffix()}";
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, $"{folder}{title}.epub", section.Id);
 
@@ -520,7 +520,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithMeta("calibre:title_sort", "Left Hand of Darkness, The")
             .WithCreator(author, fileAs: "Le Guin, Ursula K.")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "left-hand.epub", section.Id);
 
@@ -542,7 +542,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithTitle("The Dispossessed")
             .WithCreator(author, role: "aut")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "dispossessed.epub", section.Id);
 
@@ -565,7 +565,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithCreator("Some Illustrator", role: "ill")
             .WithCreator(author, role: "aut")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "solaris.epub", section.Id);
 
@@ -590,7 +590,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var name = $"Pat Contributor {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder(version: 2).WithTitle("Roles").WithCreator(name, role: code).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "roles.epub", section.Id);
 
@@ -609,7 +609,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithCreator("Ed Itor", role: "edt")
             .WithCreator("Some Illustrator", role: "ill")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "anthology.epub", section.Id);
 
@@ -630,7 +630,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var second = new EpubBuilder().WithTitle("The Telling")
             .WithCreator($"ursula  k. le guin {suffix} ", fileAs: "le guin, ursula k.")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "word-for-world.epub", section.Id)).Status);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "telling.epub", section.Id)).Status);
@@ -651,7 +651,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var suffix = IngestTestExtensions.UniqueSuffix();
         var first = new EpubBuilder().WithTitle("Rocannon's World").WithCreator($"Ursula K. Le Guin {suffix}").Build();
         var second = new EpubBuilder().WithTitle("Planet of Exile").WithCreator($"ursula  k. le guin {suffix} ").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "rocannon.epub", section.Id)).Status);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "exile.epub", section.Id)).Status);
@@ -673,7 +673,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var second = new EpubBuilder(version: 3).WithTitle("Planet of Exile")
             .WithCollection($" HAINISH   cycle {suffix}", "2")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "rocannon.epub", section.Id)).Status);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "exile.epub", section.Id)).Status);
@@ -694,7 +694,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var suffix = IngestTestExtensions.UniqueSuffix();
         var first = new EpubBuilder().WithTitle("The Lathe of Heaven").WithSubject($"Science Fiction {suffix}").Build();
         var second = new EpubBuilder().WithTitle("City of Illusions").WithSubject($"science\tFICTION  {suffix}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "lathe.epub", section.Id)).Status);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "illusions.epub", section.Id)).Status);
@@ -714,7 +714,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var stored = new Person { Name = $"Ursula  K.  Le Guin {suffix}", SortName = "Le Guin, Ursula K." };
         await SaveAsync(stored);
         var epub = new EpubBuilder().WithTitle("The Telling").WithCreator($"ursula k. le guin {suffix}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "telling.epub", section.Id);
 
@@ -732,7 +732,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var name = $"İhsan Oktay Anar {suffix}";
         var first = new EpubBuilder().WithTitle("Puslu Kıtalar Atlası").WithCreator(name).Build();
         var second = new EpubBuilder().WithTitle("Kitab-ül Hiyel").WithCreator(NameKey.Of(name)).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(first, "atlas.epub", section.Id)).Status);
         Assert.Equal(JobStatus.Succeeded, (await client.IngestAsync(second, "hiyel.epub", section.Id)).Status);
@@ -750,7 +750,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var stored = new Series { Name = $"Hainish  Cycle  {suffix}" };
         await SaveAsync(stored);
         var epub = new EpubBuilder().WithTitle("The Telling").WithCalibreSeries($"hainish cycle {suffix}", "8").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "telling.epub", section.Id);
 
@@ -768,7 +768,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle("cover").WithCreator(author)
             .WithCover(TestData.PngCover, "x.epub", "image/png")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "cover.epub", section.Id);
 
@@ -789,7 +789,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var stored = new Tag { Name = $"Science  Fiction  {suffix}" };
         await SaveAsync(stored);
         var epub = new EpubBuilder().WithTitle("The Telling").WithSubject($"science fiction {suffix}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "telling.epub", section.Id);
 
@@ -809,7 +809,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithSubject($"space opera {suffix}")
             .WithSubject($"Utopia {suffix}")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "heron.epub", section.Id);
 
@@ -829,7 +829,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithCreator($"PAT  writer {suffix}", role: "aut")
             .WithCreator($"pat writer {suffix}", role: "trl")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "self-translated.epub", section.Id);
 
@@ -849,7 +849,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle("The Left Hand of Darkness").WithCreator(author).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = factory.CountStagedFiles();
 
         var job = await client.IngestAsync(epub, "upload.epub", section.Id);
@@ -867,7 +867,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle("The Lathe of Heaven").WithCreator(author).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "lathe.epub", section.Id);
 
@@ -887,7 +887,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
         var first = new EpubBuilder().WithTitle("The Telling").WithCreator(author).WithDescription("First.").Build();
         var second = new EpubBuilder().WithTitle("The Telling").WithCreator(author).WithDescription("Second.").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var firstJob = await client.IngestAsync(first, "telling.epub", one.Id);
         var secondJob = await client.IngestAsync(second, "telling.epub", other.Id);
@@ -917,7 +917,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(Path.Combine(folder, "Dawn.epub"), epub[..(epub.Length / 2)], cancellationToken);
         await File.WriteAllBytesAsync(Path.Combine(folder, "cover.png"), [1, 2, 3], cancellationToken);
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "dawn.epub", section.Id);
 
@@ -936,7 +936,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle("Kindred").WithCreator(author).WithCover(TestData.PngCover).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "kindred.epub", section.Id);
 
@@ -956,7 +956,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle("Bloodchild").WithCreator(author)
             .WithCover(TestData.PngCover)
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "bloodchild.epub", section.Id);
 
@@ -974,7 +974,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     {
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("Fledgling").WithCreator($"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "fledgling.epub", section.Id);
 
@@ -994,7 +994,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
             .WithCreator(author)
             .WithCover(new byte[21 * 1024 * 1024])
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "wild-seed.epub", section.Id);
 
@@ -1009,7 +1009,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     {
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("Parable of the Sower").WithCreator($"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "sower.epub", section.Id);
 
@@ -1025,7 +1025,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     {
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("The Dispossessed").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         // Read before the first upload: a succeeded job's staged file goes a moment after the job reads as succeeded,
         // so a count read between the two uploads could still hold the first one's.
@@ -1049,7 +1049,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     {
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("The Word for World Is Forest").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "word-for-world.epub", section.Id);
 
@@ -1063,7 +1063,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     {
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("Rocannon's World").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var first = await client.IngestAsync(epub, "rocannon.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, first.Status);
 
@@ -1080,7 +1080,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var one = await factory.AddSectionAsync();
         var other = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("The Lathe of Heaven").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var first = await client.IngestAsync(epub, "lathe.epub", one.Id);
         var second = await client.IngestAsync(epub, "lathe.epub", other.Id);
@@ -1099,7 +1099,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle($"Always Coming Home {suffix}").WithCreator($"Ursula K. Le Guin {suffix}")
             .WithIdentifier("9780765326355", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "always-coming-home.epub", sectionId: null);
 
@@ -1118,7 +1118,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle($"Four Ways to Forgiveness {suffix}").WithCreator($"Ursula K. Le Guin {suffix}")
             .WithIdentifier("9780547928227", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var first = await client.IngestAsync(epub, "four-ways.epub", sectionId: null);
         Assert.Equal(JobStatus.Succeeded, first.Status);
 
@@ -1139,7 +1139,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var epub = new EpubBuilder().WithTitle($"The Telling {suffix}").WithCreator($"Ursula K. Le Guin {suffix}")
             .WithIdentifier("9780061120084", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var inSection = await client.IngestAsync(epub, "telling.epub", section.Id);
         var inDefault = await client.IngestAsync(epub, "telling.epub", sectionId: null);
@@ -1163,7 +1163,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var second = new EpubBuilder().WithTitle($"Tehanu (Reissue) {suffix}").WithCreator(author)
             .WithIdentifier("9780143127741", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var firstJob = await client.IngestAsync(first, "tehanu.epub", sectionId: null);
         Assert.Equal(JobStatus.Succeeded, firstJob.Status);
 
@@ -1190,7 +1190,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var second = new EpubBuilder().WithTitle($"The Other Wind (Reissue) {suffix}").WithCreator(author)
             .WithIdentifier("9780307588364", scheme: "isbn")
             .Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var firstJob = await client.IngestAsync(first, "other-wind.epub", sectionId: null);
         Assert.Equal(JobStatus.Succeeded, firstJob.Status);
 
@@ -1230,7 +1230,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     public async Task Failed_ingest_keeps_its_staged_file_and_runs_again_when_retried()
     {
         var section = await factory.AddSectionAsync();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = factory.CountStagedFiles();
 
         var failed = await client.IngestAsync(TestData.NotABook, "notes.epub", section.Id);
@@ -1258,7 +1258,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     public async Task Deleting_a_failed_ingest_removes_the_job_its_steps_and_its_staged_file()
     {
         var section = await factory.AddSectionAsync();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = factory.CountStagedFiles();
         var failed = await client.IngestAsync(TestData.NotABook, "notes.epub", section.Id);
         Assert.Equal(JobStatus.Failed, failed.Status);
@@ -1281,7 +1281,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var section = await factory.AddSectionAsync();
         var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle("Fledgling").WithCreator(author).Build();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var job = await client.IngestAsync(epub, "fledgling.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, job.Status);
 
@@ -1297,7 +1297,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     private async Task AssertFailsAtMetadataAndCreatesNothingAsync(byte[] epub, string cause)
     {
         var section = await factory.AddSectionAsync();
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
         var filesBefore = ListLibraryFiles();
 
         var job = await client.IngestAsync(epub, "book.epub", section.Id);

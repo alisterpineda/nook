@@ -32,7 +32,7 @@ public class SetupTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
         var admin = await created.ReadAsync<CurrentUserResponse>();
         Assert.Equal("admin@example.test", admin.Email);
-        Assert.Equal(UserRole.Admin, admin.Role);
+        Assert.Equal(BuiltInRole.Admin, admin.Role);
 
         // Setup signs the new admin in.
         Assert.Equal(admin, await client.GetAsync<CurrentUserResponse>("/api/auth/me"));

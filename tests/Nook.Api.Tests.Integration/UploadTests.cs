@@ -30,7 +30,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Upload_of_a_file_that_is_not_an_epub_returns_a_job_that_fails_as_an_unsupported_format()
     {
         var section = await _app.AddSectionAsync();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.UploadAsync(TestData.NotABook, "notes.epub", section.Id);
 
@@ -49,7 +49,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Upload_without_a_section_id_is_accepted()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.UploadAsync(TestData.NotABook, "notes.epub", sectionId: null);
 
@@ -73,12 +73,12 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Theory]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Guest)]
-    public async Task Member_or_guest_is_forbidden_from_uploading(UserRole role)
+    [InlineData(BuiltInRole.Contributor)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task Contributor_or_viewer_is_forbidden_from_uploading(BuiltInRole role)
     {
         var section = await _app.AddSectionAsync();
-        using var admin = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var admin = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var jobsBefore = await admin.CountJobsAsync();
         var stagedBefore = _factory.CountStagedFiles();
         using var client = await _app.CreateSignedInClientAsync(role);
@@ -125,7 +125,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Upload_within_the_limit_is_accepted()
     {
         var section = await _app.AddSectionAsync();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.UploadAsync(new byte[500], "small.epub", section.Id);
 
@@ -141,7 +141,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     private async Task AssertRefusedAsync(
         Func<HttpClient, Task<HttpResponseMessage>> upload, HttpStatusCode status = HttpStatusCode.BadRequest)
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var jobsBefore = await client.CountJobsAsync();
         var stagedBefore = _factory.CountStagedFiles();
 

@@ -23,8 +23,8 @@ public sealed class OidcOptions
     /// <summary>The group whose members are admins. Unset, it matches nobody.</summary>
     public string? AdminGroup { get; set; }
 
-    /// <summary>The group whose members are members. Unset, it matches nobody.</summary>
-    public string? MemberGroup { get; set; }
+    /// <summary>The group whose members are contributors. Unset, it matches nobody.</summary>
+    public string? ContributorGroup { get; set; }
 
     /// <summary>The claim that lists the groups someone is in.</summary>
     public string GroupsClaim { get; set; } = "groups";

@@ -14,7 +14,7 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     {
         var zebra = await factory.AddSectionAsync("Zebra");
         var apple = await factory.AddSectionAsync("Apple");
-        using var client = await factory.CreateSignedInClientAsync(UserRole.Guest);
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Viewer);
 
         var sections = await client.GetAsync<List<SectionResponse>>("/api/sections");
 

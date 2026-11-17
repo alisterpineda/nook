@@ -12,7 +12,7 @@ namespace Nook.Api.Features.Uploads;
 /// <summary>Files sent in to be ingested into a section or the Default area.</summary>
 [ApiController]
 [Route("api/uploads")]
-[Authorize(Roles = nameof(UserRole.Admin))]
+[Authorize(Roles = nameof(BuiltInRole.Admin))]
 public class UploadsController(
     NookDbContext db, JobQueue queue, NookStorage storage, IOptions<UploadOptions> options) : ControllerBase
 {

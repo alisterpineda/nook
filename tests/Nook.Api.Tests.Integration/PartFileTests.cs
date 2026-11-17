@@ -28,9 +28,9 @@ public class PartFileTests(NookApiFactory factory) : IClassFixture<NookApiFactor
     }
 
     [Theory]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Guest)]
-    public async Task Member_and_guest_can_download_a_part(UserRole role)
+    [InlineData(BuiltInRole.Contributor)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task Contributor_and_viewer_can_download_a_part(BuiltInRole role)
     {
         var part = await factory.IngestOnePartAsync(new EpubBuilder().WithTitle("Kindred").WithCreator("Octavia E. Butler").Build());
         using var client = await factory.CreateSignedInClientAsync(role);

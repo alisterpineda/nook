@@ -349,10 +349,9 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("phone_number_confirmed");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("role");
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text")
@@ -380,6 +379,9 @@ namespace Nook.Api.Data.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_asp_net_users_role_id");
 
                     b.ToTable("asp_net_users", (string)null);
                 });
@@ -473,6 +475,103 @@ namespace Nook.Api.Data.Migrations
                         .HasDatabaseName("ix_people_name_key");
 
                     b.ToTable("people", (string)null);
+                });
+
+            modelBuilder.Entity("Nook.Api.Data.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AllSections")
+                        .HasColumnType("boolean")
+                        .HasColumnName("all_sections");
+
+                    b.Property<string>("BuiltIn")
+                        .HasColumnType("text")
+                        .HasColumnName("built_in");
+
+                    b.Property<bool>("CanUpload")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_upload");
+
+                    b.Property<string>("ContentAccess")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_access");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DefaultAreaAccess")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("default_area_access");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_roles");
+
+                    b.ToTable("roles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("01a1c7e7-8000-7000-8000-0000000000a1"),
+                            AllSections = true,
+                            BuiltIn = "Admin",
+                            CanUpload = true,
+                            ContentAccess = "Download",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            DefaultAreaAccess = "Download",
+                            Name = "Admin",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("01a1c7e7-8000-7000-8000-0000000000a2"),
+                            AllSections = true,
+                            BuiltIn = "Contributor",
+                            CanUpload = false,
+                            ContentAccess = "Download",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            DefaultAreaAccess = "Download",
+                            Name = "Contributor",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("01a1c7e7-8000-7000-8000-0000000000a3"),
+                            AllSections = true,
+                            BuiltIn = "Viewer",
+                            CanUpload = false,
+                            ContentAccess = "Download",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            DefaultAreaAccess = "Download",
+                            Name = "Viewer",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("01a1c7e7-8000-7000-8000-0000000000a4"),
+                            AllSections = false,
+                            BuiltIn = "Anonymous",
+                            CanUpload = false,
+                            ContentAccess = "None",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            DefaultAreaAccess = "None",
+                            Name = "Anonymous",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
                 });
 
             modelBuilder.Entity("Nook.Api.Data.Series", b =>
@@ -782,6 +881,16 @@ namespace Nook.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_job_steps_jobs_job_id");
+                });
+
+            modelBuilder.Entity("Nook.Api.Data.NookUser", b =>
+                {
+                    b.HasOne("Nook.Api.Data.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_users_roles_role_id");
                 });
 
             modelBuilder.Entity("Nook.Api.Data.Part", b =>

@@ -25,10 +25,10 @@ internal static class ApiTestExtensions
 
     /// <summary>Creates a user with <see cref="Password"/>, and a new email unless one is given.</summary>
     public static async Task<NookUser> CreateUserAsync(
-        this WebApplicationFactory<Program> factory, UserRole role = UserRole.Member, string? email = null)
+        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor, string? email = null)
     {
         email ??= $"{Guid.NewGuid():N}@example.test";
-        var user = new NookUser { UserName = email, Email = email, Role = role };
+        var user = new NookUser { UserName = email, Email = email, RoleId = Role.IdOf(role) };
 
         await using var scope = factory.Services.CreateAsyncScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
@@ -40,7 +40,7 @@ internal static class ApiTestExtensions
 
     /// <summary>A client that holds the session cookie of a new user.</summary>
     public static async Task<HttpClient> CreateSignedInClientAsync(
-        this WebApplicationFactory<Program> factory, UserRole role = UserRole.Member)
+        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor)
     {
         var user = await factory.CreateUserAsync(role);
         var client = factory.CreateClient();

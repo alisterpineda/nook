@@ -23,12 +23,12 @@ describe('route guards', () => {
   const mel: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000002',
     email: 'mel@example.com',
-    role: 'member',
+    role: 'contributor',
   };
   const gus: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000003',
     email: 'gus@example.com',
-    role: 'guest',
+    role: 'viewer',
   };
 
   let harness: RouterTestingHarness;
@@ -250,7 +250,7 @@ describe('route guards', () => {
     await vi.waitFor(() => expect(heading()).toBe('Add books'));
   });
 
-  it('adminGuard sends a member to the works list', async () => {
+  it('adminGuard sends a contributor to the works list', async () => {
     const navigating = harness.navigateByUrl('/upload');
     await answerSignedIn(mel);
     await answerSections();
@@ -260,7 +260,7 @@ describe('route guards', () => {
     expect(router.url).toBe('/library');
   });
 
-  it('adminGuard sends a guest to the works list', async () => {
+  it('adminGuard sends a viewer to the works list', async () => {
     const navigating = harness.navigateByUrl('/upload');
     await answerSignedIn(gus);
     await answerSections();

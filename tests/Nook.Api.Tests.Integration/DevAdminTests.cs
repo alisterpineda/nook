@@ -27,7 +27,7 @@ public class DevAdminTests(NookApiFactory factory) : IClassFixture<NookApiFactor
 
         var login = await client.LoginAsync(DevAdmin.Email, DevAdmin.Password);
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
-        Assert.Equal(UserRole.Admin, (await login.ReadAsync<CurrentUserResponse>()).Role);
+        Assert.Equal(BuiltInRole.Admin, (await login.ReadAsync<CurrentUserResponse>()).Role);
 
         Assert.Single(logger.Collector.GetSnapshot(), r =>
             r.Level == LogLevel.Information && r.Message.Contains(DevAdmin.Email) && r.Message.Contains(DevAdmin.Password));
@@ -47,7 +47,7 @@ public class DevAdminOnExistingInstallTests(NookApiFactory factory) : IClassFixt
     [Fact]
     public async Task An_install_that_is_already_set_up_gets_no_dev_admin()
     {
-        await factory.CreateUserAsync(UserRole.Admin);
+        await factory.CreateUserAsync(BuiltInRole.Admin);
 
         var logger = await factory.EnsureDevAdminAsync(TestContext.Current.CancellationToken);
 

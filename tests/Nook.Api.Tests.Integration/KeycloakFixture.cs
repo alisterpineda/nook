@@ -6,7 +6,7 @@ namespace Nook.Api.Tests.Integration;
 
 /// <summary>
 /// Starts a Keycloak with the realm <c>nook</c> from <c>Keycloak/nook-realm.json</c>: the client Nook signs in as,
-/// the groups <c>nook-admins</c> and <c>nook-members</c>, and the users the single sign-on tests sign in with.
+/// the groups <c>nook-admins</c> and <c>nook-contributors</c>, and the users the single sign-on tests sign in with.
 /// Use it as a class fixture, so Keycloak starts only for the classes that need it.
 /// </summary>
 public sealed partial class KeycloakFixture : IAsyncLifetime

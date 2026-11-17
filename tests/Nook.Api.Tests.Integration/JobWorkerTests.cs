@@ -36,7 +36,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_runs_its_steps_in_order_and_succeeds_with_its_result()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var id = await EnqueueAsync(RecordingJob.TypeName, "hello");
         var job = await client.WaitForJobAsync(id);
@@ -62,7 +62,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Step_that_throws_fails_the_job_with_its_error()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
 
         var id = await EnqueueAsync(FailingJob.TypeName, note);
@@ -82,7 +82,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_type_with_two_attempts_runs_twice_before_failing()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var id = await EnqueueAsync(FailingTwiceJob.TypeName, "twice");
         var job = await client.WaitForJobAsync(id);
@@ -103,7 +103,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Step_that_completes_the_job_early_skips_the_rest()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
 
         var id = await EnqueueAsync(EarlyExitJob.TypeName, note);
@@ -121,7 +121,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Succeeded_job_runs_its_success_hook_after_success_is_recorded()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
 
         var id = await EnqueueAsync(RecordingJob.TypeName, note);
@@ -136,7 +136,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Success_hook_runs_when_the_commit_that_recorded_success_lost_its_answer()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = $"{LostCommitAnswer} {Guid.NewGuid()}";
 
         var id = await EnqueueAsync(RecordingJob.TypeName, note);
@@ -152,7 +152,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Failed_job_does_not_run_its_success_hook()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
 
         var id = await EnqueueAsync(FailingJob.TypeName, note);
@@ -171,7 +171,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Success_hook_that_throws_leaves_the_job_succeeded()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var id = await EnqueueAsync(ThrowingSuccessHookJob.TypeName, "throws");
         await client.WaitForJobAsync(id);
@@ -191,7 +191,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_of_an_unknown_type_fails()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var id = await EnqueueAsync("no-such-type", "unknown");
         var job = await client.WaitForJobAsync(id);
@@ -206,7 +206,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_with_a_future_not_before_time_waits_until_then()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var notBefore = DateTimeOffset.UtcNow.AddSeconds(2);
 
         var id = await EnqueueAsync(RecordingJob.TypeName, new RecordingPayload("later"), notBefore);
@@ -227,7 +227,7 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
         Assert.Equal(1, options.WorkerCount);
         Assert.Equal(5, options.LeaseMinutes);
 
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var counter = _app.Services.GetRequiredService<JobCounter>();
         var keys = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid()).ToList();
         var ids = new List<Guid>();

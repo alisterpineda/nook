@@ -8,6 +8,8 @@ namespace Nook.Api.Data;
 public class NookDbContext(DbContextOptions<NookDbContext> options)
     : IdentityUserContext<NookUser, Guid>(options)
 {
+    public DbSet<Role> Roles => Set<Role>();
+
     public DbSet<LibrarySection> Sections => Set<LibrarySection>();
 
     public DbSet<Series> Series => Set<Series>();
@@ -45,6 +47,16 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
         builder.Entity<IdentityUserClaim<Guid>>().ToTable("asp_net_user_claims");
         builder.Entity<IdentityUserLogin<Guid>>().ToTable("asp_net_user_logins");
         builder.Entity<IdentityUserToken<Guid>>().ToTable("asp_net_user_tokens");
+
+        builder.Entity<Role>(role =>
+        {
+            role.ToTable("roles");
+            role.HasData(BuiltInRoles());
+        });
+
+        // A role that users still hold cannot be deleted.
+        builder.Entity<NookUser>()
+            .HasOne<Role>().WithMany().HasForeignKey(u => u.RoleId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<Work>(work =>
         {
@@ -131,5 +143,34 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
         {
             builder.Entity(entityType.ClrType).Property(nameof(Entity.Id)).ValueGeneratedNever();
         }
+    }
+
+    /// <summary>
+    /// The four built-in roles, under their fixed ids. Admin, contributor and viewer may do everything with every
+    /// work; only admin may upload. Anonymous, what a visitor with no account gets, starts with nothing.
+    /// </summary>
+    private static Role[] BuiltInRoles()
+    {
+        var seededAt = new DateTimeOffset(2026, 11, 16, 0, 0, 0, TimeSpan.Zero);
+        return
+        [
+            Seed(BuiltInRole.Admin, ContentAccess.Download, allSections: true, canUpload: true),
+            Seed(BuiltInRole.Contributor, ContentAccess.Download, allSections: true, canUpload: false),
+            Seed(BuiltInRole.Viewer, ContentAccess.Download, allSections: true, canUpload: false),
+            Seed(BuiltInRole.Anonymous, ContentAccess.None, allSections: false, canUpload: false),
+        ];
+
+        Role Seed(BuiltInRole builtIn, ContentAccess access, bool allSections, bool canUpload) => new()
+        {
+            Id = Role.IdOf(builtIn),
+            Name = builtIn.ToString(),
+            BuiltIn = builtIn,
+            ContentAccess = access,
+            DefaultAreaAccess = access,
+            AllSections = allSections,
+            CanUpload = canUpload,
+            CreatedAt = seededAt,
+            UpdatedAt = seededAt,
+        };
     }
 }

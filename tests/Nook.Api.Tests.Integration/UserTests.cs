@@ -18,18 +18,18 @@ public class UserTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Theory]
-    [InlineData(UserRole.Admin)]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Guest)]
-    public async Task Role_round_trips_for_each_value(UserRole role)
+    [InlineData(BuiltInRole.Admin)]
+    [InlineData(BuiltInRole.Contributor)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task Role_round_trips_for_each_value(BuiltInRole role)
     {
-        var user = await CreateUserAsync(new NookUser { UserName = $"role-{role}", Role = role });
+        var user = await CreateUserAsync(new NookUser { UserName = $"role-{role}", RoleId = Role.IdOf(role) });
 
         var saved = await FindAsync(user.Id);
-        var stored = await ReadRoleColumnAsync(user.Id);
+        var stored = await ReadRoleIdColumnAsync(user.Id);
 
-        Assert.Equal(role, saved.Role);
-        Assert.Equal(role.ToString(), stored);
+        Assert.Equal(Role.IdOf(role), saved.RoleId);
+        Assert.Equal(Role.IdOf(role), stored);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class UserTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
             var tracked = await users.FindByIdAsync(user.Id.ToString());
-            tracked!.Role = UserRole.Member;
+            tracked!.RoleId = Role.ContributorId;
             AssertSucceeded(await users.UpdateAsync(tracked));
         }
 
@@ -99,14 +99,14 @@ public class UserTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         return user;
     }
 
-    private async Task<string?> ReadRoleColumnAsync(Guid id)
+    private async Task<Guid?> ReadRoleIdColumnAsync(Guid id)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new NpgsqlConnection(factory.ConnectionString);
         await connection.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand("SELECT role FROM asp_net_users WHERE id = @id", connection);
+        await using var command = new NpgsqlCommand("SELECT role_id FROM asp_net_users WHERE id = @id", connection);
         command.Parameters.AddWithValue("id", id);
-        return (string?)await command.ExecuteScalarAsync(cancellationToken);
+        return (Guid?)await command.ExecuteScalarAsync(cancellationToken);
     }
 
     private static void AssertSucceeded(IdentityResult result) =>

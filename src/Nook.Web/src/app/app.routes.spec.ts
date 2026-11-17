@@ -30,14 +30,14 @@ type PageOfPersonSummaryResponse = components['schemas']['PageOfPersonSummaryRes
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type PersonDetailResponse = components['schemas']['PersonDetailResponse'];
 type UploadResponse = components['schemas']['UploadResponse'];
-type UserRole = components['schemas']['UserRole'];
+type BuiltInRole = components['schemas']['BuiltInRole'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 
 /** Who opens a page: signed in or not, with the role they hold when signed in, on an instance set up or not. */
 interface Visitor {
   signedIn: boolean;
   setupRequired: boolean;
-  role?: UserRole;
+  role?: BuiltInRole;
 }
 
 describe('routes', () => {
@@ -204,11 +204,11 @@ describe('routes', () => {
     ).toEqual({ landedOn: '/upload', shown: true });
   });
 
-  it('a member who opens /upload lands on the works list', async () => {
+  it('a contributor who opens /upload lands on the works list', async () => {
     expect(
       await open(
         '/upload',
-        { signedIn: true, setupRequired: false, role: 'member' },
+        { signedIn: true, setupRequired: false, role: 'contributor' },
         WorksListPage,
       ),
     ).toEqual({ landedOn: '/library', shown: true });

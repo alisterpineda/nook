@@ -47,7 +47,7 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
         var epub = new EpubBuilder().WithTitle($"Wild Seed {FailSave}").WithCreator(author)
             .WithCover(TestData.PngCover)
             .Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
         var job = await client.IngestAsync(epub, "wild-seed.epub", section.Id);
@@ -66,7 +66,7 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
         var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle($"Adulthood Rites {FailSaveClaimed}").WithCreator(author)
             .Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "adulthood-rites.epub", section.Id);
 
@@ -85,7 +85,7 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
         var epub = new EpubBuilder().WithTitle($"Mind of My Mind {FailCommit}").WithCreator(author)
             .WithCover(TestData.PngCover)
             .Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await client.IngestAsync(epub, "mind.epub", section.Id);
 
@@ -102,7 +102,7 @@ public sealed class IngestSaveFailureTests : IClassFixture<NookApiFactory>, IDis
         var author = $"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle($"Clay's Ark {FailCommitOnce}").WithCreator(author)
             .Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
         var job = await client.IngestAsync(epub, "clays-ark.epub", section.Id);

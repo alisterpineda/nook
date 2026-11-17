@@ -27,7 +27,7 @@ public sealed class JobLeaseTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Running_job_with_an_expired_lease_is_run_again()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var key = Guid.NewGuid();
 
         var id = await InsertJobOfADeadWorkerAsync(key, reclaimsMade: 0);
@@ -46,7 +46,7 @@ public sealed class JobLeaseTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_that_outlives_its_lease_is_not_reclaimed_while_its_worker_is_alive()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var counter = _app.Services.GetRequiredService<JobCounter>();
         var key = Guid.NewGuid();
         counter.Hold(key);
@@ -76,7 +76,7 @@ public sealed class JobLeaseTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_whose_lease_expires_a_fourth_time_fails_saying_its_worker_kept_dying()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var key = Guid.NewGuid();
 
         var id = await InsertJobOfADeadWorkerAsync(key, reclaimsMade: 3);
@@ -93,7 +93,7 @@ public sealed class JobLeaseTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Job_failed_for_a_dying_worker_can_be_retried()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var key = Guid.NewGuid();
         var id = await InsertJobOfADeadWorkerAsync(key, reclaimsMade: 3);
         var failed = await client.WaitForJobAsync(id);

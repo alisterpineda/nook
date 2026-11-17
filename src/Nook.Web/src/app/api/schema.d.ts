@@ -1186,12 +1186,14 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {unknown} */
+        BuiltInRole: "admin" | "contributor" | "viewer" | "anonymous";
+        /** @enum {unknown} */
         ContributorRole: "author" | "narrator" | "translator" | "editor";
         CurrentUserResponse: {
             /** Format: uuid */
             id: string;
             email: string;
-            role: components["schemas"]["UserRole"];
+            role: components["schemas"]["BuiltInRole"];
         };
         /** Format: binary */
         IFormFile: string;
@@ -1379,8 +1381,6 @@ export interface components {
             /** Format: uuid */
             jobId: string;
         };
-        /** @enum {unknown} */
-        UserRole: "admin" | "member" | "guest";
         ValidationProblemDetails: {
             type?: null | string;
             title?: null | string;

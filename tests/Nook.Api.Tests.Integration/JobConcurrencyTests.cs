@@ -23,7 +23,7 @@ public sealed class JobConcurrencyTests : IClassFixture<NookApiFactory>, IDispos
     [Fact]
     public async Task Several_workers_never_run_the_same_job()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var counter = _app.Services.GetRequiredService<JobCounter>();
         var keys = Enumerable.Range(0, 50).Select(_ => Guid.NewGuid()).ToList();
 
@@ -46,7 +46,7 @@ public sealed class JobConcurrencyTests : IClassFixture<NookApiFactory>, IDispos
     [Fact]
     public async Task A_higher_worker_count_runs_jobs_together()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var counter = _app.Services.GetRequiredService<JobCounter>();
         var keys = Enumerable.Range(0, WorkerCount).Select(_ => Guid.NewGuid()).ToList();
         var ids = new List<Guid>();

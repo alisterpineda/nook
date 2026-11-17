@@ -33,7 +33,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
         var section = await _app.AddSectionAsync();
         var author = $"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}";
         var epub = new EpubBuilder().WithTitle("The Word for World Is Forest").WithCreator(author).Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
         var id = await InsertIngestOfADeadWorkerAsync(epub, section, diedIn: "extract-metadata");
@@ -55,7 +55,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
     {
         var section = await _app.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("The Telling").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var stagedBefore = _factory.CountStagedFiles();
 
         // The same bytes ingested in full stand for what the dead run saved before it died.

@@ -28,9 +28,9 @@ public class CoverTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Theory]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Guest)]
-    public async Task Member_and_guest_can_fetch_a_cover(UserRole role)
+    [InlineData(BuiltInRole.Contributor)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task Contributor_and_viewer_can_fetch_a_cover(BuiltInRole role)
     {
         var work = await factory.IngestWithCoverAsync(TestImages.Png(80, 120));
         using var client = await factory.CreateSignedInClientAsync(role);

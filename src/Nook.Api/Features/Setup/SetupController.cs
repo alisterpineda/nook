@@ -36,7 +36,7 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> CreateFirstAdmin(SetupRequest request, CancellationToken cancellationToken)
     {
-        var user = new NookUser { UserName = request.Email, Email = request.Email, Role = UserRole.Admin };
+        var user = new NookUser { UserName = request.Email, Email = request.Email, RoleId = Role.AdminId };
 
         // The database is set to retry, so the transaction has to run inside its retry strategy.
         var result = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>

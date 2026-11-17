@@ -11,7 +11,7 @@ namespace Nook.Api.Features.Jobs;
 /// <summary>Background jobs, for admins to watch, retry and delete.</summary>
 [ApiController]
 [Route("api/jobs")]
-[Authorize(Roles = nameof(UserRole.Admin))]
+[Authorize(Roles = nameof(BuiltInRole.Admin))]
 public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry types) : ControllerBase
 {
     private static readonly Expression<Func<Job, JobSummaryResponse>> ToSummary = j => new JobSummaryResponse(

@@ -66,7 +66,7 @@ public sealed class OidcSignIn(
             {
                 // First-run setup closes for good once any user exists. Someone who is not an admin must not be
                 // the first user, or Nook would be left with no admin and no way to create one.
-                if (RoleFromGroups(principal, UserRole.Guest) != UserRole.Admin && await FirstRunSetup.IsRequiredAsync(db))
+                if (RoleFromGroups(principal, BuiltInRole.Viewer) != BuiltInRole.Admin && await FirstRunSetup.IsRequiredAsync(db))
                 {
                     return Fail(SetupRequired, "Nook has no users yet and the provider's groups do not make this person an admin");
                 }
@@ -78,7 +78,7 @@ public sealed class OidcSignIn(
                     UserName = email,
                     Email = email,
                     EmailConfirmed = emailVerified,
-                    Role = RoleFromGroups(principal, UserRole.Guest),
+                    RoleId = Role.IdOf(RoleFromGroups(principal, BuiltInRole.Viewer)),
                 };
 
                 // The login is added before the user is created, so the one save that creates the user writes
@@ -120,10 +120,10 @@ public sealed class OidcSignIn(
             }
         }
 
-        var role = RoleFromGroups(principal, user.Role);
-        if (role != user.Role)
+        var roleId = Role.IdOf(RoleFromGroups(principal, user.BuiltInRoleOrViewer));
+        if (roleId != user.RoleId)
         {
-            user.Role = role;
+            user.RoleId = roleId;
             var updated = await users.UpdateAsync(user);
             if (!updated.Succeeded)
             {
@@ -136,13 +136,13 @@ public sealed class OidcSignIn(
     }
 
     /// <summary>
-    /// The role the provider's groups give: admin in the admin group, otherwise member in the member group,
-    /// otherwise guest. With neither group named, the role stays as it is.
+    /// The role the provider's groups give: admin in the admin group, otherwise contributor in the contributor group,
+    /// otherwise viewer. With neither group named, the role stays as it is.
     /// </summary>
-    private UserRole RoleFromGroups(ClaimsPrincipal principal, UserRole current)
+    private BuiltInRole RoleFromGroups(ClaimsPrincipal principal, BuiltInRole current)
     {
         var settings = options.Value;
-        if (string.IsNullOrEmpty(settings.AdminGroup) && string.IsNullOrEmpty(settings.MemberGroup))
+        if (string.IsNullOrEmpty(settings.AdminGroup) && string.IsNullOrEmpty(settings.ContributorGroup))
         {
             return current;
         }
@@ -150,15 +150,15 @@ public sealed class OidcSignIn(
         var groups = principal.FindAll(settings.GroupsClaim).Select(claim => claim.Value).ToHashSet(StringComparer.Ordinal);
         if (!string.IsNullOrEmpty(settings.AdminGroup) && groups.Contains(settings.AdminGroup))
         {
-            return UserRole.Admin;
+            return BuiltInRole.Admin;
         }
 
-        if (!string.IsNullOrEmpty(settings.MemberGroup) && groups.Contains(settings.MemberGroup))
+        if (!string.IsNullOrEmpty(settings.ContributorGroup) && groups.Contains(settings.ContributorGroup))
         {
-            return UserRole.Member;
+            return BuiltInRole.Contributor;
         }
 
-        return UserRole.Guest;
+        return BuiltInRole.Viewer;
     }
 
     private string Fail(string code, string reason, IdentityResult? result = null)

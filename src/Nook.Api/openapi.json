@@ -1478,6 +1478,14 @@
   },
   "components": {
     "schemas": {
+      "BuiltInRole": {
+        "enum": [
+          "admin",
+          "contributor",
+          "viewer",
+          "anonymous"
+        ]
+      },
       "ContributorRole": {
         "enum": [
           "author",
@@ -1502,7 +1510,7 @@
             "type": "string"
           },
           "role": {
-            "$ref": "#/components/schemas/UserRole"
+            "$ref": "#/components/schemas/BuiltInRole"
           }
         }
       },
@@ -2196,13 +2204,6 @@
             "format": "uuid"
           }
         }
-      },
-      "UserRole": {
-        "enum": [
-          "admin",
-          "member",
-          "guest"
-        ]
       },
       "ValidationProblemDetails": {
         "type": "object",

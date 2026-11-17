@@ -49,8 +49,8 @@
       "path": "/nook-admins"
     },
     {
-      "name": "nook-members",
-      "path": "/nook-members"
+      "name": "nook-contributors",
+      "path": "/nook-contributors"
     }
   ],
   "users": [
@@ -87,7 +87,7 @@
         }
       ],
       "groups": [
-        "/nook-members"
+        "/nook-contributors"
       ]
     },
     {
@@ -106,7 +106,7 @@
       ],
       "groups": [
         "/nook-admins",
-        "/nook-members"
+        "/nook-contributors"
       ]
     },
     {
@@ -253,7 +253,25 @@
         }
       ],
       "groups": [
-        "/nook-members"
+        "/nook-contributors"
+      ]
+    },
+    {
+      "username": "cora",
+      "enabled": true,
+      "firstName": "Cora",
+      "lastName": "Contributor",
+      "email": "cora@sso.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nook-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/nook-contributors"
       ]
     },
     {

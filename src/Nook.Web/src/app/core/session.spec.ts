@@ -51,8 +51,8 @@ describe('Session', () => {
 
     for (const [role, admin] of [
       ['admin', true],
-      ['member', false],
-      ['guest', false],
+      ['contributor', false],
+      ['viewer', false],
     ] as const) {
       const loading = session.load();
       httpTesting.expectOne('/api/auth/me').flush({ ...ada, role });

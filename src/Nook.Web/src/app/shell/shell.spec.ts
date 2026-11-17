@@ -43,12 +43,12 @@ describe('Shell', () => {
   const grace: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000002',
     email: 'grace@example.com',
-    role: 'member',
+    role: 'contributor',
   };
-  const guest: CurrentUserResponse = {
+  const viewer: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000003',
-    email: 'guest@example.com',
-    role: 'guest',
+    email: 'viewer@example.com',
+    role: 'viewer',
   };
   const books: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
   const comics: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000b', name: 'Comics' };
@@ -303,7 +303,7 @@ describe('Shell', () => {
     expect(addBooks(shell)?.getAttribute('href')).toBe('/upload');
   });
 
-  it('a member sees no Add books', async () => {
+  it('a contributor sees no Add books', async () => {
     await signInAs(grace);
     const shell = await openShell('/library');
 
@@ -311,8 +311,8 @@ describe('Shell', () => {
     expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
   });
 
-  it('a guest sees no Add books', async () => {
-    await signInAs(guest);
+  it('a viewer sees no Add books', async () => {
+    await signInAs(viewer);
     const shell = await openShell('/library');
 
     expect(addBooks(shell)).toBeUndefined();
@@ -359,8 +359,8 @@ describe('Shell', () => {
     ).toEqual([['Authors', '/authors']]);
   });
 
-  it('a guest sees Authors', async () => {
-    await signInAs(guest);
+  it('a viewer sees Authors', async () => {
+    await signInAs(viewer);
     const shell = await openShell('/library');
 
     expect(groupLinks(shell, 'Browse').map((link) => link.textContent?.trim())).toEqual([

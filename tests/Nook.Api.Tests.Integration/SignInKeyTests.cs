@@ -9,7 +9,7 @@ public class SignInKeyTests(NookApiFactory factory) : IClassFixture<NookApiFacto
     [Fact]
     public async Task A_sign_in_is_still_accepted_after_the_api_restarts_over_the_same_data_folder()
     {
-        var user = await factory.CreateUserAsync(UserRole.Member);
+        var user = await factory.CreateUserAsync(BuiltInRole.Contributor);
         using var client = factory.CreateClient();
         var login = await client.LoginAsync(user.Email!, ApiTestExtensions.Password);
         login.EnsureSuccessStatusCode();

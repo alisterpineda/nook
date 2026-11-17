@@ -12,7 +12,7 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 
     private static readonly string[] NookTables =
     [
-        "asp_net_users", "sections", "works", "items", "parts", "people", "work_contributors", "series", "tags",
+        "asp_net_users", "roles", "sections", "works", "items", "parts", "people", "work_contributors", "series", "tags",
         "work_external_ids", "jobs", "job_steps",
     ];
 
@@ -30,7 +30,7 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         string[] expected = [.. NookTables, .. IdentityChildTables, "work_tags", "__EFMigrationsHistory"];
         Assert.Equal(expected.Order(), tables.Order());
         Assert.DoesNotContain(tables, t =>
-            t.Contains("role") || t.Contains("grant") || t.Contains("progress") || t.Contains("state") || t.Contains("shel"));
+            t.Contains("grant") || t.Contains("progress") || t.Contains("state") || t.Contains("shel"));
     }
 
     [Fact]

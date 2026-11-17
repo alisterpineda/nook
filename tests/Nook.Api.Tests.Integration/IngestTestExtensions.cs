@@ -59,7 +59,7 @@ internal static class IngestTestExtensions
         this NookApiFactory factory, byte[] epub, LibrarySection? section = null, string fileName = "book.epub")
     {
         section ??= await factory.AddSectionAsync();
-        using var admin = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var admin = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await admin.IngestAsync(epub, fileName, section.Id);
         Assert.Equal(JobStatus.Succeeded, job.Status);

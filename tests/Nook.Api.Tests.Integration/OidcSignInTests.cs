@@ -17,7 +17,7 @@ namespace Nook.Api.Tests.Integration;
 public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, PostgresFixture postgres)
     : IClassFixture<NookApiFactory>, IClassFixture<KeycloakFixture>, IAsyncLifetime
 {
-    private readonly Dictionary<(string? AdminGroup, string? MemberGroup), WebApplicationFactory<Program>> _apps = [];
+    private readonly Dictionary<(string? AdminGroup, string? ContributorGroup), WebApplicationFactory<Program>> _apps = [];
 
     [Fact]
     public async Task Single_sign_on_login_redirects_to_the_provider_with_a_code_request()
@@ -43,7 +43,7 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     [Fact]
     public async Task Single_sign_on_login_returns_to_sign_in_when_the_provider_cannot_be_reached()
     {
-        await using var app = CreateApp(factory, "https://localhost:1/", adminGroup: null, memberGroup: null);
+        await using var app = CreateApp(factory, "https://localhost:1/", adminGroup: null, contributorGroup: null);
         using var client = CreateClient(app);
 
         var response = await client.GetAsync("/api/auth/oidc/login", TestContext.Current.CancellationToken);
@@ -121,44 +121,55 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     [Fact]
     public async Task Role_comes_from_the_provider_groups()
     {
-        var app = App(adminGroup: "nook-admins", memberGroup: "nook-members");
+        var app = App(adminGroup: "nook-admins", contributorGroup: "nook-contributors");
 
-        Assert.Equal(UserRole.Admin, (await SignInAsync(app, "ada")).Role);
-        Assert.Equal(UserRole.Member, (await SignInAsync(app, "mel")).Role);
-        Assert.Equal(UserRole.Admin, (await SignInAsync(app, "bo")).Role);
-        Assert.Equal(UserRole.Guest, (await SignInAsync(app, "gus")).Role);
+        Assert.Equal(BuiltInRole.Admin, (await SignInAsync(app, "ada")).Role);
+        Assert.Equal(BuiltInRole.Contributor, (await SignInAsync(app, "mel")).Role);
+        Assert.Equal(BuiltInRole.Admin, (await SignInAsync(app, "bo")).Role);
+        Assert.Equal(BuiltInRole.Viewer, (await SignInAsync(app, "gus")).Role);
     }
 
     [Fact]
     public async Task Role_is_set_again_on_the_next_single_sign_on()
     {
-        var first = await SignInAsync(App(adminGroup: "nook-admins", memberGroup: "nook-members"), "rae");
-        Assert.Equal(UserRole.Admin, first.Role);
+        var first = await SignInAsync(App(adminGroup: "nook-admins", contributorGroup: "nook-contributors"), "rae");
+        Assert.Equal(BuiltInRole.Admin, first.Role);
 
-        var next = await SignInAsync(App(adminGroup: "nobody", memberGroup: "nook-admins"), "rae");
+        var next = await SignInAsync(App(adminGroup: "nobody", contributorGroup: "nook-admins"), "rae");
 
         Assert.Equal(first.Id, next.Id);
-        Assert.Equal(UserRole.Member, next.Role);
+        Assert.Equal(BuiltInRole.Contributor, next.Role);
     }
 
     [Fact]
-    public async Task A_new_user_is_a_guest_when_no_group_is_named()
+    public async Task A_new_user_is_a_viewer_when_no_group_is_named()
     {
         var me = await SignInAsync(App(), "nia");
 
-        Assert.Equal(UserRole.Guest, me.Role);
+        Assert.Equal(BuiltInRole.Viewer, me.Role);
+    }
+
+    [Fact]
+    public async Task The_member_group_setting_is_ignored()
+    {
+        await using var app = CreateApp(factory, keycloak.Authority, adminGroup: null, contributorGroup: null)
+            .WithWebHostBuilder(builder => builder.UseSetting("Nook:Oidc:MemberGroup", "nook-contributors"));
+
+        var me = await SignInAsync(app, "cora");
+
+        Assert.Equal(BuiltInRole.Viewer, me.Role);
     }
 
     [Fact]
     public async Task A_verified_email_links_to_the_user_who_has_it()
     {
-        var app = App(adminGroup: "nook-admins", memberGroup: "nook-members");
-        var user = await app.CreateUserAsync(UserRole.Admin, "lin@sso.test");
+        var app = App(adminGroup: "nook-admins", contributorGroup: "nook-contributors");
+        var user = await app.CreateUserAsync(BuiltInRole.Admin, "lin@sso.test");
 
         var me = await SignInAsync(app, "lin");
 
         Assert.Equal(user.Id, me.Id);
-        Assert.Equal(UserRole.Member, me.Role);
+        Assert.Equal(BuiltInRole.Contributor, me.Role);
         using var passwordClient = CreateClient(app);
         var login = await passwordClient.LoginAsync("lin@sso.test", ApiTestExtensions.Password);
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
@@ -171,19 +182,19 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     public async Task An_existing_role_is_kept_when_no_group_is_named()
     {
         var app = App();
-        var user = await app.CreateUserAsync(UserRole.Member, "kit@sso.test");
+        var user = await app.CreateUserAsync(BuiltInRole.Contributor, "kit@sso.test");
 
         var me = await SignInAsync(app, "kit");
 
         Assert.Equal(user.Id, me.Id);
-        Assert.Equal(UserRole.Member, me.Role);
+        Assert.Equal(BuiltInRole.Contributor, me.Role);
     }
 
     [Fact]
     public async Task An_unverified_email_does_not_link()
     {
         var app = App();
-        var user = await app.CreateUserAsync(UserRole.Member, "uma@sso.test");
+        var user = await app.CreateUserAsync(BuiltInRole.Contributor, "uma@sso.test");
         using var client = CreateClient(app);
 
         var response = await keycloak.SignInAsync(client, "uma");
@@ -215,7 +226,7 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     public async Task A_verified_email_does_not_link_to_a_user_another_provider_account_has()
     {
         var app = App();
-        var user = await app.CreateUserAsync(UserRole.Member, "ivy@sso.test");
+        var user = await app.CreateUserAsync(BuiltInRole.Contributor, "ivy@sso.test");
         await using (var scope = app.Services.CreateAsyncScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
@@ -274,7 +285,7 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
         var response = await keycloak.SignInAsync(client, "amy");
 
         Assert.Equal("/", response.Headers.Location?.OriginalString);
-        Assert.Equal(UserRole.Admin, (await client.GetAsync<CurrentUserResponse>("/api/auth/me")).Role);
+        Assert.Equal(BuiltInRole.Admin, (await client.GetAsync<CurrentUserResponse>("/api/auth/me")).Role);
         Assert.False((await client.GetAsync<SetupStatusResponse>("/api/setup")).Required);
     }
 
@@ -302,7 +313,7 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     {
         if (await CountUsersAsync(factory) == 0)
         {
-            await factory.CreateUserAsync(UserRole.Admin);
+            await factory.CreateUserAsync(BuiltInRole.Admin);
         }
     }
 
@@ -315,19 +326,19 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     }
 
     /// <summary>A Nook that signs in through the Keycloak, kept for the class and shared by tests that name the same groups.</summary>
-    private WebApplicationFactory<Program> App(string? adminGroup = null, string? memberGroup = null)
+    private WebApplicationFactory<Program> App(string? adminGroup = null, string? contributorGroup = null)
     {
-        if (!_apps.TryGetValue((adminGroup, memberGroup), out var app))
+        if (!_apps.TryGetValue((adminGroup, contributorGroup), out var app))
         {
-            app = CreateApp(factory, keycloak.Authority, adminGroup, memberGroup);
-            _apps[(adminGroup, memberGroup)] = app;
+            app = CreateApp(factory, keycloak.Authority, adminGroup, contributorGroup);
+            _apps[(adminGroup, contributorGroup)] = app;
         }
 
         return app;
     }
 
     private static WebApplicationFactory<Program> CreateApp(
-        NookApiFactory nook, string authority, string? adminGroup, string? memberGroup) =>
+        NookApiFactory nook, string authority, string? adminGroup, string? contributorGroup) =>
         nook.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Nook:Oidc:Authority", authority);
@@ -338,9 +349,9 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
                 builder.UseSetting("Nook:Oidc:AdminGroup", adminGroup);
             }
 
-            if (memberGroup is not null)
+            if (contributorGroup is not null)
             {
-                builder.UseSetting("Nook:Oidc:MemberGroup", memberGroup);
+                builder.UseSetting("Nook:Oidc:ContributorGroup", contributorGroup);
             }
 
             // Keycloak answers over plain http. The https check runs in the handler's own post-configure step,
@@ -354,7 +365,7 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     {
         var empty = new NookApiFactory(postgres);
         await empty.InitializeAsync();
-        return new EmptyNook(empty, CreateApp(empty, keycloak.Authority, adminGroup, memberGroup: null));
+        return new EmptyNook(empty, CreateApp(empty, keycloak.Authority, adminGroup, contributorGroup: null));
     }
 
     /// <summary>An app and the factory that holds its database, disposed together.</summary>

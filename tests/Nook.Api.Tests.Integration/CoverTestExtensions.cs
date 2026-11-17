@@ -18,7 +18,7 @@ internal static class CoverTestExtensions
         var epub = new EpubBuilder().WithTitle("Kindred").WithCreator("Octavia E. Butler")
             .WithCover(cover, fileName, mediaType)
             .Build();
-        using var admin = await factory.CreateSignedInClientAsync(UserRole.Admin);
+        using var admin = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var job = await admin.IngestAsync(epub, "kindred.epub", section.Id);
         Assert.Equal(JobStatus.Succeeded, job.Status);

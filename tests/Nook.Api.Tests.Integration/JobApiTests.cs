@@ -28,7 +28,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     {
         var parent = await EnqueueAsync("parent", notBefore: Never);
         var child = await EnqueueAsync("child", parent, Never);
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var detail = await client.GetAsync<JobDetailResponse>($"/api/jobs/{parent}");
 
@@ -49,7 +49,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Jobs_list_comes_newest_first_in_pages()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var before = await client.CountJobsAsync();
         var first = await EnqueueAsync("first");
         var second = await EnqueueAsync("second");
@@ -73,7 +73,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [InlineData("offset=-1")]
     public async Task Jobs_list_rejects_a_bad_query(string query)
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.GetAsync($"/api/jobs?{query}", TestContext.Current.CancellationToken);
 
@@ -99,7 +99,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
                 new JobStep { JobId = id, Name = "first", Order = 0, Attempt = 1, Status = JobStepStatus.Failed, Error = "boom", StartedAt = startedAt, FinishedAt = startedAt.AddMinutes(1) });
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var detail = await client.GetAsync<JobDetailResponse>($"/api/jobs/{id}");
 
@@ -124,7 +124,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Job_enqueued_with_a_not_before_time_shows_it()
     {
         var id = await EnqueueAsync("later", notBefore: Never);
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var detail = await client.GetAsync<JobDetailResponse>($"/api/jobs/{id}");
 
@@ -137,7 +137,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Job_of_an_unregistered_type_is_enqueued_with_one_attempt()
     {
         var id = await _app.EnqueueJobAsync("no-such-type", new { }, notBefore: Never);
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var detail = await client.GetAsync<JobDetailResponse>($"/api/jobs/{id}");
 
@@ -149,7 +149,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Unknown_job_is_not_found()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.GetAsync($"/api/jobs/{Guid.CreateVersion7()}", TestContext.Current.CancellationToken);
 
@@ -158,11 +158,11 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Theory]
-    [InlineData(UserRole.Member, false)]
-    [InlineData(UserRole.Member, true)]
-    [InlineData(UserRole.Guest, false)]
-    [InlineData(UserRole.Guest, true)]
-    public async Task Member_or_guest_is_forbidden_from_reading_jobs(UserRole role, bool oneJob)
+    [InlineData(BuiltInRole.Contributor, false)]
+    [InlineData(BuiltInRole.Contributor, true)]
+    [InlineData(BuiltInRole.Viewer, false)]
+    [InlineData(BuiltInRole.Viewer, true)]
+    public async Task Contributor_or_viewer_is_forbidden_from_reading_jobs(BuiltInRole role, bool oneJob)
     {
         var id = await EnqueueAsync("hidden");
         using var client = await _app.CreateSignedInClientAsync(role);
@@ -177,7 +177,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     {
         var secret = $"/srv/nook/staging/{Guid.NewGuid():N}";
         var id = await EnqueueAsync(secret);
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var detail = await client.GetStringAsync($"/api/jobs/{id}", TestContext.Current.CancellationToken);
         var list = await client.GetStringAsync("/api/jobs?limit=200", TestContext.Current.CancellationToken);
@@ -192,7 +192,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Retrying_a_failed_job_runs_it_again_from_its_first_step()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var id = await EnqueueAsync(Guid.NewGuid().ToString(), type: FlakyJob.TypeName);
         var failed = await client.WaitForJobAsync(id);
         Assert.Equal(JobStatus.Failed, failed.Status);
@@ -226,7 +226,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [InlineData(JobStatus.Succeeded)]
     public async Task Retrying_a_job_that_is_not_failed_is_refused(JobStatus status)
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var id = await EnqueueAsync("not failed", notBefore: status == JobStatus.Pending ? Never : null);
         var before = status == JobStatus.Pending
             ? await client.GetAsync<JobDetailResponse>($"/api/jobs/{id}")
@@ -246,7 +246,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Retrying_an_unknown_job_is_not_found()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.RetryJobAsync(Guid.CreateVersion7());
 
@@ -255,11 +255,11 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Theory]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Guest)]
-    public async Task Member_or_guest_is_forbidden_from_retrying(UserRole role)
+    [InlineData(BuiltInRole.Contributor)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task Contributor_or_viewer_is_forbidden_from_retrying(BuiltInRole role)
     {
-        using var admin = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var admin = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var id = await EnqueueAsync(Guid.NewGuid().ToString(), type: FailingJob.TypeName);
         Assert.Equal(JobStatus.Failed, (await admin.WaitForJobAsync(id)).Status);
         using var client = await _app.CreateSignedInClientAsync(role);
@@ -274,7 +274,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Deleting_a_finished_job_removes_it_and_its_steps_and_runs_its_cleanup()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
         var id = await EnqueueAsync(note);
         var finished = await client.WaitForJobAsync(id);
@@ -293,7 +293,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Deleting_a_pending_job_removes_it()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
         var id = await EnqueueAsync(note, notBefore: Never);
 
@@ -308,7 +308,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Deleting_a_job_of_an_unregistered_type_removes_it()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var id = await EnqueueAsync(Guid.NewGuid().ToString(), notBefore: Never, type: "no-such-type");
 
         var response = await client.DeleteJobAsync(id);
@@ -320,7 +320,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Deleting_a_running_job_is_refused()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var counter = _app.Services.GetRequiredService<JobCounter>();
         var key = Guid.NewGuid();
         counter.Hold(key);
@@ -349,7 +349,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Deleting_a_job_with_children_is_refused()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var note = Guid.NewGuid().ToString();
         var parent = await EnqueueAsync(note, notBefore: Never);
         var child = await EnqueueAsync(Guid.NewGuid().ToString(), parent, Never);
@@ -366,7 +366,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Deleting_an_unknown_job_is_not_found()
     {
-        using var client = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
 
         var response = await client.DeleteJobAsync(Guid.CreateVersion7());
 
@@ -375,9 +375,9 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Theory]
-    [InlineData(UserRole.Member)]
-    [InlineData(UserRole.Guest)]
-    public async Task Member_or_guest_is_forbidden_from_deleting(UserRole role)
+    [InlineData(BuiltInRole.Contributor)]
+    [InlineData(BuiltInRole.Viewer)]
+    public async Task Contributor_or_viewer_is_forbidden_from_deleting(BuiltInRole role)
     {
         var note = Guid.NewGuid().ToString();
         var id = await EnqueueAsync(note, notBefore: Never);
@@ -386,7 +386,7 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
         var response = await client.DeleteJobAsync(id);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using var admin = await _app.CreateSignedInClientAsync(UserRole.Admin);
+        using var admin = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         Assert.Equal(HttpStatusCode.OK, await GetStatusCodeAsync(admin, id));
         Assert.DoesNotContain(note, Recorder.Cleanups);
     }
