@@ -24,6 +24,9 @@ var builder = WebApplication.CreateBuilder(args);
 // no jobs to run and no data folder.
 var buildingOpenApiDocument = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
 
+// Settings can also come from nook.json in the data root. It is added first, so everything below reads it.
+var settingsFile = buildingOpenApiDocument ? null : builder.Configuration.AddSettingsFile();
+
 builder.AddServiceDefaults();
 
 // One clock for the whole app: the timestamps on saved rows and the times the job worker writes and compares.
@@ -98,7 +101,13 @@ if (!buildingOpenApiDocument)
 {
     // Checked before migrating, so a missing data root or a folder Nook cannot write to stops the API before it
     // touches the database.
-    app.Services.GetRequiredService<NookStorage>().PrepareFolders(app.Services.GetRequiredService<ILogger<NookStorage>>());
+    var storageLogger = app.Services.GetRequiredService<ILogger<NookStorage>>();
+    if (settingsFile is not null)
+    {
+        SettingsFile.LogSettingsFile(storageLogger, settingsFile);
+    }
+
+    app.Services.GetRequiredService<NookStorage>().PrepareFolders(storageLogger);
 
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();

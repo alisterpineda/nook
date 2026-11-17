@@ -7,6 +7,9 @@ public sealed class StorageOptions
 {
     public const string Section = "Nook";
 
+    /// <summary>The full name of the setting that holds the data root.</summary>
+    public const string DataPathSetting = $"{Section}:{nameof(DataPath)}";
+
     /// <summary>The folder that holds everything Nook keeps on disk: the files waiting to be ingested, the app's secrets, and the library and the cache when they have no folders of their own.</summary>
     [Required(ErrorMessage = "Nook:DataPath is not set. Set it to the folder where Nook keeps its files.")]
     public string DataPath { get; set; } = "";

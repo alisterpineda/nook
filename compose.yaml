@@ -15,6 +15,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # Settings go here, or in a file named nook.json in ./data. The README's "Settings" section says more.
       # To keep the cache out of ./data, give it a folder inside the container. It is made again when it is lost.
       # Nook__CachePath: /tmp/nook-cache
       ConnectionStrings__nookdb: Host=postgres;Database=nook;Username=nook;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}

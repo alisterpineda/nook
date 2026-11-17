@@ -8,7 +8,7 @@ public sealed partial class NookStorage(IOptions<StorageOptions> options)
     /// <summary>The buffer files are copied through, the size <see cref="Stream.CopyToAsync(Stream)"/> uses.</summary>
     private const int CopyBufferSize = 81920;
 
-    private const string DataPathSetting = $"{StorageOptions.Section}:{nameof(StorageOptions.DataPath)}";
+    private const string DataPathSetting = StorageOptions.DataPathSetting;
     private const string LibraryPathSetting = $"{StorageOptions.Section}:{nameof(StorageOptions.LibraryPath)}";
     private const string CachePathSetting = $"{StorageOptions.Section}:{nameof(StorageOptions.CachePath)}";
 

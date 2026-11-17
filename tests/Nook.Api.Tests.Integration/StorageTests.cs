@@ -2,6 +2,8 @@ using System.Runtime.Versioning;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Nook.Api.Features.Uploads;
 using Nook.Api.Storage;
 
 namespace Nook.Api.Tests.Integration;
@@ -80,6 +82,29 @@ public class StorageTests(NookApiFactory factory) : IClassFixture<NookApiFactory
             {
                 Directory.Delete(elsewhere, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public void Api_reads_settings_from_nook_json_in_the_data_root()
+    {
+        // A data root of its own, so the file does not reach the class's other tests.
+        var dataPath = Path.Combine(Path.GetTempPath(), "nook-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dataPath);
+        File.WriteAllText(
+            Path.Combine(dataPath, "nook.json"),
+            """{ "Nook": { "Uploads": { "MaxBytes": 4096 }, "Jobs": { "WorkerCount": 0 } } }""");
+        try
+        {
+            using var app = factory.WithWebHostBuilder(builder => builder.UseSetting("Nook:DataPath", dataPath));
+
+            var options = app.Services.GetRequiredService<IOptions<UploadOptions>>().Value;
+
+            Assert.Equal(4096, options.MaxBytes);
+        }
+        finally
+        {
+            Directory.Delete(dataPath, recursive: true);
         }
     }
 

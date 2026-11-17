@@ -73,6 +73,40 @@ The compose file serves Nook over http. To serve it over https, put it behind a 
 in through a provider. [Storage](#storage) covers keeping the library or the cache somewhere other than the
 `data` folder. [Public access](#public-access) covers opening parts of the library to visitors with no account.
 
+## Settings
+
+Every setting in the tables below can be given in either of two ways: as an environment variable on the
+`nook` service in the compose file, or in a file named `nook.json` in the `data` folder. The file needs no
+mount of its own, because the `data` folder is already mounted.
+
+```json
+{
+  "Nook": {
+    "Oidc": {
+      "Authority": "https://auth.example.com/realms/home",
+      "ClientId": "nook",
+      "ClientSecret": "<the client secret>"
+    }
+  },
+  "RateLimiting": {
+    "Anonymous": { "PermitLimit": 600 }
+  }
+}
+```
+
+A setting's name gives its place in the file: each `:` in the name is one level, so `Nook:Oidc:Authority` is
+`Authority` inside `Oidc` inside `Nook`. The file may hold `//` comments.
+
+Nook reads the file when it starts, so restart Nook after changing it: `docker compose restart nook`. The
+user Nook runs as, with the id 1654, must be able to read it. When the file is there, Nook logs that it read
+it, and it refuses to start when the file is not valid JSON.
+
+When one of those settings is in both places, the environment variable wins. The data root, `Nook:DataPath`,
+cannot be set in the file, because it says where the file is.
+
+The file is only for the settings in the tables. Anything else, such as `ASPNETCORE_FORWARDEDHEADERS_ENABLED`
+from [Behind a reverse proxy](#behind-a-reverse-proxy), stays an environment variable.
+
 ## Storage
 
 Nook keeps its files in four folders. By default all four are in the data root, which is `/data` in the
