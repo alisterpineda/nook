@@ -9,6 +9,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
 import { Session } from '../../core/session';
+import { fieldLabelled } from '../../testing/field-labelled';
 import { linkLabelled } from '../../testing/link-labelled';
 import { SignInPage } from './sign-in-page';
 
@@ -54,26 +55,14 @@ describe('SignInPage', () => {
 
   afterEach(() => httpTesting.verify());
 
-  /** The form control a label names, found the way assistive technology finds it. */
-  function fieldLabelled(text: string): HTMLInputElement {
-    const label = Array.from(page.querySelectorAll('label')).find(
-      (candidate) => candidate.textContent?.trim() === text,
-    );
-    const control = label?.control;
-    if (!(control instanceof HTMLInputElement)) {
-      throw new Error(`No input is labelled "${text}".`);
-    }
-    return control;
-  }
-
   function type(input: HTMLInputElement, value: string): void {
     input.value = value;
     input.dispatchEvent(new Event('input'));
   }
 
   async function submit(email: string, password: string): Promise<void> {
-    type(fieldLabelled('Email'), email);
-    type(fieldLabelled('Password'), password);
+    type(fieldLabelled(page, 'Email'), email);
+    type(fieldLabelled(page, 'Password'), password);
     const button = Array.from(page.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.trim() === 'Sign in',
     );
@@ -95,7 +84,7 @@ describe('SignInPage', () => {
 
     const link = await vi.waitFor(() => linkLabelled(page, 'Sign in with Authentik'));
     expect(link.getAttribute('href')).toBe('/api/auth/oidc/login');
-    expect(fieldLabelled('Email')).toBeDefined();
+    expect(fieldLabelled(page, 'Email')).toBeDefined();
   });
 
   describe('without single sign-on', () => {
@@ -140,7 +129,7 @@ describe('SignInPage', () => {
       httpTesting.expectNone('/api/auth/login');
       expect(alerts()).toEqual(['Enter your email address.', 'Enter your password.']);
 
-      type(fieldLabelled('Email'), 'ada@example.com');
+      type(fieldLabelled(page, 'Email'), 'ada@example.com');
       await fixture.whenStable();
       expect(alerts()).toEqual(['Enter your password.']);
     });

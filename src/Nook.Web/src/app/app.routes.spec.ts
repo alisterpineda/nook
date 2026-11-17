@@ -9,6 +9,7 @@ import { components } from './api/schema';
 import { routes } from './app.routes';
 import { AuthorsListPage } from './features/people/authors-list-page';
 import { PersonPage } from './features/people/person-page';
+import { PublicAccessPage } from './features/public-access/public-access-page';
 import { ReaderPage } from './features/reader/reader-page';
 import {
   FakeReaderEngine,
@@ -29,6 +30,7 @@ type SectionResponse = components['schemas']['SectionResponse'];
 type PageOfPersonSummaryResponse = components['schemas']['PageOfPersonSummaryResponse'];
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type PersonDetailResponse = components['schemas']['PersonDetailResponse'];
+type PublicAccessResponse = components['schemas']['PublicAccessResponse'];
 type UploadResponse = components['schemas']['UploadResponse'];
 type BuiltInRole = components['schemas']['BuiltInRole'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
@@ -89,6 +91,12 @@ describe('routes', () => {
       '/api/works/42': dune,
       '/api/people': noPeople,
       '/api/people/42': herbert,
+      '/api/public-access': {
+        enabled: false,
+        access: 'none',
+        defaultAreaAccess: 'none',
+        sections: [],
+      } satisfies PublicAccessResponse,
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
     };
   }
@@ -238,6 +246,36 @@ describe('routes', () => {
       landedOn: '/sign-in',
       shown: true,
     });
+  });
+
+  it('an admin who opens /public-access sees the public access page', async () => {
+    expect(
+      await open(
+        '/public-access',
+        { signedIn: true, setupRequired: false, role: 'admin' },
+        PublicAccessPage,
+      ),
+    ).toEqual({ landedOn: '/public-access', shown: true });
+  });
+
+  it('sends a viewer who asks for the public access page to the library', async () => {
+    expect(
+      await open(
+        '/public-access',
+        { signedIn: true, setupRequired: false, role: 'viewer' },
+        WorksListPage,
+      ),
+    ).toEqual({ landedOn: '/library', shown: true });
+  });
+
+  it('sends a visitor who asks for the public access page to the library', async () => {
+    expect(
+      await open(
+        '/public-access',
+        { signedIn: false, setupRequired: false, publicAccess: true },
+        WorksListPage,
+      ),
+    ).toEqual({ landedOn: '/library', shown: true });
   });
 
   it('the upload list is still there after visiting the works list and coming back', async () => {

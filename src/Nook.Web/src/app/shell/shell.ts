@@ -15,8 +15,9 @@ type SectionResponse = components['schemas']['SectionResponse'];
 
 /**
  * The frame around every page of the library: a collapsible sidebar with "Library", then "Default" and the caller's
- * sections when there are any, then "Authors", then "Add books" for an admin, the user's menu in its footer, and the
- * page itself beside it. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
+ * sections when there are any, then "Authors", then "Add books" and "Public access" for an admin, the user's menu in
+ * its footer, and the page itself beside it. A visitor nobody has signed in as gets no user menu, and a "Sign in" link
+ * in the header.
  */
 @Component({
   selector: 'app-shell',
@@ -74,6 +75,17 @@ type SectionResponse = components['schemas']['SectionResponse'];
                     [attr.aria-current]="onUpload() ? 'page' : null"
                   >
                     <span>Add books</span>
+                  </a>
+                </li>
+                <li hlmSidebarMenuItem>
+                  <a
+                    hlmSidebarMenuButton
+                    routerLink="/public-access"
+                    closeMobileSidebarOnClick
+                    [isActive]="onPublicAccess()"
+                    [attr.aria-current]="onPublicAccess() ? 'page' : null"
+                  >
+                    <span>Public access</span>
                   </a>
                 </li>
               </ul>
@@ -148,6 +160,9 @@ export class Shell {
   /** Whether the list of works is open, the only page "Library", "Default" and the sections stand for. */
   protected readonly onLibrary = isActive('/library', this.router, { queryParams: 'ignored' });
   protected readonly onUpload = isActive('/upload', this.router, { queryParams: 'ignored' });
+  protected readonly onPublicAccess = isActive('/public-access', this.router, {
+    queryParams: 'ignored',
+  });
   protected readonly onAuthors = isActive('/authors', this.router, { queryParams: 'ignored' });
   /**
    * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,

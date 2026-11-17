@@ -8,6 +8,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { components } from '../../api/schema';
 import { Session } from '../../core/session';
+import { fieldLabelled } from '../../testing/field-labelled';
 import { linkLabelled } from '../../testing/link-labelled';
 import { SetupPage } from './setup-page';
 
@@ -49,26 +50,14 @@ describe('SetupPage', () => {
 
   afterEach(() => httpTesting.verify());
 
-  /** The form control a label names, found the way assistive technology finds it. */
-  function fieldLabelled(text: string): HTMLInputElement {
-    const label = Array.from(page.querySelectorAll('label')).find(
-      (candidate) => candidate.textContent?.trim() === text,
-    );
-    const control = label?.control;
-    if (!(control instanceof HTMLInputElement)) {
-      throw new Error(`No input is labelled "${text}".`);
-    }
-    return control;
-  }
-
   function type(input: HTMLInputElement, value: string): void {
     input.value = value;
     input.dispatchEvent(new Event('input'));
   }
 
   async function submit(email: string, password: string): Promise<void> {
-    type(fieldLabelled('Email'), email);
-    type(fieldLabelled('Password'), password);
+    type(fieldLabelled(page, 'Email'), email);
+    type(fieldLabelled(page, 'Password'), password);
     const button = Array.from(page.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.trim() === 'Create admin',
     );
@@ -86,7 +75,7 @@ describe('SetupPage', () => {
 
     const link = await vi.waitFor(() => linkLabelled(page, 'Sign in with Authentik'));
     expect(link.getAttribute('href')).toBe('/api/auth/oidc/login');
-    expect(fieldLabelled('Email')).toBeDefined();
+    expect(fieldLabelled(page, 'Email')).toBeDefined();
   });
 
   describe('without single sign-on', () => {
@@ -125,11 +114,13 @@ describe('SetupPage', () => {
       });
 
       await vi.waitFor(() =>
-        expect(fieldLabelled('Password').parentElement?.textContent).toContain(
+        expect(fieldLabelled(page, 'Password').parentElement?.textContent).toContain(
           'Passwords must be at least 8 characters.',
         ),
       );
-      expect(fieldLabelled('Email').parentElement?.textContent).not.toContain('Passwords must');
+      expect(fieldLabelled(page, 'Email').parentElement?.textContent).not.toContain(
+        'Passwords must',
+      );
       expect(router.url).toBe('/');
     });
 

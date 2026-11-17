@@ -26,6 +26,9 @@ class WorkStub {}
 @Component({ template: '<h1>Add books</h1>' })
 class UploadStub {}
 
+@Component({ template: '<h1>Public access</h1>' })
+class PublicAccessStub {}
+
 @Component({ template: '<h1>Authors</h1>' })
 class AuthorsStub {}
 
@@ -73,6 +76,7 @@ describe('Shell', () => {
               { path: 'library', component: WorksStub },
               { path: 'works/:id', component: WorkStub },
               { path: 'upload', component: UploadStub },
+              { path: 'public-access', component: PublicAccessStub },
               { path: 'authors', component: AuthorsStub },
               { path: 'people/:id', component: PersonStub },
             ],
@@ -315,10 +319,41 @@ describe('Shell', () => {
   it('an admin sees Add books', async () => {
     const shell = await openShell('/library');
 
-    expect(groupLinks(shell, 'Manage').map((link) => link.textContent?.trim())).toEqual([
+    expect(groupLinks(shell, 'Manage').map((link) => link.textContent?.trim())).toContain(
       'Add books',
-    ]);
+    );
     expect(addBooks(shell)?.getAttribute('href')).toBe('/upload');
+  });
+
+  it('lists Public access under Manage for an admin only', async () => {
+    const shell = await openShell('/library');
+
+    expect(
+      groupLinks(shell, 'Manage').map((link) => [
+        link.textContent?.trim(),
+        link.getAttribute('href'),
+      ]),
+    ).toEqual([
+      ['Add books', '/upload'],
+      ['Public access', '/public-access'],
+    ]);
+
+    for (const user of [grace, viewer]) {
+      await signInAs(user);
+      await harness.fixture.whenStable();
+      expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+    }
+  });
+
+  it('Public access is the current page on /public-access and nothing else is', async () => {
+    const shell = await openShell('/public-access');
+    const current = () =>
+      Array.from(shell.querySelectorAll('nav a[aria-current="page"]'), (link) =>
+        link.textContent?.trim(),
+      );
+
+    expect(current()).toEqual(['Public access']);
+    expect(groupLinks(shell, 'Manage')[1].hasAttribute('closeMobileSidebarOnClick')).toBe(true);
   });
 
   it('a contributor sees no Add books', async () => {

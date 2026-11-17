@@ -50,6 +50,12 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () => import('./features/upload/upload-page').then((m) => m.UploadPage),
       },
+      {
+        path: 'public-access',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/public-access/public-access-page').then((m) => m.PublicAccessPage),
+      },
     ],
   },
   { path: '**', redirectTo: 'library' },
