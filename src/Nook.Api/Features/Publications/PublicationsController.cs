@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 using Nook.Api.Data;
@@ -27,6 +28,7 @@ namespace Nook.Api.Features.Publications;
 /// </remarks>
 [ApiController]
 [Route("api/items/{itemId:guid}/publication")]
+[EnableRateLimiting(RateLimits.AnonymousContent)]
 public partial class PublicationsController(
     NookDbContext db,
     NookStorage storage,
@@ -87,6 +89,21 @@ public partial class PublicationsController(
 
         var subject = users.GetUserId(User) ?? PublicationTokens.Anonymous;
         return Manifest(itemId, Uri.EscapeDataString(tokens.Issue(itemId, subject)), book);
+    }
+
+    /// <summary>
+    /// Whether the request is under a token path whose token was issued to a user and not to a visitor, going by the
+    /// route values the templates below name. It says nothing of what that user may read.
+    /// </summary>
+    public static bool HasUsersToken(HttpContext context)
+    {
+        var route = context.Request.RouteValues;
+        return route.TryGetValue("token", out var token)
+            && route.TryGetValue("itemId", out var itemIdValue)
+            && Guid.TryParse(itemIdValue?.ToString(), out var itemId)
+            && token?.ToString() is { } tokenText
+            && context.RequestServices.GetRequiredService<PublicationTokens>().TryRead(tokenText, itemId, out var subject)
+            && subject != PublicationTokens.Anonymous;
     }
 
     /// <summary>The same manifest as the signed-in one, reached by its token alone.</summary>

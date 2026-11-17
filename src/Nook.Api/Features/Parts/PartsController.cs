@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
@@ -19,6 +20,7 @@ public partial class PartsController(
     /// The part's file as a download, with the part's media type and the file's name on disk. A range of its bytes can
     /// be asked for. Only a caller whose level in the work's area is download gets it.
     /// </summary>
+    [EnableRateLimiting(RateLimits.AnonymousContent)]
     [HttpGet("{id:guid}/file")]
     [ProducesResponseType<Stream>(StatusCodes.Status200OK, "application/epub+zip")]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

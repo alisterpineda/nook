@@ -106,6 +106,8 @@ if (!buildingOpenApiDocument)
 
 // Every response carries the web app's policy, an error and the built web app included, unless it sets its own.
 app.UseWebAppContentSecurityPolicy();
+// And every response tells crawlers not to index it.
+app.UseCrawlerDirectives();
 
 // Errors and bare status codes, such as a 401 from the cookie, leave as problem details.
 app.UseExceptionHandler();
@@ -114,9 +116,10 @@ app.UseStatusCodePages();
 // The built web app is public: it holds no data, and its sign-in page must load before anyone has signed in.
 app.UseStaticFiles();
 
-app.UseRateLimiter();
 app.UseKeptCacheControl();
 app.UseAuthentication();
+// After authentication, so a limit can tell a signed-in user from a visitor.
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapDefaultEndpoints();
@@ -127,6 +130,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+app.MapRobotsTxt();
 
 // The web app routes in the browser, so any other path that is not a file gets its index.html.
 // Paths under /api are left out, so an unknown API path still answers as an API. So are the health

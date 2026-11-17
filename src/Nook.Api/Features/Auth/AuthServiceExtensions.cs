@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Nook.Api.Data;
+using Nook.Api.Features.Publications;
 
 namespace Nook.Api.Features.Auth;
 
@@ -13,7 +14,8 @@ public static class AuthServiceExtensions
     /// <summary>
     /// Adds sign-in with a cookie, an authorization default that requires a signed-in user on every endpoint, the
     /// catalog policy that also lets a visitor in while public access is on,
-    /// the rate limit for the endpoints that take a password, the single sign-on settings, and, when single sign-on
+    /// the rate limits for the endpoints that take a password and for a visitor's reading and downloading, the single
+    /// sign-on settings, and, when single sign-on
     /// is on, the OpenID Connect handler that signs in at the provider.
     /// </summary>
     public static IServiceCollection AddNookAuth(this IServiceCollection services, IConfiguration configuration)
@@ -153,16 +155,39 @@ public static class AuthServiceExtensions
         services.AddScoped<IAuthorizationHandler, CatalogHandler>();
 
         var permitLimit = configuration.GetValue("RateLimiting:Auth:PermitLimit", 10);
+        var anonymousPermitLimit = configuration.GetValue("RateLimiting:Anonymous:PermitLimit", 300);
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.AddPolicy(RateLimits.Auth, context => RateLimitPartition.GetFixedWindowLimiter(
-                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                ClientAddress(context),
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = TimeSpan.FromMinutes(1) }));
+            // A partition's limiter is made for its key once and kept, so signed-in callers have a key no client
+            // address equals. Sharing the address would give a visitor whatever the first caller from it was given.
+            options.AddPolicy(RateLimits.AnonymousContent, context => IsSignedInReader(context)
+                ? RateLimitPartition.GetNoLimiter("signed-in")
+                : RateLimitPartition.GetFixedWindowLimiter(
+                    ClientAddress(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = anonymousPermitLimit,
+                        Window = TimeSpan.FromMinutes(1),
+                    }));
         });
 
         return services;
     }
+
+    private static string ClientAddress(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    /// <summary>
+    /// Whether the request comes from a signed-in user: one with a session, or one reading under a token path with a
+    /// token issued to a user, which a reader's frames reach without the cookie. Whether that user may read the work is
+    /// for the endpoint to decide.
+    /// </summary>
+    private static bool IsSignedInReader(HttpContext context) =>
+        context.User.Identity?.IsAuthenticated == true || PublicationsController.HasUsersToken(context);
 
     private static ILogger SignInLogger(HttpContext context) =>
         context.RequestServices.GetRequiredService<ILogger<OidcSignIn>>();
@@ -173,4 +198,10 @@ public static class RateLimits
 {
     /// <summary>Endpoints that take a password, limited per client address.</summary>
     public const string Auth = "auth";
+
+    /// <summary>
+    /// A visitor's reading and downloading, limited per client address. A signed-in user, and a token issued to one,
+    /// is not limited.
+    /// </summary>
+    public const string AnonymousContent = "anonymous-content";
 }

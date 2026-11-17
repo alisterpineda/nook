@@ -37,4 +37,17 @@ internal static class PublicationManifests
 
     /// <summary>An href of the manifest as an absolute URL, resolved against its self link.</summary>
     public static Uri Resolve(JsonObject manifest, string href) => new(new Uri(SelfHref(manifest)), href);
+
+    /// <summary>The first reading-order file, as an absolute URL resolved against the self link.</summary>
+    public static Uri FirstChapterOf(JsonObject manifest)
+    {
+        var readingOrder = Assert.IsType<JsonArray>(manifest["readingOrder"]);
+        var href = (string?)readingOrder[0]?["href"];
+        Assert.NotNull(href);
+        return Resolve(manifest, href);
+    }
+
+    /// <summary>A book of one chapter, <c>chapter.xhtml</c>, that says its title.</summary>
+    public static byte[] OneChapterBook(string title) =>
+        new EpubBuilder().WithTitle(title).WithChapter("chapter.xhtml", $"<h1>{title}</h1>").Build();
 }

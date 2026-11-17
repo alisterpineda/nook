@@ -18,7 +18,7 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
     public async Task Visitor_reads_a_publication_where_the_level_is_read()
     {
         var section = await factory.AddSectionAsync();
-        var part = await factory.IngestOnePartAsync(Book("Kindred"), section);
+        var part = await factory.IngestOnePartAsync(OneChapterBook("Kindred"), section);
         await factory.SetPublicAccessAsync(true, ContentAccess.Download, ContentAccess.None, (section.Id, ContentAccess.Read));
         using var visitor = factory.CreateClient();
 
@@ -38,7 +38,7 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
     public async Task Manifest_is_not_found_for_a_visitor_where_the_level_is_browse()
     {
         var section = await factory.AddSectionAsync();
-        var part = await factory.IngestOnePartAsync(Book("Dawn"), section);
+        var part = await factory.IngestOnePartAsync(OneChapterBook("Dawn"), section);
         await factory.SetPublicAccessAsync(true, ContentAccess.Download, ContentAccess.None, (section.Id, ContentAccess.Browse));
         using var visitor = factory.CreateClient();
 
@@ -51,7 +51,7 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
     public async Task Manifest_is_not_found_for_a_visitor_where_the_anonymous_level_is_browse()
     {
         var section = await factory.AddSectionAsync();
-        var part = await factory.IngestOnePartAsync(Book("Imago"), section);
+        var part = await factory.IngestOnePartAsync(OneChapterBook("Imago"), section);
         await factory.SetPublicAccessAsync(true, ContentAccess.Browse, ContentAccess.None, (section.Id, ContentAccess.Download));
         using var visitor = factory.CreateClient();
 
@@ -64,7 +64,7 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
     public async Task A_visitors_token_stops_working_when_public_access_is_turned_off()
     {
         var section = await factory.AddSectionAsync();
-        var part = await factory.IngestOnePartAsync(Book("Parable of the Sower"), section);
+        var part = await factory.IngestOnePartAsync(OneChapterBook("Parable of the Sower"), section);
         await factory.SetPublicAccessAsync(true, ContentAccess.Download, ContentAccess.None, (section.Id, ContentAccess.Read));
         var manifest = await GetVisitorManifestAsync(part.ItemId);
         using var reader = factory.CreateClient(new() { HandleCookies = false });
@@ -80,7 +80,7 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
     public async Task A_visitors_token_stops_working_when_the_section_drops_to_browse()
     {
         var section = await factory.AddSectionAsync();
-        var part = await factory.IngestOnePartAsync(Book("Parable of the Talents"), section);
+        var part = await factory.IngestOnePartAsync(OneChapterBook("Parable of the Talents"), section);
         await factory.SetPublicAccessAsync(true, ContentAccess.Download, ContentAccess.None, (section.Id, ContentAccess.Read));
         var manifest = await GetVisitorManifestAsync(part.ItemId);
         using var reader = factory.CreateClient(new() { HandleCookies = false });
@@ -96,8 +96,8 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
     public async Task A_visitors_token_does_not_reach_another_item()
     {
         var (section, otherSection) = (await factory.AddSectionAsync(), await factory.AddSectionAsync());
-        var open = await factory.IngestOnePartAsync(Book("Wild Seed"), section);
-        var other = await factory.IngestOnePartAsync(Book("Mind of My Mind"), otherSection);
+        var open = await factory.IngestOnePartAsync(OneChapterBook("Wild Seed"), section);
+        var other = await factory.IngestOnePartAsync(OneChapterBook("Mind of My Mind"), otherSection);
         await factory.SetPublicAccessAsync(
             true,
             ContentAccess.Download,
@@ -112,21 +112,9 @@ public class PublicAccessReadingTests(NookApiFactory factory) : IClassFixture<No
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private static byte[] Book(string title) =>
-        new EpubBuilder().WithTitle(title).WithChapter("chapter.xhtml", $"<h1>{title}</h1>").Build();
-
     private async Task<JsonObject> GetVisitorManifestAsync(Guid itemId)
     {
         using var visitor = factory.CreateClient();
         return await GetManifestAsync(visitor, itemId);
-    }
-
-    /// <summary>The first reading-order file, as an absolute URL resolved against the self link.</summary>
-    private static Uri FirstChapterOf(JsonObject manifest)
-    {
-        var readingOrder = Assert.IsType<JsonArray>(manifest["readingOrder"]);
-        var href = (string?)readingOrder[0]?["href"];
-        Assert.NotNull(href);
-        return Resolve(manifest, href);
     }
 }

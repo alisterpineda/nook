@@ -115,6 +115,44 @@ public sealed class WebAppHostingTests : IClassFixture<NookApiFactory>, IDisposa
             Assert.Equal([WebAppPolicy], response.Headers.GetValues("Content-Security-Policy")));
     }
 
+    [Fact]
+    public async Task Every_response_tells_crawlers_not_to_index()
+    {
+        using var client = _app.CreateClient();
+        using var signedIn = await _app.CreateSignedInClientAsync();
+
+        var responses = new[]
+        {
+            await client.GetAsync("/", TestContext.Current.CancellationToken),
+            await client.GetAsync("/library", TestContext.Current.CancellationToken),
+            await client.GetAsync("/main.js", TestContext.Current.CancellationToken),
+            await client.GetAsync("/api/access", TestContext.Current.CancellationToken),
+            await client.GetAsync("/api/works", TestContext.Current.CancellationToken),
+            await signedIn.GetAsync("/api/nope", TestContext.Current.CancellationToken),
+        };
+
+        Assert.Equal(
+            [HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK,
+                HttpStatusCode.Unauthorized, HttpStatusCode.NotFound],
+            responses.Select(response => response.StatusCode));
+        Assert.All(responses, response =>
+            Assert.Equal(["noindex, nofollow"], response.Headers.GetValues("X-Robots-Tag")));
+    }
+
+    [Fact]
+    public async Task Robots_txt_lets_in_three_search_engines_and_turns_every_other_crawler_away()
+    {
+        using var client = _app.CreateClient();
+
+        var response = await client.GetAsync("/robots.txt", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(
+            "User-agent: Googlebot\nUser-agent: Bingbot\nUser-agent: Yandex\nAllow: /\n\nUser-agent: *\nDisallow: /\n",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
     /// <summary>
     /// The dev server serves the web app in development, so it has to send the policy the API sends in production,
     /// widened only by the socket its live reload uses. The two are separate copies, and this keeps them the same.
