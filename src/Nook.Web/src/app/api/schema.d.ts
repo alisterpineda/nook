@@ -572,6 +572,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AccessResponse"];
+                        "application/json": components["schemas"]["AccessResponse"];
+                        "text/json": components["schemas"]["AccessResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicAccessResponse"];
+                        "application/json": components["schemas"]["PublicAccessResponse"];
+                        "text/json": components["schemas"]["PublicAccessResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PublicAccessRequest"];
+                    "text/json": components["schemas"]["PublicAccessRequest"];
+                    "application/*+json": components["schemas"]["PublicAccessRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/people": {
         parameters: {
             query?: never;
@@ -1185,8 +1315,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccessResponse: {
+            publicAccess: boolean;
+            defaultArea: components["schemas"]["ContentAccess"];
+        };
         /** @enum {unknown} */
         BuiltInRole: "admin" | "contributor" | "viewer" | "anonymous";
+        /** @enum {unknown} */
+        ContentAccess: "none" | "browse" | "read" | "download";
         /** @enum {unknown} */
         ContributorRole: "author" | "narrator" | "translator" | "editor";
         CurrentUserResponse: {
@@ -1320,6 +1456,29 @@ export interface components {
             detail?: null | string;
             instance?: null | string;
         };
+        PublicAccessRequest: {
+            enabled: boolean;
+            access: components["schemas"]["ContentAccess"];
+            defaultAreaAccess: components["schemas"]["ContentAccess"];
+            sections: components["schemas"]["PublicAccessSectionRequest"][];
+        };
+        PublicAccessResponse: {
+            enabled: boolean;
+            access: components["schemas"]["ContentAccess"];
+            defaultAreaAccess: components["schemas"]["ContentAccess"];
+            sections: components["schemas"]["PublicAccessSectionResponse"][];
+        };
+        PublicAccessSectionRequest: {
+            /** Format: uuid */
+            id: string;
+            access: components["schemas"]["ContentAccess"];
+        };
+        PublicAccessSectionResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            access: components["schemas"]["ContentAccess"];
+        };
         PublicationLink: {
             href: string;
             type?: null | string;
@@ -1420,6 +1579,7 @@ export interface components {
             addedAt: string;
             /** Format: date-time */
             updatedAt: string;
+            access: components["schemas"]["ContentAccess"];
         };
         WorkExternalIdResponse: {
             scheme: string;

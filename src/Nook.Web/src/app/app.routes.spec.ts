@@ -71,6 +71,7 @@ describe('routes', () => {
     items: [],
     addedAt: '2026-11-01T12:00:00Z',
     updatedAt: '2026-11-01T12:00:00Z',
+    access: 'download',
   };
 
   /** What the API answers on each path for `visitor`, who is an admin unless they carry another role. */

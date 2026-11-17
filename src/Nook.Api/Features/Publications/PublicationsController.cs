@@ -15,13 +15,15 @@ using Nook.Api.Storage;
 namespace Nook.Api.Features.Publications;
 
 /// <summary>
-/// An EPUB item as a Readium publication. The manifest here needs the sign-in cookie; its self link puts the
-/// publication under a token path, so the files it lists are reached by the token alone.
+/// An EPUB item as a Readium publication. The manifest here needs the sign-in cookie, or public access on for a
+/// visitor with no session; its self link puts the publication under a token path, so the files it lists are reached by
+/// the token alone.
 /// </summary>
 /// <remarks>
 /// A reader's frames do not always send the cookie, so everything under the token path is reached without it. Each
-/// such request checks again that the token's user exists and can see the work. Anything the token does not reach is
-/// reported the same way as an item that does not exist.
+/// such request works out again what the token's subject may do: a user's token, that the user exists and can read the
+/// work; a visitor's token, which names no user, that public access is on and lets a visitor read the work. Anything
+/// the token does not reach is reported the same way as an item that does not exist.
 /// </remarks>
 [ApiController]
 [Route("api/items/{itemId:guid}/publication")]
@@ -30,6 +32,7 @@ public partial class PublicationsController(
     NookStorage storage,
     PublicationCache publications,
     PublicationTokens tokens,
+    SectionAccess access,
     UserManager<NookUser> users,
     IUserClaimsPrincipalFactory<NookUser> principals,
     ILogger<PublicationsController> logger)
@@ -67,22 +70,23 @@ public partial class PublicationsController(
     };
 
     /// <summary>
-    /// The item's publication manifest, for an EPUB item with exactly one part. Its self link is the absolute address
-    /// of the same manifest under a token path that is the same for the user and item all day, and every other href is
-    /// relative to it.
+    /// The item's publication manifest, for an EPUB item with exactly one part of a work the caller can read. Its self
+    /// link is the absolute address of the same manifest under a token path that is the same for the user and item all
+    /// day, or for every visitor and the item all day, and every other href is relative to it.
     /// </summary>
+    [Authorize(Policy = Policies.Catalog)]
     [HttpGet("manifest.json")]
     [ProducesResponseType<PublicationManifest>(StatusCodes.Status200OK, PublicationManifest.MediaType)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetManifest(Guid itemId, CancellationToken cancellationToken)
     {
-        var userId = users.GetUserId(User);
-        if (userId is null || await ReadAsync(itemId, User, cancellationToken) is not { } book)
+        if (await ReadAsync(itemId, User, cancellationToken) is not { } book)
         {
             return NotFound();
         }
 
-        return Manifest(itemId, Uri.EscapeDataString(tokens.Issue(itemId, userId)), book);
+        var subject = users.GetUserId(User) ?? PublicationTokens.Anonymous;
+        return Manifest(itemId, Uri.EscapeDataString(tokens.Issue(itemId, subject)), book);
     }
 
     /// <summary>The same manifest as the signed-in one, reached by its token alone.</summary>
@@ -211,28 +215,43 @@ public partial class PublicationsController(
     private sealed record Book(EpubPublication Publication, string WorkTitle, string Path);
 
     /// <summary>
-    /// The item's book for the token's user, when the token was issued to them for this item and is still current,
-    /// and they still exist and can see the work.
+    /// The item's book for the token's subject, when the token was issued for this item and is still current, and the
+    /// subject can read the work now: a user who still exists, or a visitor while public access lets them.
     /// </summary>
     private async Task<Book?> ReadByTokenAsync(Guid itemId, string token, CancellationToken cancellationToken)
     {
-        if (!tokens.TryRead(token, itemId, out var userId) || await users.FindByIdAsync(userId) is not { } user)
+        if (!tokens.TryRead(token, itemId, out var subject))
         {
             return null;
         }
 
-        return await ReadAsync(itemId, await principals.CreateAsync(user), cancellationToken);
+        ClaimsPrincipal reader;
+        if (subject == PublicationTokens.Anonymous)
+        {
+            reader = new ClaimsPrincipal(new ClaimsIdentity());
+        }
+        else if (await users.FindByIdAsync(subject) is { } user)
+        {
+            reader = await principals.CreateAsync(user);
+        }
+        else
+        {
+            return null;
+        }
+
+        return await ReadAsync(itemId, reader, cancellationToken);
     }
 
     /// <summary>
-    /// The item's book, when the item is an EPUB of a work <paramref name="user"/> can see, has exactly one part, and
+    /// The item's book, when the item is an EPUB of a work <paramref name="user"/> can read, has exactly one part, and
     /// that part's file is on disk and readable. Anything else is reported the same way as an item that does not exist.
     /// </summary>
     private async Task<Book?> ReadAsync(Guid itemId, ClaimsPrincipal user, CancellationToken cancellationToken)
     {
+        var grants = await access.ForAsync(user, cancellationToken);
         var item = await (
                 from i in db.Items
-                join w in db.Works.VisibleTo(user) on i.WorkId equals w.Id
+                join w in db.Works.VisibleTo(grants, ContentAccess.Read) on i.WorkId equals w.Id
                 where i.Id == itemId && i.Format == ItemFormat.Epub
                 select new
                 {

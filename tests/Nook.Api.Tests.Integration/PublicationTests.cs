@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Nook.Api.Data;
 using Nook.Api.Features.Security;
 using Contents = Nook.Api.Tests.Integration.EpubBuilder.Contents;
+using static Nook.Api.Tests.Integration.PublicationManifests;
 
 namespace Nook.Api.Tests.Integration;
 
@@ -571,17 +572,9 @@ public class PublicationTests(NookApiFactory factory) : IClassFixture<NookApiFac
     private static string? ContentSecurityPolicyOf(HttpResponseMessage response) =>
         response.Headers.TryGetValues("Content-Security-Policy", out var values) ? string.Join(", ", values) : null;
 
-    private static string ManifestUrl(Guid itemId) => $"/api/items/{itemId}/publication/manifest.json";
-
-    private static string TokenUrl(Guid itemId, string token, string path) =>
-        $"/api/items/{itemId}/publication/t/{token}/{path}";
-
     /// <summary>The manifest, the positions list and the first chapter, relative to the self link.</summary>
     private static string[] TokenPaths(JsonObject manifest) =>
         ["manifest.json", PositionsHrefOf(manifest), Links(manifest["readingOrder"])[0].Href!];
-
-    /// <summary>An href of the manifest as an absolute URL, resolved against its self link.</summary>
-    private static Uri Resolve(JsonObject manifest, string href) => new(new Uri(SelfHref(manifest)), href);
 
     private static string PositionsHrefOf(JsonObject manifest)
     {
@@ -618,27 +611,6 @@ public class PublicationTests(NookApiFactory factory) : IClassFixture<NookApiFac
         stream.CopyTo(bytes);
         return bytes.ToArray();
     }
-
-    private static async Task<JsonObject> GetManifestAsync(HttpClient client, Guid itemId)
-    {
-        var response = await client.GetAsync(ManifestUrl(itemId), CancellationToken);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return await ReadManifestAsync(response);
-    }
-
-    private static async Task<JsonObject> ReadManifestAsync(HttpResponseMessage response) =>
-        Assert.IsType<JsonObject>(JsonNode.Parse(await response.Content.ReadAsStringAsync(CancellationToken)));
-
-    private static string SelfHref(JsonObject manifest)
-    {
-        var links = Assert.IsType<JsonArray>(manifest["links"]);
-        var self = Assert.Single(links, link => (string?)link?["rel"] == "self");
-        var href = (string?)self?["href"];
-        Assert.NotNull(href);
-        return href;
-    }
-
-    private static string TokenOf(string selfHref) => selfHref.Split('/')[^2];
 
     private static List<string?> Strings(JsonNode? array) =>
         Assert.IsType<JsonArray>(array).Select(value => (string?)value).ToList();

@@ -7,10 +7,11 @@ using Nook.Api.Storage;
 namespace Nook.Api.Features.Publications;
 
 /// <summary>
-/// Issues and checks the tokens that stand in for the sign-in cookie in a publication's URLs. A token names a user and
-/// the UTC day it was issued, is signed for one item with a secret kept in the data root, comes out the same for the
-/// same user, item and day, and is accepted on its day and the day after, so a book open across midnight keeps working.
-/// A token is URL-safe base64 with no padding, so it fits in one path segment.
+/// Issues and checks the tokens that stand in for the sign-in cookie in a publication's URLs. A token names its subject,
+/// a user or <see cref="Anonymous"/> for a visitor with no session, and the UTC day it was issued, is signed for one item
+/// with a secret kept in the data root, comes out the same for the same subject, item and day, and is accepted on its
+/// day and the day after, so a book open across midnight keeps working. A token is URL-safe base64 with no padding, so
+/// it fits in one path segment.
 /// </summary>
 /// <remarks>
 /// The secret is a 32-byte random key in <see cref="NookStorage.KeysFolder"/>, made the first time a token is issued or
@@ -28,6 +29,9 @@ public sealed class PublicationTokens
     /// <summary>Kept apart from anything else the secret could ever sign.</summary>
     private static readonly byte[] Purpose = "nook publication token"u8.ToArray();
 
+    /// <summary>The subject of a token issued to a visitor with no session. No user id, which is a GUID, equals it.</summary>
+    public const string Anonymous = "anonymous";
+
     private readonly NookStorage storage;
     private readonly TimeProvider time;
     private readonly Lock secretLock = new();
@@ -39,13 +43,16 @@ public sealed class PublicationTokens
         this.time = time;
     }
 
-    /// <summary>The token that lets <paramref name="userId"/> read the item's publication, for today in UTC.</summary>
-    public string Issue(Guid itemId, string userId)
+    /// <summary>
+    /// The token that lets <paramref name="subject"/>, a user id or <see cref="Anonymous"/>, read the item's
+    /// publication, for today in UTC.
+    /// </summary>
+    public string Issue(Guid itemId, string subject)
     {
-        ArgumentException.ThrowIfNullOrEmpty(userId);
+        ArgumentException.ThrowIfNullOrEmpty(subject);
 
         var day = Today();
-        var user = Encoding.UTF8.GetBytes(userId);
+        var user = Encoding.UTF8.GetBytes(subject);
         var token = new byte[DaySize + SignatureSize + user.Length];
 
         BinaryPrimitives.WriteInt32BigEndian(token, day);
@@ -57,11 +64,11 @@ public sealed class PublicationTokens
 
     /// <summary>
     /// Reads a token for the item. It is accepted when it was issued for this item, today or yesterday in UTC, and has
-    /// not been changed; <paramref name="userId"/> is then the user it was issued to.
+    /// not been changed; <paramref name="subject"/> is then the user id it was issued to, or <see cref="Anonymous"/>.
     /// </summary>
-    public bool TryRead(string token, Guid itemId, out string userId)
+    public bool TryRead(string token, Guid itemId, out string subject)
     {
-        userId = "";
+        subject = "";
 
         byte[] bytes;
         try
@@ -94,7 +101,7 @@ public sealed class PublicationTokens
             return false;
         }
 
-        userId = Encoding.UTF8.GetString(user);
+        subject = Encoding.UTF8.GetString(user);
         return true;
     }
 

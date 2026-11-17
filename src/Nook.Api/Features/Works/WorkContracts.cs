@@ -64,7 +64,10 @@ public record WorkPartResponse(Guid Id, string MediaType, long Size);
 
 public record WorkItemResponse(Guid Id, ItemFormat Format, IReadOnlyList<WorkPartResponse> Parts);
 
-/// <summary>Everything Nook knows about one work. Contributors and parts come in display order.</summary>
+/// <summary>
+/// Everything Nook knows about one work. Contributors and parts come in display order. <c>Access</c> is the caller's
+/// level for the work: whether they may only browse it, read it in the browser, or download its files.
+/// </summary>
 public record WorkDetailResponse(
     Guid Id,
     Guid? SectionId,
@@ -81,4 +84,5 @@ public record WorkDetailResponse(
     IReadOnlyList<WorkExternalIdResponse> ExternalIds,
     IReadOnlyList<WorkItemResponse> Items,
     DateTimeOffset AddedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    ContentAccess Access);

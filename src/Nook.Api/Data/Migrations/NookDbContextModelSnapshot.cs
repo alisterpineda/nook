@@ -574,6 +574,46 @@ namespace Nook.Api.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Nook.Api.Data.RoleSection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Access")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("access");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<Guid>("SectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("section_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_role_sections");
+
+                    b.HasIndex("SectionId")
+                        .HasDatabaseName("ix_role_sections_section_id");
+
+                    b.HasIndex("RoleId", "SectionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_sections_role_id_section_id");
+
+                    b.ToTable("role_sections", (string)null);
+                });
+
             modelBuilder.Entity("Nook.Api.Data.Series", b =>
                 {
                     b.Property<Guid>("Id")
@@ -605,6 +645,40 @@ namespace Nook.Api.Data.Migrations
                         .HasDatabaseName("ix_series_name_key");
 
                     b.ToTable("series", (string)null);
+                });
+
+            modelBuilder.Entity("Nook.Api.Data.Setting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_settings");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_settings_key");
+
+                    b.ToTable("settings", (string)null);
                 });
 
             modelBuilder.Entity("Nook.Api.Data.Tag", b =>
@@ -901,6 +975,23 @@ namespace Nook.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_parts_items_item_id");
+                });
+
+            modelBuilder.Entity("Nook.Api.Data.RoleSection", b =>
+                {
+                    b.HasOne("Nook.Api.Data.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_sections_roles_role_id");
+
+                    b.HasOne("Nook.Api.Data.LibrarySection", null)
+                        .WithMany()
+                        .HasForeignKey("SectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_sections_sections_section_id");
                 });
 
             modelBuilder.Entity("Nook.Api.Data.Work", b =>

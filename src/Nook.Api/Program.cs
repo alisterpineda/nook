@@ -8,7 +8,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
+using Nook.Api.Features.PublicAccess;
 using Nook.Api.Features.Publications;
+using Nook.Api.Features.Sections;
 using Nook.Api.Features.Security;
 using Nook.Api.Features.Uploads;
 using Nook.Api.Features.Works;
@@ -55,6 +57,8 @@ builder.Services.AddSingleton<CoverResizer>();
 builder.Services.AddSingleton<CoverCache>();
 builder.Services.AddSingleton<PublicationTokens>();
 builder.Services.AddSingleton<PublicationCache>();
+builder.Services.AddScoped<InstanceSettings>();
+builder.Services.AddScoped<SectionAccess>();
 
 builder.Services.AddOptions<UploadOptions>()
     .BindConfiguration(UploadOptions.Section)

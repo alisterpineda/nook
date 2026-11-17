@@ -11,7 +11,8 @@ namespace Nook.Api.Features.Auth;
 public static class AuthServiceExtensions
 {
     /// <summary>
-    /// Adds sign-in with a cookie, an authorization default that requires a signed-in user on every endpoint,
+    /// Adds sign-in with a cookie, an authorization default that requires a signed-in user on every endpoint, the
+    /// catalog policy that also lets a visitor in while public access is on,
     /// the rate limit for the endpoints that take a password, the single sign-on settings, and, when single sign-on
     /// is on, the OpenID Connect handler that signs in at the provider.
     /// </summary>
@@ -145,7 +146,11 @@ public static class AuthServiceExtensions
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.FromMinutes(5));
 
         services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
+            .AddPolicy(Policies.Catalog, policy => policy.AddRequirements(new CatalogRequirement()));
+
+        // Scoped, since it reads the settings table.
+        services.AddScoped<IAuthorizationHandler, CatalogHandler>();
 
         var permitLimit = configuration.GetValue("RateLimiting:Auth:PermitLimit", 10);
         services.AddRateLimiter(options =>

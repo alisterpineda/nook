@@ -13,6 +13,9 @@ internal static class TestData
     public static Work NewWork(string title, Guid? sectionId = null, string? sortTitle = null) =>
         new() { SectionId = sectionId, Title = title, SortTitle = sortTitle ?? title };
 
+    /// <summary>A section with only its name set, not yet saved.</summary>
+    public static LibrarySection NewSection(string name) => new() { Name = name };
+
     /// <summary>A file that is no book format at all.</summary>
     public static readonly byte[] NotABook = Encoding.UTF8.GetBytes("This is a plain text file, not a book.");
 

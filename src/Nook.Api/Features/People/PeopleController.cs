@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
+using Nook.Api.Features.Auth;
 using Nook.Api.Features.Sections;
 using Nook.Api.Features.Works;
 
@@ -8,17 +10,18 @@ namespace Nook.Api.Features.People;
 
 [ApiController]
 [Route("api/people")]
-public class PeopleController(NookDbContext db) : ControllerBase
+[Authorize(Policy = Policies.Catalog)]
+public class PeopleController(NookDbContext db, SectionAccess access) : ControllerBase
 {
     /// <summary>
-    /// One page of the people credited on a work the signed-in user can see, or holding the given role on one, by sort
+    /// One page of the people credited on a work the caller can see, or holding the given role on one, by sort
     /// name, each with how many such works they are credited on. A work counts once however many roles they hold on it.
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<Page<PersonSummaryResponse>>> List(
         [FromQuery] PersonListQuery query, CancellationToken cancellationToken)
     {
-        var works = db.Works.VisibleTo(User);
+        var works = db.Works.VisibleTo(await access.ForAsync(User, cancellationToken));
         var credits = db.WorkContributors.AsQueryable();
         if (query.Role is { } role)
         {
@@ -48,7 +51,7 @@ public class PeopleController(NookDbContext db) : ControllerBase
     }
 
     /// <summary>
-    /// One person with every work the signed-in user can see that they are credited on, grouped by role in the order
+    /// One person with every work the caller can see that they are credited on, grouped by role in the order
     /// the roles are declared. Within a role the works in a series come first, by series name then place in the
     /// series, and the works in no series after them, by sort title.
     /// </summary>
@@ -63,22 +66,24 @@ public class PeopleController(NookDbContext db) : ControllerBase
             return NotFound();
         }
 
+        var grants = await access.ForAsync(User, cancellationToken);
+
         // The id breaks ties, so works with the same sort title always come in the same order.
         var works = await db.Works
-            .VisibleTo(User)
+            .VisibleTo(grants)
             .Where(w => db.WorkContributors.Any(c => c.WorkId == w.Id && c.PersonId == id))
             .OrderBy(w => w.SortTitle)
             .ThenBy(w => w.Id)
             .ToSummaries(db)
             .ToListAsync(cancellationToken);
 
-        // A person credited only on works the user cannot see is reported the same way as one that does not exist.
+        // A person credited only on works the caller cannot see is reported the same way as one that does not exist.
         if (works.Count == 0)
         {
             return NotFound();
         }
 
-        // Credits on works the user cannot see are dropped below, since only the works read above are walked.
+        // Credits on works the caller cannot see are dropped below, since only the works read above are walked.
         var credits = (await db.WorkContributors
                 .Where(c => c.PersonId == id)
                 .Select(c => new { c.WorkId, c.Role })

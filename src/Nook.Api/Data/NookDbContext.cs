@@ -10,6 +10,10 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
 {
     public DbSet<Role> Roles => Set<Role>();
 
+    public DbSet<RoleSection> RoleSections => Set<RoleSection>();
+
+    public DbSet<Setting> Settings => Set<Setting>();
+
     public DbSet<LibrarySection> Sections => Set<LibrarySection>();
 
     public DbSet<Series> Series => Set<Series>();
@@ -57,6 +61,22 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
         // A role that users still hold cannot be deleted.
         builder.Entity<NookUser>()
             .HasOne<Role>().WithMany().HasForeignKey(u => u.RoleId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<RoleSection>(roleSection =>
+        {
+            roleSection.ToTable("role_sections");
+
+            // A role holds one level per section, and the level goes with either its role or its section.
+            roleSection.HasIndex(r => new { r.RoleId, r.SectionId }).IsUnique();
+            roleSection.HasOne<Role>().WithMany().HasForeignKey(r => r.RoleId).OnDelete(DeleteBehavior.Cascade);
+            roleSection.HasOne<LibrarySection>().WithMany().HasForeignKey(r => r.SectionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Setting>(setting =>
+        {
+            setting.ToTable("settings");
+            setting.HasIndex(s => s.Key).IsUnique();
+        });
 
         builder.Entity<Work>(work =>
         {

@@ -87,6 +87,7 @@ describe('WorksApi', () => {
       items: [],
       addedAt: '2026-11-01T12:00:00Z',
       updatedAt: '2026-11-01T12:00:00Z',
+      access: 'download',
     };
 
     const fetching = api.get('0198a1b2-0000-7000-8000-000000000001');

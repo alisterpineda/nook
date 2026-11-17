@@ -11,7 +11,11 @@ namespace Nook.Api.Tests.Integration;
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18").Build();
+    // Every test class keeps a connection pool to its own database open until the run ends, and together they
+    // outgrow the server's default of 100 connections.
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18")
+        .WithCommand("-c", "max_connections=500")
+        .Build();
 
     public async ValueTask InitializeAsync() => await _container.StartAsync();
 

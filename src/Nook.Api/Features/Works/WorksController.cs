@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
@@ -9,19 +10,21 @@ namespace Nook.Api.Features.Works;
 
 [ApiController]
 [Route("api/works")]
+[Authorize(Policy = Policies.Catalog)]
 public partial class WorksController(
     NookDbContext db,
     NookStorage storage,
     CoverResizer resizer,
     CoverCache coverCache,
+    SectionAccess access,
     ILogger<WorksController> logger) : ControllerBase
 {
-    /// <summary>One page of the works the signed-in user can see.</summary>
+    /// <summary>One page of the works the caller can see.</summary>
     [HttpGet]
     public async Task<ActionResult<Page<WorkSummaryResponse>>> List(
         [FromQuery] WorkListQuery query, CancellationToken cancellationToken)
     {
-        var works = db.Works.VisibleTo(User);
+        var works = db.Works.VisibleTo(await access.ForAsync(User, cancellationToken));
         if (query.SectionId is { } sectionId)
         {
             works = works.Where(w => w.SectionId == sectionId);
@@ -55,9 +58,10 @@ public partial class WorksController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<WorkDetailResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
-        // A work the user cannot see is reported the same way as one that does not exist.
+        // A work the caller cannot see is reported the same way as one that does not exist.
+        var grants = await access.ForAsync(User, cancellationToken);
         var work = await db.Works
-            .VisibleTo(User)
+            .VisibleTo(grants)
             .Where(w => w.Id == id)
             .Select(w => new WorkDetailResponse(
                 w.Id,
@@ -97,11 +101,13 @@ public partial class WorksController(
                             .ToList()))
                     .ToList(),
                 w.CreatedAt,
-                w.UpdatedAt))
+                w.UpdatedAt,
+                // Set from the grants once the work is found, since they are not in the database.
+                ContentAccess.None))
             .AsSplitQuery()
             .SingleOrDefaultAsync(cancellationToken);
 
-        return work is null ? NotFound() : work;
+        return work is null ? NotFound() : work with { Access = grants.In(work.SectionId) };
     }
 
     /// <summary>
@@ -140,9 +146,10 @@ public partial class WorksController(
             coverSize = parsed;
         }
 
-        // A work the user cannot see is reported the same way as one that does not exist.
+        // A work the caller cannot see is reported the same way as one that does not exist.
+        var grants = await access.ForAsync(User, cancellationToken);
         var cover = await (
-                from w in db.Works.VisibleTo(User)
+                from w in db.Works.VisibleTo(grants)
                 where w.Id == id
                 select new { w.CoverPath, w.CoverHash })
             .SingleOrDefaultAsync(cancellationToken);
@@ -201,9 +208,9 @@ public partial class WorksController(
 
     /// <summary>
     /// Lets the browser keep a cover for good when it was asked for by its current hash, and otherwise makes it check
-    /// every time. Private, since covers are served only to a signed-in user. The file result that follows writes no
-    /// <c>Cache-Control</c> of its own, and the header is set so that a renewal of the session cookie on the same
-    /// response does not replace it.
+    /// every time. Private, so a shared cache never keeps a cover, whether a signed-in user or a visitor asked for it.
+    /// The file result that follows writes no <c>Cache-Control</c> of its own, and the header is set so that a renewal
+    /// of the session cookie on the same response does not replace it.
     /// </summary>
     private void SetCoverCacheControl(bool keepForGood)
     {

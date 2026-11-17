@@ -12,7 +12,7 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 
     private static readonly string[] NookTables =
     [
-        "asp_net_users", "roles", "sections", "works", "items", "parts", "people", "work_contributors", "series", "tags",
+        "asp_net_users", "roles", "role_sections", "settings", "sections", "works", "items", "parts", "people", "work_contributors", "series", "tags",
         "work_external_ids", "jobs", "job_steps",
     ];
 

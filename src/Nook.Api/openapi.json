@@ -761,6 +761,154 @@
         }
       }
     },
+    "/api/access": {
+      "get": {
+        "tags": [
+          "Access"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public-access": {
+      "get": {
+        "tags": [
+          "PublicAccess"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAccessResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAccessResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "PublicAccess"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicAccessRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicAccessRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/people": {
       "get": {
         "tags": [
@@ -1478,12 +1626,35 @@
   },
   "components": {
     "schemas": {
+      "AccessResponse": {
+        "required": [
+          "publicAccess",
+          "defaultArea"
+        ],
+        "type": "object",
+        "properties": {
+          "publicAccess": {
+            "type": "boolean"
+          },
+          "defaultArea": {
+            "$ref": "#/components/schemas/ContentAccess"
+          }
+        }
+      },
       "BuiltInRole": {
         "enum": [
           "admin",
           "contributor",
           "viewer",
           "anonymous"
+        ]
+      },
+      "ContentAccess": {
+        "enum": [
+          "none",
+          "browse",
+          "read",
+          "download"
         ]
       },
       "ContributorRole": {
@@ -1953,6 +2124,94 @@
           }
         }
       },
+      "PublicAccessRequest": {
+        "required": [
+          "enabled",
+          "access",
+          "defaultAreaAccess",
+          "sections"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "access": {
+            "$ref": "#/components/schemas/ContentAccess"
+          },
+          "defaultAreaAccess": {
+            "$ref": "#/components/schemas/ContentAccess"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicAccessSectionRequest"
+            }
+          }
+        }
+      },
+      "PublicAccessResponse": {
+        "required": [
+          "enabled",
+          "access",
+          "defaultAreaAccess",
+          "sections"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "access": {
+            "$ref": "#/components/schemas/ContentAccess"
+          },
+          "defaultAreaAccess": {
+            "$ref": "#/components/schemas/ContentAccess"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicAccessSectionResponse"
+            }
+          }
+        }
+      },
+      "PublicAccessSectionRequest": {
+        "required": [
+          "id",
+          "access"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "access": {
+            "$ref": "#/components/schemas/ContentAccess"
+          }
+        }
+      },
+      "PublicAccessSectionResponse": {
+        "required": [
+          "id",
+          "name",
+          "access"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "access": {
+            "$ref": "#/components/schemas/ContentAccess"
+          }
+        }
+      },
       "PublicationLink": {
         "required": [
           "href"
@@ -2287,7 +2546,8 @@
           "externalIds",
           "items",
           "addedAt",
-          "updatedAt"
+          "updatedAt",
+          "access"
         ],
         "type": "object",
         "properties": {
@@ -2380,6 +2640,9 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "access": {
+            "$ref": "#/components/schemas/ContentAccess"
           }
         }
       },
@@ -2566,6 +2829,12 @@
     },
     {
       "name": "Publications"
+    },
+    {
+      "name": "Access"
+    },
+    {
+      "name": "PublicAccess"
     },
     {
       "name": "People"
