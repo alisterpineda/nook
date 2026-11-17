@@ -51,8 +51,10 @@ describe('route guards', () => {
     return vi.waitFor(() => httpTesting.expectOne(url));
   }
 
-  async function answerSignedOut(): Promise<void> {
+  /** Answers as for a visitor nobody has signed in as, with public access off unless `publicAccess` says it is on. */
+  async function answerSignedOut(publicAccess = false): Promise<void> {
     (await nextRequest('/api/auth/me')).flush(null, { status: 401, statusText: 'Unauthorized' });
+    (await nextRequest('/api/access')).flush({ publicAccess, defaultArea: 'none' });
   }
 
   async function answerSignedIn(user: CurrentUserResponse = ada): Promise<void> {
@@ -107,7 +109,28 @@ describe('route guards', () => {
     return harness.routeNativeElement?.querySelector('h1')?.textContent?.trim();
   }
 
-  it('a signed-out visitor to /library lands on /sign-in when a user exists', async () => {
+  it('lets a visitor into the library when public access is on', async () => {
+    const navigating = harness.navigateByUrl('/library');
+    await answerSignedOut(true);
+    await answerSections();
+    await answerWorks();
+    await navigating;
+
+    expect(router.url).toBe('/library');
+    expect(heading()).toBe('Library');
+  });
+
+  it('sends a visitor who asks for the upload page to the library', async () => {
+    const navigating = harness.navigateByUrl('/upload');
+    await answerSignedOut(true);
+    await answerSections();
+    await answerWorks();
+    await navigating;
+
+    expect(router.url).toBe('/library');
+  });
+
+  it('sends a visitor to sign-in when public access is off', async () => {
     const navigating = harness.navigateByUrl('/library');
     await answerSignedOut();
     await answerSetupRequired(false);
@@ -118,7 +141,7 @@ describe('route guards', () => {
     expect(heading()).toBe('Sign in');
   });
 
-  it('a signed-out visitor to /library lands on /setup when no user exists', async () => {
+  it('sends a visitor to setup when Nook has no users', async () => {
     const navigating = harness.navigateByUrl('/library');
     await answerSignedOut();
     await answerSetupRequired(true);

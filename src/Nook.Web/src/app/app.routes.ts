@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { adminGuard, setupGuard, signedInGuard, signedOutGuard } from './core/guards';
+import { adminGuard, libraryGuard, setupGuard, signedOutGuard } from './core/guards';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'library' },
@@ -16,14 +16,14 @@ export const routes: Routes = [
   {
     // The reader fills the screen, so it stands outside the shell and its sidebar.
     path: 'works/:workId/read/:itemId',
-    canActivate: [signedInGuard],
+    canActivate: [libraryGuard],
     loadComponent: () => import('./features/reader/reader-page').then((m) => m.ReaderPage),
   },
   {
-    // One shell holds every signed-in page, so it and the services under it stay put while the user moves between
-    // them.
+    // One shell holds every page of the library, so it and the services under it stay put while the user moves
+    // between them.
     path: '',
-    canActivate: [signedInGuard],
+    canActivate: [libraryGuard],
     loadComponent: () => import('./shell/shell').then((m) => m.Shell),
     children: [
       {

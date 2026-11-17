@@ -323,6 +323,35 @@ describe('WorkDetailPage', () => {
     expect(readLinks(page)).toEqual([]);
   });
 
+  /** The page's "Download" links. */
+  function downloadLinks(page: HTMLElement): HTMLAnchorElement[] {
+    return Array.from(page.querySelectorAll('a')).filter((link) => text(link) === 'Download');
+  }
+
+  it('shows neither Read nor Download at the browse level', async () => {
+    const page = await openWork({ ...dune, access: 'browse' });
+
+    expect(items(page)).toHaveLength(2);
+    expect(readLinks(page)).toEqual([]);
+    expect(downloadLinks(page)).toEqual([]);
+  });
+
+  it('shows Read and no Download at the read level', async () => {
+    const page = await openWork({ ...dune, access: 'read' });
+
+    expect(readLinks(page).map((link) => link.getAttribute('href'))).toEqual([
+      `/works/${duneId}/read/0198a1b2-0000-7000-8000-0000000000f4`,
+    ]);
+    expect(downloadLinks(page)).toEqual([]);
+  });
+
+  it('shows Read and Download at the download level', async () => {
+    const page = await openWork({ ...dune, access: 'download' });
+
+    expect(readLinks(page)).toHaveLength(1);
+    expect(downloadLinks(page)).toHaveLength(3);
+  });
+
   it('shows a format it has no label for as the API sent it', async () => {
     const page = await openWork({
       ...dune,

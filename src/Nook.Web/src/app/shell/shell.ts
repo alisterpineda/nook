@@ -1,24 +1,26 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink, RouterOutlet, isActive } from '@angular/router';
+import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { SectionsApi } from '../api/sections-api';
 import { components } from '../api/schema';
 import { LibraryArea, areaParam, readArea, sameArea } from '../core/library-area';
+import { allows } from '../core/content-access';
 import { Session } from '../core/session';
 import { UploadQueue } from '../features/upload/upload-queue';
 
 type SectionResponse = components['schemas']['SectionResponse'];
 
 /**
- * The frame around every signed-in page: a collapsible sidebar with "Library", then "Default" and the user's
+ * The frame around every page of the library: a collapsible sidebar with "Library", then "Default" and the caller's
  * sections when there are any, then "Authors", then "Add books" for an admin, the user's menu in its footer, and the
- * page itself beside it.
+ * page itself beside it. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
  */
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterOutlet, HlmDropdownMenuImports, HlmSidebarImports],
+  imports: [RouterLink, RouterOutlet, HlmButtonImports, HlmDropdownMenuImports, HlmSidebarImports],
   template: `
     <div hlmSidebarWrapper>
       <hlm-sidebar>
@@ -78,25 +80,29 @@ type SectionResponse = components['schemas']['SectionResponse'];
             </nav>
           }
         </div>
-        <div hlmSidebarFooter>
-          @if (signOutFailed()) {
-            <p class="text-destructive px-2 text-sm" role="alert">Could not sign out. Try again.</p>
-          }
-          <ul hlmSidebarMenu>
-            <li hlmSidebarMenuItem>
-              <button
-                hlmSidebarMenuButton
-                type="button"
-                size="lg"
-                side="top"
-                align="start"
-                [hlmDropdownMenuTrigger]="userMenu"
-              >
-                <span>{{ session.user()?.email }}</span>
-              </button>
-            </li>
-          </ul>
-        </div>
+        @if (session.user(); as user) {
+          <div hlmSidebarFooter>
+            @if (signOutFailed()) {
+              <p class="text-destructive px-2 text-sm" role="alert">
+                Could not sign out. Try again.
+              </p>
+            }
+            <ul hlmSidebarMenu>
+              <li hlmSidebarMenuItem>
+                <button
+                  hlmSidebarMenuButton
+                  type="button"
+                  size="lg"
+                  side="top"
+                  align="start"
+                  [hlmDropdownMenuTrigger]="userMenu"
+                >
+                  <span>{{ user.email }}</span>
+                </button>
+              </li>
+            </ul>
+          </div>
+        }
       </hlm-sidebar>
 
       <main hlmSidebarInset>
@@ -107,6 +113,9 @@ type SectionResponse = components['schemas']['SectionResponse'];
             aria-label="Toggle sidebar"
             srOnlyText="Toggle sidebar"
           ></button>
+          @if (!session.user()) {
+            <a hlmBtn variant="outline" size="sm" class="ml-auto" routerLink="/sign-in">Sign in</a>
+          }
         </header>
         <div class="flex-1 p-4">
           <router-outlet />
@@ -142,13 +151,15 @@ export class Shell {
   protected readonly onAuthors = isActive('/authors', this.router, { queryParams: 'ignored' });
   /**
    * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,
-   * since the Default area is worth naming only beside a section. The one the URL names is current.
+   * since the Default area is worth naming only beside a section. "Default" is left out for a visitor who may not
+   * see it. The one the URL names is current.
    */
   protected readonly links = computed(() => {
     const sections = this.sections();
+    const showDefault = sections.length > 0 && allows(this.session.defaultAreaAccess(), 'browse');
     const areas: { label: string; area: LibraryArea }[] = [
       { label: 'Library', area: { kind: 'all' } },
-      ...(sections.length > 0 ? [{ label: 'Default', area: { kind: 'default' } as const }] : []),
+      ...(showDefault ? [{ label: 'Default', area: { kind: 'default' } as const }] : []),
       ...sections.map(({ id, name }) => ({ label: name, area: { kind: 'section', id } as const })),
     ];
     const browsed = readArea(this.queryParams());

@@ -4,7 +4,10 @@ import { TestBed } from '@angular/core/testing';
 import { components } from '../api/schema';
 import { Session } from './session';
 
+type AccessResponse = components['schemas']['AccessResponse'];
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
+
+const publicAccessOff: AccessResponse = { publicAccess: false, defaultArea: 'none' };
 
 describe('Session', () => {
   const ada: CurrentUserResponse = {
@@ -41,6 +44,7 @@ describe('Session', () => {
     const loading = session.load();
 
     httpTesting.expectOne('/api/auth/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
     await loading;
 
     expect(session.user()).toBeNull();
@@ -138,6 +142,7 @@ describe('Session', () => {
     const request = httpTesting.expectOne('/api/auth/logout');
     expect(request.request.method).toBe('POST');
     request.flush(null, { status: 204, statusText: 'No Content' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
     await signingOut;
 
     expect(session.user()).toBeNull();
@@ -152,6 +157,7 @@ describe('Session', () => {
     httpTesting
       .expectOne('/api/auth/logout')
       .flush(null, { status: 401, statusText: 'Unauthorized' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
     await signingOut;
 
     expect(session.user()).toBeNull();
@@ -169,6 +175,82 @@ describe('Session', () => {
 
     await expect(signingOut).rejects.toMatchObject({ status: 500 });
     expect(session.user()).toEqual(ada);
+  });
+
+  it('learns whether public access is on when nobody is signed in', async () => {
+    const loading = session.ensureLoaded();
+
+    httpTesting.expectOne('/api/auth/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+    const request = await vi.waitFor(() => httpTesting.expectOne('/api/access'));
+    expect(request.request.method).toBe('GET');
+    request.flush({ publicAccess: true, defaultArea: 'browse' } satisfies AccessResponse);
+    await loading;
+
+    expect(session.user()).toBeNull();
+    expect(session.publicAccess()).toBe(true);
+    expect(session.defaultAreaAccess()).toBe('browse');
+  });
+
+  it('does not ask for access when someone is signed in', async () => {
+    const loading = session.ensureLoaded();
+
+    httpTesting.expectOne('/api/auth/me').flush(ada);
+    await loading;
+
+    httpTesting.expectNone('/api/access');
+    expect(session.publicAccess()).toBe(false);
+    expect(session.defaultAreaAccess()).toBe('download');
+  });
+
+  it('passes on a failure to read access while loading', async () => {
+    const loading = session.ensureLoaded();
+
+    httpTesting.expectOne('/api/auth/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(null, {
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+
+    await expect(loading).rejects.toMatchObject({ status: 500 });
+  });
+
+  it('reads access again after signing out', async () => {
+    const signingIn = session.signIn('ada@example.com', 'correct horse');
+    httpTesting.expectOne('/api/auth/login').flush(ada);
+    await signingIn;
+
+    const signingOut = session.signOut();
+    httpTesting
+      .expectOne('/api/auth/logout')
+      .flush(null, { status: 204, statusText: 'No Content' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush({
+      publicAccess: true,
+      defaultArea: 'none',
+    } satisfies AccessResponse);
+    await signingOut;
+
+    expect(session.user()).toBeNull();
+    expect(session.publicAccess()).toBe(true);
+    expect(session.defaultAreaAccess()).toBe('none');
+  });
+
+  it('signs out even when access cannot be read', async () => {
+    const signingIn = session.signIn('ada@example.com', 'correct horse');
+    httpTesting.expectOne('/api/auth/login').flush(ada);
+    await signingIn;
+
+    const signingOut = session.signOut();
+    httpTesting
+      .expectOne('/api/auth/logout')
+      .flush(null, { status: 204, statusText: 'No Content' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(null, {
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    await signingOut;
+
+    expect(session.user()).toBeNull();
+    expect(session.publicAccess()).toBe(false);
   });
 
   it('setupRequired reports what the API says', async () => {

@@ -2,13 +2,16 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { Session } from './session';
 
-/** Lets a signed-in user through, and sends a signed-out visitor to setup when Nook has no users, or to sign-in. */
-export const signedInGuard: CanActivateFn = async () => {
+/**
+ * Lets a signed-in user through, and a visitor nobody has signed in as when public access is on. Any other visitor
+ * goes to setup when Nook has no users, or to sign-in.
+ */
+export const libraryGuard: CanActivateFn = async () => {
   const session = inject(Session);
   const router = inject(Router);
 
   await session.ensureLoaded();
-  if (session.user()) {
+  if (session.user() || session.publicAccess()) {
     return true;
   }
   return router.parseUrl((await session.setupRequired()) ? '/setup' : '/sign-in');
@@ -39,8 +42,8 @@ export const setupGuard: CanActivateFn = async () => {
 };
 
 /**
- * Lets an admin through, and sends anyone else to the works list. It sits below `signedInGuard`, which has already
- * sent a signed-out visitor away.
+ * Lets an admin through, and sends anyone else to the works list. It sits below `libraryGuard`, which has already
+ * sent away a visitor who may not enter the library.
  */
 export const adminGuard: CanActivateFn = async () => {
   const session = inject(Session);

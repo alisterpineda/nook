@@ -13,6 +13,7 @@ import { Session } from '../core/session';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { Shell } from './shell';
 
+type AccessResponse = components['schemas']['AccessResponse'];
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type SectionResponse = components['schemas']['SectionResponse'];
 
@@ -52,6 +53,7 @@ describe('Shell', () => {
   };
   const books: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
   const comics: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000b', name: 'Comics' };
+  const publicAccessOff: AccessResponse = { publicAccess: false, defaultArea: 'none' };
 
   let harness: RouterTestingHarness;
   let httpTesting: HttpTestingController;
@@ -99,6 +101,21 @@ describe('Shell', () => {
     const loading = TestBed.inject(Session).load();
     httpTesting.expectOne('/api/auth/me').flush(user);
     await loading;
+  }
+
+  /** Loads the session with nobody signed in, the API saying a visitor may do what `access` says. */
+  async function visitWith(access: AccessResponse): Promise<void> {
+    const loading = TestBed.inject(Session).load();
+    httpTesting.expectOne('/api/auth/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(access);
+    await loading;
+  }
+
+  /** The header's link named "Sign in", if there is one. */
+  function signInLink(shell: HTMLElement): HTMLAnchorElement | undefined {
+    return Array.from(shell.querySelectorAll<HTMLAnchorElement>('header a')).find(
+      (link) => link.textContent?.trim() === 'Sign in',
+    );
   }
 
   /** Opens the shell at `url`, answering its request for the sections with `answer`. */
@@ -264,6 +281,7 @@ describe('Shell', () => {
     const request = await vi.waitFor(() => httpTesting.expectOne('/api/auth/logout'));
     expect(request.request.method).toBe('POST');
     request.flush(null, { status: 204, statusText: 'No Content' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
 
     await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
     expect(TestBed.inject(Session).user()).toBeNull();
@@ -412,11 +430,55 @@ describe('Shell', () => {
       status: 204,
       statusText: 'No Content',
     });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
 
     await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
     ignoreCancelled = true;
     expect(queue.rows()).toEqual([]);
     expect(upload.cancelled).toBe(true);
+  });
+
+  it('shows a visitor a sign-in link and no user menu', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'browse' });
+    const shell = await openShell('/library');
+
+    expect(signInLink(shell)?.getAttribute('href')).toBe('/sign-in');
+    expect(shell.querySelectorAll('[data-slot="sidebar-footer"] button')).toHaveLength(0);
+  });
+
+  it('shows a signed-in user no sign-in link', async () => {
+    const shell = await openShell('/library');
+
+    expect(signInLink(shell)).toBeUndefined();
+  });
+
+  it('shows a visitor Default when their Default area level is not none', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'read' });
+    const shell = await openShell('/library', (request) => request.flush([comics]));
+
+    expect(sidebarLinks(shell).map((link) => link.textContent?.trim())).toEqual([
+      'Library',
+      'Default',
+      'Comics',
+    ]);
+  });
+
+  it('hides Default from a visitor whose Default area level is none', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'none' });
+    const shell = await openShell('/library', (request) => request.flush([comics]));
+
+    expect(sidebarLinks(shell).map((link) => link.textContent?.trim())).toEqual([
+      'Library',
+      'Comics',
+    ]);
+  });
+
+  it('shows a visitor no Manage group', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'download' });
+    const shell = await openShell('/library');
+
+    expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+    expect(addBooks(shell)).toBeUndefined();
   });
 
   it('a failed sign-out keeps the upload list', async () => {

@@ -33,11 +33,15 @@ type UploadResponse = components['schemas']['UploadResponse'];
 type BuiltInRole = components['schemas']['BuiltInRole'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 
-/** Who opens a page: signed in or not, with the role they hold when signed in, on an instance set up or not. */
+/**
+ * Who opens a page: signed in or not, with the role they hold when signed in, on an instance set up or not, and with
+ * public access on or off.
+ */
 interface Visitor {
   signedIn: boolean;
   setupRequired: boolean;
   role?: BuiltInRole;
+  publicAccess?: boolean;
 }
 
 describe('routes', () => {
@@ -79,6 +83,7 @@ describe('routes', () => {
     return {
       '/api/setup': { required: visitor.setupRequired },
       '/api/auth/sign-in-options': { ssoName: null },
+      '/api/access': { publicAccess: visitor.publicAccess ?? false, defaultArea: 'none' },
       '/api/sections': [],
       '/api/works': noWorks,
       '/api/works/42': dune,
@@ -186,6 +191,19 @@ describe('routes', () => {
         Shell,
       ),
     ).toEqual({ landedOn: reader, shown: false });
+  });
+
+  it('a visitor opens the reader when public access is on', async () => {
+    const reader = '/works/42/read/0198a1b2-0000-7000-8000-0000000000f1';
+
+    expect(
+      await open(
+        reader,
+        { signedIn: false, setupRequired: false, publicAccess: true },
+        ReaderPage,
+        [provideFakeReaderEngine(new FakeReaderEngine())],
+      ),
+    ).toEqual({ landedOn: reader, shown: true });
   });
 
   it('sends a signed-out visitor from the reader to sign-in', async () => {

@@ -2,12 +2,17 @@ import { HttpClient, HttpErrorResponse, HttpStatusCode } from '@angular/common/h
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { components } from '../api/schema';
+import { ContentAccess } from './content-access';
 
+type AccessResponse = components['schemas']['AccessResponse'];
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type LoginRequest = components['schemas']['LoginRequest'];
 type SetupRequest = components['schemas']['SetupRequest'];
 type SetupStatusResponse = components['schemas']['SetupStatusResponse'];
 type SignInOptionsResponse = components['schemas']['SignInOptionsResponse'];
+
+/** What a visitor may do until the API says otherwise: nothing. */
+const noVisitorAccess: AccessResponse = { publicAccess: false, defaultArea: 'none' };
 
 /**
  * Who is signed in, and the calls that change it. The session itself is the API's `nook` cookie, so the user
@@ -19,6 +24,7 @@ type SignInOptionsResponse = components['schemas']['SignInOptionsResponse'];
 export class Session {
   private readonly http = inject(HttpClient);
   private readonly currentUser = signal<CurrentUserResponse | null>(null);
+  private readonly visitorAccess = signal(noVisitorAccess);
   private loaded: Promise<void> | null = null;
 
   /** The signed-in user, or `null` when signed out. */
@@ -26,6 +32,17 @@ export class Session {
 
   /** Whether the signed-in user is an admin, who alone may add books. */
   readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
+
+  /** Whether someone who is not signed in may enter the library. Read only while nobody is signed in. */
+  readonly publicAccess = computed(() => this.visitorAccess().publicAccess);
+
+  /**
+   * The caller's level in the Default area: `'download'` for a signed-in user, and for a visitor what the API
+   * last said.
+   */
+  readonly defaultAreaAccess = computed<ContentAccess>(() =>
+    this.currentUser() ? 'download' : this.visitorAccess().defaultArea,
+  );
 
   /**
    * Calls `load()` the first time it is asked and hands back that same answer after, so the route guards can
@@ -40,7 +57,7 @@ export class Session {
     return this.loaded;
   }
 
-  /** Asks the API who the session belongs to. */
+  /** Asks the API who the session belongs to, and when nobody is signed in, what a visitor may do. */
   async load(): Promise<void> {
     try {
       this.currentUser.set(
@@ -49,6 +66,7 @@ export class Session {
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === HttpStatusCode.Unauthorized) {
         this.currentUser.set(null);
+        await this.readAccess();
         return;
       }
       throw error;
@@ -83,7 +101,8 @@ export class Session {
 
   /**
    * Ends the session. The user is cleared only once the API has ended it, or says there was none to end: after
-   * any other failure the `nook` cookie still works, so the app must not look signed out.
+   * any other failure the `nook` cookie still works, so the app must not look signed out. What a visitor may do
+   * is then read again; when that read fails the session is ended all the same, with public access taken as off.
    */
   async signOut(): Promise<void> {
     try {
@@ -94,5 +113,14 @@ export class Session {
       }
     }
     this.currentUser.set(null);
+    try {
+      await this.readAccess();
+    } catch {
+      this.visitorAccess.set(noVisitorAccess);
+    }
+  }
+
+  private async readAccess(): Promise<void> {
+    this.visitorAccess.set(await firstValueFrom(this.http.get<AccessResponse>('/api/access')));
   }
 }

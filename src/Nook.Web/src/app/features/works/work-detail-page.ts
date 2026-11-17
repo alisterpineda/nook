@@ -8,6 +8,7 @@ import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
 import { components } from '../../api/schema';
 import { WorksApi, partFileUrl } from '../../api/works-api';
+import { allows } from '../../core/content-access';
 import { formatBytes } from '../../core/format-bytes';
 import { somethingWentWrong } from '../../core/messages';
 import { WorkCover } from './work-cover';
@@ -115,7 +116,7 @@ type Showing =
                 <li class="flex flex-col gap-1">
                   <div class="flex flex-wrap items-center gap-2">
                     <span hlmBadge variant="secondary">{{ formatLabel(item.format) }}</span>
-                    @if (readable(item)) {
+                    @if (readable(work, item)) {
                       <a hlmBtn size="sm" [routerLink]="['/works', work.id, 'read', item.id]"
                         >Read</a
                       >
@@ -126,15 +127,17 @@ type Showing =
                       <li class="flex flex-wrap items-center gap-2">
                         <span>{{ part.mediaType }}</span>
                         <span class="text-muted-foreground">{{ formatBytes(part.size) }}</span>
-                        <!-- The API names the saved file, so the download attribute carries no name. -->
-                        <a
-                          hlmBtn
-                          variant="outline"
-                          size="sm"
-                          download
-                          [attr.href]="partFileUrl(part.id)"
-                          >Download</a
-                        >
+                        @if (allows(work.access, 'download')) {
+                          <!-- The API names the saved file, so the download attribute carries no name. -->
+                          <a
+                            hlmBtn
+                            variant="outline"
+                            size="sm"
+                            download
+                            [attr.href]="partFileUrl(part.id)"
+                            >Download</a
+                          >
+                        }
                       </li>
                     }
                   </ul>
@@ -152,6 +155,7 @@ export class WorkDetailPage {
   private readonly route = inject(ActivatedRoute);
 
   protected readonly somethingWentWrong = somethingWentWrong;
+  protected readonly allows = allows;
   protected readonly formatBytes = formatBytes;
   protected readonly formatLabel = formatLabel;
   protected readonly partFileUrl = partFileUrl;
@@ -180,9 +184,10 @@ export class WorkDetailPage {
     );
   }
 
-  // Ingest makes one part per EPUB item, but nothing enforces it, and the reader opens only an item with exactly one.
-  protected readable(item: WorkItemResponse): boolean {
-    return item.format === 'epub' && item.parts.length === 1;
+  // Reading needs the read level or above. Ingest makes one part per EPUB item, but nothing enforces it, and the reader
+  // opens only an item with exactly one.
+  protected readable(work: WorkDetailResponse, item: WorkItemResponse): boolean {
+    return allows(work.access, 'read') && item.format === 'epub' && item.parts.length === 1;
   }
 
   private async load(id: string): Promise<Showing> {
