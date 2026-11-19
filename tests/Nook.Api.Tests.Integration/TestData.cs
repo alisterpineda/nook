@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
+using Nook.Api.Features.Works;
 
 namespace Nook.Api.Tests.Integration;
 
@@ -32,6 +33,16 @@ internal static class TestData
         db.Sections.Add(section);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return section;
+    }
+
+    /// <summary>Saves rows as <c>AddRowsAsync</c> does, then builds the search vector of every work among them.</summary>
+    public static async Task AddSearchableRowsAsync(this WebApplicationFactory<Program> factory, params object[] rows)
+    {
+        await factory.AddRowsAsync(rows);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        await new WorkSearchIndex(db).RebuildAsync(
+            [.. rows.OfType<Work>().Select(w => w.Id)], TestContext.Current.CancellationToken);
     }
 
     /// <summary>The definition of every index on a table, as PostgreSQL reports it.</summary>

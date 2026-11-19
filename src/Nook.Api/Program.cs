@@ -110,7 +110,11 @@ if (!buildingOpenApiDocument)
     app.Services.GetRequiredService<NookStorage>().PrepareFolders(storageLogger);
 
     await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<NookDbContext>().Database.MigrateAsync();
+    var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+    await db.Database.MigrateAsync();
+
+    // A work with no search vector, such as one from before search was built, gets one before Nook answers requests.
+    await new WorkSearchIndex(db).RebuildMissingAsync(CancellationToken.None);
 }
 
 // Every response carries the web app's policy, an error and the built web app included, unless it sets its own.

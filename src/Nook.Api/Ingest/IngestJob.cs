@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Nook.Api.Data;
+using Nook.Api.Features.Works;
 using Nook.Api.Jobs;
 using Nook.Api.Storage;
 
@@ -30,6 +31,7 @@ public sealed class IngestJob : JobType
         var handlers = services.GetServices<IFormatHandler>().ToList();
         var db = services.GetRequiredService<NookDbContext>();
         var matcher = new WorkMatcher(db);
+        var searchIndex = new WorkSearchIndex(db);
         var logger = services.GetRequiredService<ILogger<IngestJob>>();
         var stagedFile = storage.StagedFile(payload.StagedName);
         var run = new JobRun();
@@ -186,6 +188,13 @@ public sealed class IngestJob : JobType
                 built = (item.Id, work.Id);
                 saving = true;
                 await db.SaveChangesAsync(cancellationToken);
+                if (!joined)
+                {
+                    // A new work is searchable from the moment it is saved. A work this file joined keeps the
+                    // vector it has: none of the fields a search reads changed.
+                    await searchIndex.RebuildAsync([work.Id], cancellationToken);
+                }
+
                 await transaction.CommitAsync(CancellationToken.None);
                 run.SetResult(new IngestResult(IngestOutcome.Created, item.Id, work.Id));
             }

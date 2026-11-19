@@ -37,7 +37,10 @@ public class Work : Entity
     /// <summary>The cover file's path, relative to the library folder. Null when the work has no cover.</summary>
     public string? CoverPath { get; set; }
 
-    /// <summary>The full-text search document. Empty until search is built.</summary>
+    /// <summary>
+    /// The full-text search document: the title's words at weight A, the authors' names at B, and the series' name and
+    /// the tags' names at C. Built by <c>WorkSearchIndex</c>; null until it has been built.
+    /// </summary>
     public NpgsqlTsVector? SearchVector { get; set; }
 
     /// <summary>The people who made the work, each with a role and display order.</summary>

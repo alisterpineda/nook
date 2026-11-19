@@ -11,7 +11,7 @@ import { somethingWentWrong } from '../../core/messages';
 import { WorkCard } from './work-card';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
-type WorkSort = components['schemas']['WorkSort'];
+type WorkSort = NonNullable<components['schemas']['WorkSort']>;
 
 /** What the URL asks the list to show. */
 interface ListQuery {

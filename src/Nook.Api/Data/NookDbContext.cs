@@ -46,6 +46,9 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
     {
         base.OnModelCreating(builder);
 
+        // The "nook" text search configuration, created by a migration, strips accents through unaccent.
+        builder.HasPostgresExtension("unaccent");
+
         // Identity names its tables explicitly, which the snake_case naming convention leaves alone.
         builder.Entity<NookUser>().ToTable("asp_net_users");
         builder.Entity<IdentityUserClaim<Guid>>().ToTable("asp_net_user_claims");

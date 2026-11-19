@@ -4,7 +4,9 @@ import { firstValueFrom } from 'rxjs';
 import { toParams } from './query-params';
 import { components, paths } from './schema';
 
-type WorkListQuery = NonNullable<paths['/api/works']['get']['parameters']['query']>;
+type ListParameters = NonNullable<paths['/api/works']['get']['parameters']['query']>;
+// The schema allows a null sort for "none given", which a query leaves out instead.
+type WorkListQuery = Omit<ListParameters, 'Sort'> & { Sort?: NonNullable<ListParameters['Sort']> };
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 

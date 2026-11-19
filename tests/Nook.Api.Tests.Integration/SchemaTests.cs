@@ -227,6 +227,23 @@ public class SchemaTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
+    [Fact]
+    public async Task Search_configuration_keeps_every_word_and_drops_case_and_accents()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+
+        var vector = await db.Database
+            .SqlQuery<string>($"SELECT to_tsvector('nook', 'The Brontë It')::text AS \"Value\"")
+            .SingleAsync(cancellationToken);
+
+        Assert.Contains("'the'", vector);
+        Assert.Contains("'bronte'", vector);
+        Assert.Contains("'it'", vector);
+        Assert.DoesNotContain("brontë", vector);
+    }
+
     /// <summary>The tag's name key as the database holds it.</summary>
     private static Task<string> ReadNameKeyAsync(NookDbContext db, Guid tagId, CancellationToken cancellationToken) =>
         db.Database

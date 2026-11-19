@@ -1005,7 +1005,7 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     }
 
     [Fact]
-    public async Task Work_created_by_ingest_has_an_empty_search_vector()
+    public async Task Work_created_by_ingest_is_found_by_a_search()
     {
         var section = await factory.AddSectionAsync();
         var epub = new EpubBuilder().WithTitle("Parable of the Sower").WithCreator($"Octavia E. Butler {IngestTestExtensions.UniqueSuffix()}").Build();
@@ -1014,10 +1014,8 @@ public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var job = await client.IngestAsync(epub, "sower.epub", section.Id);
 
         Assert.Equal(JobStatus.Succeeded, job.Status);
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-        var work = await db.Works.SingleAsync(w => w.SectionId == section.Id, TestContext.Current.CancellationToken);
-        Assert.Null(work.SearchVector);
+        var page = await client.GetAsync<Page<WorkSummaryResponse>>($"/api/works?search=sower&sectionId={section.Id}");
+        Assert.Equal(["Parable of the Sower"], page.Items.Select(w => w.Title));
     }
 
     [Fact]

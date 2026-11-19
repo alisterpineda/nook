@@ -16,6 +16,7 @@ export interface paths {
                 query?: {
                     SectionId?: string;
                     NoSection?: boolean;
+                    Search?: string;
                     Sort?: components["schemas"]["WorkSort"];
                     Offset?: number;
                     Limit?: number;
@@ -1606,7 +1607,7 @@ export interface components {
             position: null | number;
         };
         /** @enum {unknown} */
-        WorkSort: "title" | "added";
+        WorkSort: "title" | "added" | "relevance" | null;
         WorkSummaryResponse: {
             /** Format: uuid */
             id: string;

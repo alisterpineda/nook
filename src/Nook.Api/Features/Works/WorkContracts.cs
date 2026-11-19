@@ -11,6 +11,9 @@ public enum WorkSort
 
     /// <summary>By when the work was added, newest first.</summary>
     Added,
+
+    /// <summary>By how well the work matches the search, best first. Only a search can be sorted this way.</summary>
+    Relevance,
 }
 
 public class WorkListQuery : IValidatableObject
@@ -21,7 +24,12 @@ public class WorkListQuery : IValidatableObject
     /// <summary>Only works in no section. It cannot be set together with <see cref="SectionId"/>.</summary>
     public bool NoSection { get; set; }
 
-    public WorkSort Sort { get; set; } = WorkSort.Title;
+    /// <summary>Only works that match these words: every word, the last as the start of a word.</summary>
+    [StringLength(200)]
+    public string? Search { get; set; }
+
+    /// <summary>The order. With none, a search is by relevance and a list with no search is by title.</summary>
+    public WorkSort? Sort { get; set; }
 
     [Range(0, int.MaxValue)]
     public int Offset { get; set; }
@@ -36,6 +44,13 @@ public class WorkListQuery : IValidatableObject
             yield return new ValidationResult(
                 "A list is of one section or of the works in no section, not both.",
                 [nameof(SectionId), nameof(NoSection)]);
+        }
+
+        if (Sort == WorkSort.Relevance && string.IsNullOrWhiteSpace(Search))
+        {
+            yield return new ValidationResult(
+                "Only a search can be sorted by relevance.",
+                [nameof(Sort), nameof(Search)]);
         }
     }
 }

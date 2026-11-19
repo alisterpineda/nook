@@ -27,6 +27,15 @@
             }
           },
           {
+            "name": "Search",
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "minLength": 0,
+              "type": "string"
+            }
+          },
+          {
             "name": "Sort",
             "in": "query",
             "schema": {
@@ -2732,7 +2741,9 @@
       "WorkSort": {
         "enum": [
           "title",
-          "added"
+          "added",
+          "relevance",
+          null
         ]
       },
       "WorkSummaryResponse": {
