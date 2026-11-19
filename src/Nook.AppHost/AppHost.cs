@@ -12,7 +12,7 @@ var nookDb = builder.AddPostgres("postgres")
 // The API keeps its files in .data at the repository root, which git ignores.
 var dataPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", ".data"));
 
-var api = builder.AddProject<Projects.Nook_Api>("api")
+var api = builder.AddDotnetProject("api", "../Nook.Api/Nook.Api.csproj")
     .WithReference(nookDb)
     .WaitFor(nookDb)
     .WithEnvironment("Nook__DataPath", dataPath)
