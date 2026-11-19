@@ -6,6 +6,7 @@ import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
 import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
+import { readTerm } from '../../core/search-term';
 import { LibraryArea, readArea, sameArea } from '../../core/library-area';
 import { somethingWentWrong } from '../../core/messages';
 import { WorkCard } from './work-card';
@@ -16,6 +17,8 @@ type WorkSort = NonNullable<components['schemas']['WorkSort']>;
 /** What the URL asks the list to show. */
 interface ListQuery {
   area: LibraryArea;
+  /** The words searched for, trimmed, or null when the URL names none. */
+  term: string | null;
   sort: WorkSort;
   /** Counts from 1. */
   page: number;
@@ -29,13 +32,22 @@ type Listing =
 
 const pageSize = 50;
 
-const defaultSort: WorkSort = 'title';
+/** The sort order the list takes when the URL names none: best match first during a search, by title otherwise. */
+function defaultSortFor(term: string | null): WorkSort {
+  return term === null ? 'title' : 'relevance';
+}
 
-/** The sort orders the list offers, in the order the control shows them. */
+const relevanceOption = { value: 'relevance', label: 'Relevance' } as const;
+
 const sortOptions: readonly { value: WorkSort; label: string }[] = [
   { value: 'title', label: 'Title' },
   { value: 'added', label: 'Recently added' },
 ];
+
+/** The sort orders the list offers, in the order the control shows them: Relevance only during a search. */
+function sortOptionsFor(term: string | null): readonly { value: WorkSort; label: string }[] {
+  return term === null ? sortOptions : [relevanceOption, ...sortOptions];
+}
 
 /**
  * One page of the works in the section the URL names, of the works in no section when it names the Default area,
@@ -58,7 +70,7 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
         [value]="shownQuery.sort"
         (valueChange)="sortBy($event)"
       >
-        @for (option of sortOptions; track option.value) {
+        @for (option of sortOptionsFor(shownQuery.term); track option.value) {
           <button hlmToggleGroupItem type="button" [value]="option.value">
             {{ option.label }}
           </button>
@@ -70,7 +82,13 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
       <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
     } @else if (current.status === 'loaded') {
       @if (current.page.total === 0) {
-        <p class="text-muted-foreground text-sm">No works yet</p>
+        <p class="text-muted-foreground text-sm">
+          @if (shownQuery.term === null) {
+            No works yet
+          } @else {
+            No works match "{{ shownQuery.term }}"
+          }
+        </p>
       } @else {
         <ul
           class="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-x-4 gap-y-6"
@@ -84,7 +102,9 @@ const sortOptions: readonly { value: WorkSort; label: string }[] = [
         </ul>
         @let pageCount = pageCountOf(current.page.total);
         <nav class="mt-4 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
-          <p class="text-muted-foreground text-sm">{{ totalText(current.page.total) }}</p>
+          <p class="text-muted-foreground text-sm">
+            {{ totalText(current.page.total, shownQuery.term !== null) }}
+          </p>
           <div class="flex items-center gap-2">
             <span class="text-muted-foreground text-sm"
               >Page {{ shownQuery.page }} of {{ pageCount }}</span
@@ -121,7 +141,7 @@ export class WorksListPage {
   private readonly router = inject(Router);
 
   protected readonly somethingWentWrong = somethingWentWrong;
-  protected readonly sortOptions = sortOptions;
+  protected readonly sortOptionsFor = sortOptionsFor;
 
   // The sidebar, the sort control and the pager all change the URL without recreating the page, so the list follows
   // the URL rather than reading it once, and an answer for a query the user has already left is dropped.
@@ -130,6 +150,7 @@ export class WorksListPage {
     distinctUntilChanged(
       (previous, next) =>
         sameArea(previous.area, next.area) &&
+        previous.term === next.term &&
         previous.sort === next.sort &&
         previous.page === next.page,
     ),
@@ -146,7 +167,7 @@ export class WorksListPage {
 
   /** Shows the first page in the chosen sort order. */
   protected sortBy(value: unknown): void {
-    const sort = sortOptions.find((option) => option.value === value)?.value;
+    const sort = sortOptionsFor(this.query().term).find((option) => option.value === value)?.value;
     if (sort) {
       this.show({ sort, page: 1 });
     }
@@ -160,12 +181,16 @@ export class WorksListPage {
     return Math.max(1, Math.ceil(total / pageSize));
   }
 
-  protected totalText(total: number): string {
+  protected totalText(total: number, searching: boolean): string {
+    if (searching) {
+      return total === 1 ? '1 work matches' : `${total} works match`;
+    }
     return total === 1 ? '1 work' : `${total} works`;
   }
 
-  /** Puts the sort and page in the URL, keeping its section, and leaves out each one that is at its default. */
-  private show({ sort, page }: Omit<ListQuery, 'area'>): void {
+  /** Puts the sort and page in the URL, keeping its section and term, and leaves out each one that is at its default. */
+  private show({ sort, page }: Pick<ListQuery, 'sort' | 'page'>): void {
+    const defaultSort = defaultSortFor(this.query().term);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { sort: sort === defaultSort ? null : sort, page: page === 1 ? null : page },
@@ -173,11 +198,12 @@ export class WorksListPage {
     });
   }
 
-  private async load({ area, sort, page }: ListQuery): Promise<Listing> {
+  private async load({ area, term, sort, page }: ListQuery): Promise<Listing> {
     try {
       const response = await this.worksApi.list({
         SectionId: area.kind === 'section' ? area.id : undefined,
         NoSection: area.kind === 'default' ? true : undefined,
+        Search: term ?? undefined,
         Sort: sort,
         Offset: (page - 1) * pageSize,
         Limit: pageSize,
@@ -189,13 +215,20 @@ export class WorksListPage {
   }
 }
 
-/** Reads the list's query from the URL, taking the default for a sort or page it does not recognise. */
+/**
+ * Reads the list's query from the URL, taking the default for a sort or page it does not recognise, and for
+ * relevance when no term is searched for.
+ */
 function toListQuery(params: ParamMap): ListQuery {
   const sortParam = params.get('sort');
   const pageParam = params.get('page');
+  const term = readTerm(params);
   return {
     area: readArea(params),
-    sort: sortOptions.find((option) => option.value === sortParam)?.value ?? defaultSort,
+    term,
+    sort:
+      sortOptionsFor(term).find((option) => option.value === sortParam)?.value ??
+      defaultSortFor(term),
     page: pageParam !== null && /^[1-9][0-9]*$/.test(pageParam) ? Number(pageParam) : 1,
   };
 }

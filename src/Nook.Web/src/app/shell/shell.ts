@@ -10,6 +10,7 @@ import { LibraryArea, areaParam, readArea, sameArea } from '../core/library-area
 import { allows } from '../core/content-access';
 import { Session } from '../core/session';
 import { UploadQueue } from '../features/upload/upload-queue';
+import { SearchBox } from './search-box';
 
 type SectionResponse = components['schemas']['SectionResponse'];
 
@@ -21,7 +22,14 @@ type SectionResponse = components['schemas']['SectionResponse'];
  */
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterOutlet, HlmButtonImports, HlmDropdownMenuImports, HlmSidebarImports],
+  imports: [
+    RouterLink,
+    RouterOutlet,
+    HlmButtonImports,
+    HlmDropdownMenuImports,
+    HlmSidebarImports,
+    SearchBox,
+  ],
   template: `
     <div hlmSidebarWrapper>
       <hlm-sidebar>
@@ -125,6 +133,7 @@ type SectionResponse = components['schemas']['SectionResponse'];
             aria-label="Toggle sidebar"
             srOnlyText="Toggle sidebar"
           ></button>
+          <app-search-box class="max-w-sm flex-1" />
           @if (!session.user()) {
             <a hlmBtn variant="outline" size="sm" class="ml-auto" routerLink="/sign-in">Sign in</a>
           }

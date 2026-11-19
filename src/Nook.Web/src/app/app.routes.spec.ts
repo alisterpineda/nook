@@ -21,6 +21,7 @@ import { UploadPage } from './features/upload/upload-page';
 import { UploadQueue } from './features/upload/upload-queue';
 import { WorkDetailPage } from './features/works/work-detail-page';
 import { WorksListPage } from './features/works/works-list-page';
+import { SearchBox } from './shell/search-box';
 import { Shell } from './shell/shell';
 import { text } from './testing/element-text';
 import { openRequests } from './testing/open-requests';
@@ -197,6 +198,25 @@ describe('routes', () => {
         ReaderPage,
         [provideFakeReaderEngine(new FakeReaderEngine())],
         Shell,
+      ),
+    ).toEqual({ landedOn: reader, shown: false });
+  });
+
+  it('shows the reader with no search box', async () => {
+    const signedIn = { signedIn: true, setupRequired: false };
+    const reader = '/works/42/read/0198a1b2-0000-7000-8000-0000000000f1';
+
+    expect(await open('/library', signedIn, WorksListPage, [], SearchBox)).toEqual({
+      landedOn: '/library',
+      shown: true,
+    });
+    expect(
+      await open(
+        reader,
+        signedIn,
+        ReaderPage,
+        [provideFakeReaderEngine(new FakeReaderEngine())],
+        SearchBox,
       ),
     ).toEqual({ landedOn: reader, shown: false });
   });

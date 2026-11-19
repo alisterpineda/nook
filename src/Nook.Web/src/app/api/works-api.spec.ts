@@ -69,6 +69,16 @@ describe('WorksApi', () => {
     expect(await listing).toEqual(emptyPage);
   });
 
+  it('list sends the search term as a query parameter', async () => {
+    const listing = api.list({ Search: 'hail mary', Sort: 'relevance', Offset: 0, Limit: 50 });
+    const request = httpTesting.expectOne((req) => req.url === '/api/works');
+    expect(request.request.params.get('Search')).toBe('hail mary');
+    expect(request.request.params.get('Sort')).toBe('relevance');
+    request.flush(emptyPage);
+
+    expect(await listing).toEqual(emptyPage);
+  });
+
   it('get requests the work by id', async () => {
     const work: WorkDetailResponse = {
       id: '0198a1b2-0000-7000-8000-000000000001',

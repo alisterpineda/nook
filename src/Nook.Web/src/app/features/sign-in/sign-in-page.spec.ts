@@ -10,6 +10,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
 import { Session } from '../../core/session';
 import { fieldLabelled } from '../../testing/field-labelled';
+import { typeInto } from '../../testing/type-into';
 import { linkLabelled } from '../../testing/link-labelled';
 import { SignInPage } from './sign-in-page';
 
@@ -55,14 +56,9 @@ describe('SignInPage', () => {
 
   afterEach(() => httpTesting.verify());
 
-  function type(input: HTMLInputElement, value: string): void {
-    input.value = value;
-    input.dispatchEvent(new Event('input'));
-  }
-
   async function submit(email: string, password: string): Promise<void> {
-    type(fieldLabelled(page, 'Email'), email);
-    type(fieldLabelled(page, 'Password'), password);
+    typeInto(fieldLabelled(page, 'Email'), email);
+    typeInto(fieldLabelled(page, 'Password'), password);
     const button = Array.from(page.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.trim() === 'Sign in',
     );
@@ -129,7 +125,7 @@ describe('SignInPage', () => {
       httpTesting.expectNone('/api/auth/login');
       expect(alerts()).toEqual(['Enter your email address.', 'Enter your password.']);
 
-      type(fieldLabelled(page, 'Email'), 'ada@example.com');
+      typeInto(fieldLabelled(page, 'Email'), 'ada@example.com');
       await fixture.whenStable();
       expect(alerts()).toEqual(['Enter your password.']);
     });

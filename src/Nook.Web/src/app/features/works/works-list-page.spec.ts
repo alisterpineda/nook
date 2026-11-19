@@ -412,6 +412,117 @@ describe('WorksListPage', () => {
     expect(page.textContent).toContain('Page 1 of 3');
   });
 
+  it('asks for the term the URL names, by relevance', async () => {
+    const { page, request } = await openList('/library?q=hail', [inDefault]);
+
+    expect(request.request.params.get('Search')).toBe('hail');
+    expect(request.request.params.get('Sort')).toBe('relevance');
+    expect(captions(page).map((caption) => caption[0])).toEqual(['Project Hail Mary']);
+  });
+
+  it('asks for the term trimmed', async () => {
+    const { request } = await openList('/library?q=%20hail%20', [inDefault]);
+
+    expect(request.request.params.get('Search')).toBe('hail');
+  });
+
+  it.each(['/library', '/library?q=', '/library?q=%20%20', '/library?sort=relevance'])(
+    'sends no Search when the URL has no term or a blank one: %s',
+    async (url) => {
+      const { request } = await openList(url);
+
+      expect(request.request.params.has('Search')).toBe(false);
+      expect(request.request.params.get('Sort')).toBe('title');
+    },
+  );
+
+  it('offers Relevance, selected, during a search and not without one', async () => {
+    const { page } = await openList('/library?q=hail', [inDefault]);
+    expect(
+      Array.from(page.querySelectorAll('[role="group"] button')).map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(['Relevance', 'Title', 'Recently added']);
+    expect(chosenSorts(page)).toEqual(['Relevance']);
+
+    await openList('/library');
+    expect(
+      Array.from(page.querySelectorAll('[role="group"] button')).map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(['Title', 'Recently added']);
+  });
+
+  it('choosing Title during a search puts sort=title in the URL and keeps the term', async () => {
+    const { page } = await openList('/library?q=hail&page=2', [inDefault], 120);
+
+    buttonNamed(page, 'Title').click();
+    const request = await answerNext(page, [inDefault], 120);
+
+    expect(router.url).toBe('/library?q=hail&sort=title');
+    expect(request.request.params.get('Search')).toBe('hail');
+    expect(request.request.params.get('Sort')).toBe('title');
+    expect(chosenSorts(page)).toEqual(['Title']);
+  });
+
+  it('choosing Relevance leaves sort out of the URL', async () => {
+    const { page } = await openList('/library?q=hail&sort=title&page=2', [inDefault], 120);
+
+    buttonNamed(page, 'Relevance').click();
+    const request = await answerNext(page, [inDefault], 120);
+
+    expect(router.url).toBe('/library?q=hail');
+    expect(request.request.params.get('Sort')).toBe('relevance');
+    expect(chosenSorts(page)).toEqual(['Relevance']);
+  });
+
+  it('Next keeps the term in the URL', async () => {
+    const { page } = await openList('/library?q=hail', [inDefault], 120);
+
+    buttonNamed(page, 'Next').click();
+    const request = await answerNext(page, [inDefault], 120);
+
+    expect(router.url).toBe('/library?q=hail&page=2');
+    expect(request.request.params.get('Search')).toBe('hail');
+    expect(request.request.params.get('Offset')).toBe('50');
+  });
+
+  it('asks again when the term in the URL changes', async () => {
+    const { page } = await openList('/library?q=hail&sort=title&page=2', [inDefault], 120);
+    const listPage = harness.routeDebugElement?.componentInstance;
+
+    const navigating = harness.navigateByUrl('/library?q=weir');
+    const request = await worksRequest();
+    expect(request.request.params.get('Search')).toBe('weir');
+    expect(request.request.params.get('Sort')).toBe('relevance');
+    expect(request.request.params.get('Offset')).toBe('0');
+    request.flush(pageOf([theMartian]));
+    await navigating;
+
+    await vi.waitFor(() =>
+      expect(captions(page).map((caption) => caption[0])).toEqual(['The Martian']),
+    );
+    expect(chosenSorts(page)).toEqual(['Relevance']);
+    expect(harness.routeDebugElement?.componentInstance).toBe(listPage);
+  });
+
+  it('says how many works match during a search', async () => {
+    const { page } = await openList('/library?q=a', [dune, goodOmens, theMartian]);
+    expect(page.textContent).toContain('3 works match');
+
+    await openList('/library?q=dune', [dune]);
+    expect(page.textContent).toContain('1 work matches');
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Library');
+  });
+
+  it('says No works match with the term when a search finds none', async () => {
+    const { page } = await openList('/library?q=%20zzz%20', []);
+
+    expect(page.querySelector('ul')).toBeNull();
+    expect(page.textContent).toContain('No works match "zzz"');
+    expect(page.textContent).not.toContain('No works yet');
+  });
+
   it('shows No works yet in place of the grid when there are none', async () => {
     const { page } = await openList('/library', []);
 
