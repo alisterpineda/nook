@@ -16,7 +16,9 @@ import {
   lucideFolder,
   lucideGlobe,
   lucideLibraryBig,
+  lucideListChecks,
   lucideLogOut,
+  lucideScrollText,
   lucideUpload,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -32,6 +34,7 @@ import { appName, tabTitle } from '../core/app-name';
 import { PageName } from '../core/page-name';
 import { readTerm } from '../core/search-term';
 import { Sections, defaultAreaName, libraryName } from '../core/sections';
+import { ActivityHub } from '../core/activity-hub';
 import { Session } from '../core/session';
 import { ActivityButton } from '../features/activity/activity-button';
 import { UploadActivity } from '../features/activity/upload-activity';
@@ -51,8 +54,8 @@ interface Crumb {
 /**
  * The frame around every page of the library: a sidebar that collapses to its icons, with the app's name, then
  * "Library", then "Default" and the caller's sections when there are any, then "Authors" and, for whoever may upload,
- * "Add books", which opens a dialog, then "Public access" for an admin, the user's menu in its footer, and the page itself beside it under a header that says where
- * the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
+ * "Add books", which opens a dialog, then "Public access", "Jobs" and "Audit log" for an admin, the user's menu in its footer, and the page itself beside
+ * it under a header that says where the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
  */
 @Component({
   selector: 'app-shell',
@@ -76,7 +79,9 @@ interface Crumb {
       lucideFolder,
       lucideGlobe,
       lucideLibraryBig,
+      lucideListChecks,
       lucideLogOut,
+      lucideScrollText,
       lucideUpload,
       lucideUsers,
     }),
@@ -169,6 +174,32 @@ interface Crumb {
                   >
                     <ng-icon name="lucideGlobe" />
                     <span>Public access</span>
+                  </a>
+                </li>
+                <li hlmSidebarMenuItem>
+                  <a
+                    hlmSidebarMenuButton
+                    routerLink="/jobs"
+                    closeMobileSidebarOnClick
+                    tooltip="Jobs"
+                    [isActive]="onJobs()"
+                    [attr.aria-current]="onJobs() ? 'page' : null"
+                  >
+                    <ng-icon name="lucideListChecks" />
+                    <span>Jobs</span>
+                  </a>
+                </li>
+                <li hlmSidebarMenuItem>
+                  <a
+                    hlmSidebarMenuButton
+                    routerLink="/audit-log"
+                    closeMobileSidebarOnClick
+                    tooltip="Audit log"
+                    [isActive]="onAuditLog()"
+                    [attr.aria-current]="onAuditLog() ? 'page' : null"
+                  >
+                    <ng-icon name="lucideScrollText" />
+                    <span>Audit log</span>
                   </a>
                 </li>
               </ul>
@@ -280,6 +311,7 @@ export class Shell {
   protected readonly addBooks = inject(AddBooks);
   private readonly uploadQueue = inject(UploadQueue);
   private readonly uploadActivity = inject(UploadActivity);
+  private readonly hub = inject(ActivityHub);
 
   protected readonly session = inject(Session);
   protected readonly appName = appName;
@@ -293,6 +325,8 @@ export class Shell {
   protected readonly onPublicAccess = isActive('/public-access', this.router, {
     queryParams: 'ignored',
   });
+  protected readonly onJobs = isActive('/jobs', this.router, { queryParams: 'ignored' });
+  protected readonly onAuditLog = isActive('/audit-log', this.router, { queryParams: 'ignored' });
   protected readonly onAuthors = isActive('/authors', this.router, { queryParams: 'ignored' });
   /**
    * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,
@@ -354,6 +388,10 @@ export class Shell {
         return [{ label: 'Authors' }];
       case '/public-access':
         return [{ label: 'Public access' }];
+      case '/jobs':
+        return [{ label: 'Jobs' }];
+      case '/audit-log':
+        return [{ label: 'Audit log' }];
     }
     const area = readArea(this.queryParams());
     const narrowedTo =
@@ -369,10 +407,22 @@ export class Shell {
 
   constructor() {
     void this.sectionStore.load();
-    // Someone who may upload follows their uploads from the server for as long as they are signed in.
+    // Someone who may upload follows their uploads from the server for as long as they are signed in, and an admin
+    // hears of every job. Both listen on the one connection, which is open for as long as either applies.
     effect(() => {
       const canUpload = this.session.canUpload();
-      untracked(() => (canUpload ? this.uploadActivity.start() : void this.uploadActivity.stop()));
+      const isAdmin = this.isAdmin();
+      untracked(() => {
+        if (canUpload) {
+          this.uploadActivity.start();
+        } else {
+          void this.uploadActivity.stop();
+        }
+        if (isAdmin) {
+          // Does nothing when the uploads have opened it. A connection that cannot open is tried again by the hub.
+          this.hub.start().catch(() => undefined);
+        }
+      });
     });
     // The tab is named after the page that is open, once the page is known by name.
     effect(() => {

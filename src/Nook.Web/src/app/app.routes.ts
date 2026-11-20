@@ -55,6 +55,17 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/public-access/public-access-page').then((m) => m.PublicAccessPage),
       },
+      {
+        path: 'jobs',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/jobs/jobs-page').then((m) => m.JobsPage),
+      },
+      {
+        path: 'audit-log',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/audit-log/audit-log-page').then((m) => m.AuditLogPage),
+      },
     ],
   },
   { path: '**', redirectTo: 'library' },

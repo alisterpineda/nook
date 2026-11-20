@@ -1160,6 +1160,16 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          {
+            "name": "Status",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/JobStatus"
+              }
+            }
           }
         ],
         "responses": {
@@ -1681,6 +1691,141 @@
         }
       }
     },
+    "/api/audit-log": {
+      "get": {
+        "tags": [
+          "AuditLog"
+        ],
+        "parameters": [
+          {
+            "name": "Offset",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Limit",
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ActorId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfAuditEntryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfAuditEntryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfAuditEntryResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit-log/filters": {
+      "get": {
+        "tags": [
+          "AuditLog"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditFiltersResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditFiltersResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditFiltersResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/activity/uploads": {
       "get": {
         "tags": [
@@ -1923,6 +2068,104 @@
           }
         }
       },
+      "AuditActorResponse": {
+        "required": [
+          "id",
+          "name",
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEntryResponse": {
+        "required": [
+          "id",
+          "at",
+          "actorId",
+          "actorName",
+          "actorEmail",
+          "action",
+          "subjectType",
+          "subjectId",
+          "subjectName",
+          "details"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "actorName": {
+            "type": "string"
+          },
+          "actorEmail": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "subjectType": {
+            "type": "string"
+          },
+          "subjectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "subjectName": {
+            "type": "string"
+          },
+          "details": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
+      "AuditFiltersResponse": {
+        "required": [
+          "actors",
+          "actions"
+        ],
+        "type": "object",
+        "properties": {
+          "actors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditActorResponse"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "BuiltInRole": {
         "enum": [
           "admin",
@@ -1999,7 +2242,8 @@
           "updatedAt",
           "result",
           "steps",
-          "children"
+          "children",
+          "submittedBy"
         ],
         "type": "object",
         "properties": {
@@ -2074,6 +2318,12 @@
             "items": {
               "$ref": "#/components/schemas/JobSummaryResponse"
             }
+          },
+          "submittedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -2149,7 +2399,8 @@
           "attemptsAllowed",
           "reclaimsMade",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "submittedBy"
         ],
         "type": "object",
         "properties": {
@@ -2202,6 +2453,12 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "submittedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -2218,6 +2475,35 @@
           },
           "password": {
             "type": "string"
+          }
+        }
+      },
+      "PageOfAuditEntryResponse": {
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryResponse"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -3240,6 +3526,9 @@
     },
     {
       "name": "Auth"
+    },
+    {
+      "name": "AuditLog"
     },
     {
       "name": "Activity"

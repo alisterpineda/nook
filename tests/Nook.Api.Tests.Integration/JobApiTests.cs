@@ -7,6 +7,7 @@ using Nook.Api.Data;
 using Nook.Api.Features;
 using Nook.Api.Features.Audit;
 using Nook.Api.Features.Jobs;
+using Nook.Api.Ingest;
 using Nook.Api.Jobs;
 
 namespace Nook.Api.Tests.Integration;
@@ -66,6 +67,87 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
 
         var defaults = await client.GetAsync<Page<JobSummaryResponse>>("/api/jobs");
         Assert.Equal(50, defaults.Limit);
+    }
+
+    [Fact]
+    public async Task Jobs_list_gives_only_the_statuses_asked_for_and_counts_them()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var failedBefore = await CountAsync(client, "status=Failed");
+        var runningBefore = await CountAsync(client, "status=Running");
+        var all = await CountAsync(client, "");
+        var failed = await SeedJobAsync(JobStatus.Failed);
+        var running = await SeedJobAsync(JobStatus.Running);
+        var succeeded = await SeedJobAsync(JobStatus.Succeeded);
+
+        var onlyFailed = await client.GetAsync<Page<JobSummaryResponse>>("/api/jobs?status=Failed&limit=200");
+        Assert.Equal(failedBefore + 1, onlyFailed.Total);
+        Assert.All(onlyFailed.Items, j => Assert.Equal(JobStatus.Failed, j.Status));
+        Assert.Contains(failed, onlyFailed.Items.Select(j => j.Id));
+
+        var two = await client.GetAsync<Page<JobSummaryResponse>>("/api/jobs?status=Failed&status=Running&limit=200");
+        Assert.Equal(failedBefore + runningBefore + 2, two.Total);
+        Assert.All(two.Items, j => Assert.Contains(j.Status, new[] { JobStatus.Failed, JobStatus.Running }));
+        Assert.Contains(failed, two.Items.Select(j => j.Id));
+        Assert.Contains(running, two.Items.Select(j => j.Id));
+        Assert.DoesNotContain(succeeded, two.Items.Select(j => j.Id));
+
+        var paged = await client.GetAsync<Page<JobSummaryResponse>>("/api/jobs?status=Failed&status=Running&limit=1");
+        Assert.Equal(two.Total, paged.Total);
+        Assert.Single(paged.Items);
+
+        Assert.Equal(all + 3, await CountAsync(client, ""));
+    }
+
+    [Fact]
+    public async Task Jobs_list_names_who_submitted_an_upload_s_job_and_no_one_for_another()
+    {
+        var (user, client) = await _app.CreateSignedInUserAsync(BuiltInRole.Admin, "Sam Submitter");
+        using var session = client;
+        var upload = await SeedJobAsync(JobStatus.Failed, IngestJob.TypeName);
+        var queuedBefore = await SeedJobAsync(JobStatus.Failed, IngestJob.TypeName);
+        var other = await SeedJobAsync(JobStatus.Failed);
+        var entry = new AuditEntry
+        {
+            ActorId = user.Id,
+            ActorName = "Sam Submitter",
+            ActorEmail = user.Email!,
+            Action = AuditActions.UploadSubmitted,
+            SubjectType = AuditSubjectTypes.Job,
+            SubjectId = upload,
+            SubjectName = "book.epub",
+            Details = "{}",
+        };
+        entry.SubmissionId = entry.Id;
+        await _app.AddRowsAsync(entry);
+
+        var page = await client.GetAsync<Page<JobSummaryResponse>>("/api/jobs?status=Failed&limit=200");
+
+        Assert.Equal("Sam Submitter", page.Items.Single(j => j.Id == upload).SubmittedBy);
+        Assert.Null(page.Items.Single(j => j.Id == queuedBefore).SubmittedBy);
+        Assert.Null(page.Items.Single(j => j.Id == other).SubmittedBy);
+
+        var detail = await client.GetAsync<JobDetailResponse>($"/api/jobs/{upload}");
+        Assert.Equal("Sam Submitter", detail.SubmittedBy);
+        Assert.Null((await client.GetAsync<JobDetailResponse>($"/api/jobs/{other}")).SubmittedBy);
+    }
+
+    private static async Task<int> CountAsync(HttpClient client, string query) =>
+        (await client.GetAsync<Page<JobSummaryResponse>>($"/api/jobs?limit=1&{query}")).Total;
+
+    private async Task<Guid> SeedJobAsync(JobStatus status, string type = RecordingJob.TypeName)
+    {
+        var job = new Job
+        {
+            Type = type,
+            Status = status,
+            Payload = "{}",
+            NotBefore = status == JobStatus.Pending ? Never : null,
+            LeaseExpiresAt = status == JobStatus.Running ? DateTimeOffset.UtcNow.AddDays(1) : null,
+            AttemptsAllowed = 1,
+        };
+        await _app.AddRowsAsync(job);
+        return job.Id;
     }
 
     [Theory]

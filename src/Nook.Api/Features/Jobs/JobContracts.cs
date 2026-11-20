@@ -11,9 +11,15 @@ public class JobListQuery
 
     [Range(1, 200)]
     public int Limit { get; set; } = 50;
+
+    /// <summary>The statuses to list, any number of them. None means every status.</summary>
+    public List<JobStatus> Status { get; set; } = [];
 }
 
-/// <summary>A job as a list shows it. The payload is left out: it can hold paths on the server's disk.</summary>
+/// <summary>
+/// A job as a list shows it. The payload is left out: it can hold paths on the server's disk. SubmittedBy is the name
+/// of the user who submitted the upload this job ingests, or null when it is not an upload or none is on record.
+/// </summary>
 public record JobSummaryResponse(
     Guid Id,
     string Type,
@@ -25,7 +31,8 @@ public record JobSummaryResponse(
     int AttemptsAllowed,
     int ReclaimsMade,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? SubmittedBy);
 
 /// <summary>One step of one run of a job.</summary>
 public record JobStepResponse(
@@ -55,4 +62,5 @@ public record JobDetailResponse(
     DateTimeOffset UpdatedAt,
     JsonElement? Result,
     IReadOnlyList<JobStepResponse> Steps,
-    IReadOnlyList<JobSummaryResponse> Children);
+    IReadOnlyList<JobSummaryResponse> Children,
+    string? SubmittedBy);

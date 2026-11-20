@@ -902,6 +902,7 @@ export interface paths {
                 query?: {
                     Offset?: number;
                     Limit?: number;
+                    Status?: components["schemas"]["JobStatus"][];
                 };
                 header?: never;
                 path?: never;
@@ -1360,6 +1361,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Offset?: number;
+                    Limit?: number;
+                    ActorId?: string;
+                    Action?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PageOfAuditEntryResponse"];
+                        "application/json": components["schemas"]["PageOfAuditEntryResponse"];
+                        "text/json": components["schemas"]["PageOfAuditEntryResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit-log/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AuditFiltersResponse"];
+                        "application/json": components["schemas"]["AuditFiltersResponse"];
+                        "text/json": components["schemas"]["AuditFiltersResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/activity/uploads": {
         parameters: {
             query?: never;
@@ -1552,6 +1654,32 @@ export interface components {
             publicAccess: boolean;
             defaultArea: components["schemas"]["ContentAccess"];
         };
+        AuditActorResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            email: string;
+        };
+        AuditEntryResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            actorId: null | string;
+            actorName: string;
+            actorEmail: string;
+            action: string;
+            subjectType: string;
+            /** Format: uuid */
+            subjectId: null | string;
+            subjectName: string;
+            details: components["schemas"]["JsonElement"];
+        };
+        AuditFiltersResponse: {
+            actors: components["schemas"]["AuditActorResponse"][];
+            actions: string[];
+        };
         /** @enum {unknown} */
         BuiltInRole: "admin" | "contributor" | "viewer" | "anonymous";
         /** @enum {unknown} */
@@ -1593,6 +1721,7 @@ export interface components {
             result: null | components["schemas"]["JsonElement"];
             steps: components["schemas"]["JobStepResponse"][];
             children: components["schemas"]["JobSummaryResponse"][];
+            submittedBy: null | string;
         };
         /** @enum {unknown} */
         JobStatus: "pending" | "running" | "succeeded" | "failed";
@@ -1631,11 +1760,21 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            submittedBy: null | string;
         };
         JsonElement: unknown;
         LoginRequest: {
             email: string;
             password: string;
+        };
+        PageOfAuditEntryResponse: {
+            items: components["schemas"]["AuditEntryResponse"][];
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            offset: number;
+            /** Format: int32 */
+            limit: number;
         };
         PageOfJobSummaryResponse: {
             items: components["schemas"]["JobSummaryResponse"][];

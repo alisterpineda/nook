@@ -8,6 +8,8 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from './api/schema';
 import { routes } from './app.routes';
 import { provideFakeActivityHub } from './testing/fake-activity-hub';
+import { AuditLogPage } from './features/audit-log/audit-log-page';
+import { JobsPage } from './features/jobs/jobs-page';
 import { AuthorsListPage } from './features/people/authors-list-page';
 import { PersonPage } from './features/people/person-page';
 import { PublicAccessPage } from './features/public-access/public-access-page';
@@ -97,6 +99,9 @@ describe('routes', () => {
         sections: [],
       } satisfies PublicAccessResponse,
       '/api/activity/uploads': [],
+      '/api/jobs': { items: [], total: 0, offset: 0, limit: 50 },
+      '/api/audit-log': { items: [], total: 0, offset: 0, limit: 50 },
+      '/api/audit-log/filters': { actors: [], actions: [] },
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
     };
   }
@@ -286,5 +291,22 @@ describe('routes', () => {
         WorksListPage,
       ),
     ).toEqual({ landedOn: '/library', shown: true });
+  });
+
+  it('keeps /jobs and /audit-log to admins', async () => {
+    const pages: [string, Type<unknown>][] = [
+      ['/jobs', JobsPage],
+      ['/audit-log', AuditLogPage],
+    ];
+    for (const [url, page] of pages) {
+      expect(
+        await open(url, { signedIn: true, setupRequired: false, role: 'admin' }, page),
+      ).toEqual({ landedOn: url, shown: true });
+      for (const role of ['contributor', 'viewer'] as const) {
+        expect(
+          await open(url, { signedIn: true, setupRequired: false, role }, WorksListPage),
+        ).toEqual({ landedOn: '/library', shown: true });
+      }
+    }
   });
 });

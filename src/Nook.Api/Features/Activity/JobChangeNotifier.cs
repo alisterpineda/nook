@@ -22,10 +22,8 @@ public sealed partial class JobChangeNotifier(
             // A scope of its own, so the reads never carry what the caller's context has changed.
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-            var summary = await db.Jobs
-                .AsNoTracking()
-                .Where(j => j.Id == jobId)
-                .Select(JobsController.ToSummary)
+            var summary = await JobsController
+                .Summaries(db, db.Jobs.AsNoTracking().Where(j => j.Id == jobId))
                 .SingleOrDefaultAsync();
 
             // Deleted since: its removal is told on its own.

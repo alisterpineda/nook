@@ -75,8 +75,7 @@ public sealed class UploadActivity(NookDbContext db)
     {
         var submission = await db.AuditEntries
             .AsNoTracking()
-            .Where(e => e.Action == AuditActions.UploadSubmitted && e.SubjectId == jobId)
-            .OrderByDescending(e => e.CreatedAt)
+            .SubmissionsOf(jobId)
             .FirstOrDefaultAsync(cancellationToken);
         if (submission is null)
         {

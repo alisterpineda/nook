@@ -23,6 +23,29 @@ describe('JobsApi', () => {
 
   afterEach(() => httpTesting.verify());
 
+  it('lists jobs in the statuses asked for', async () => {
+    const page = { items: [], total: 0, offset: 50, limit: 50 };
+
+    const listing = api.list({ Offset: 50, Limit: 50, Status: ['pending', 'running', 'failed'] });
+    const request = httpTesting.expectOne((candidate) => candidate.url === '/api/jobs');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('Offset')).toBe('50');
+    expect(request.request.params.get('Limit')).toBe('50');
+    expect(request.request.params.getAll('Status')).toEqual(['pending', 'running', 'failed']);
+    request.flush(page);
+
+    expect(await listing).toEqual(page);
+  });
+
+  it('lists jobs in every status when none is asked for', async () => {
+    const listing = api.list({ Offset: 0, Limit: 50 });
+    const request = httpTesting.expectOne((candidate) => candidate.url === '/api/jobs');
+    expect(request.request.params.has('Status')).toBe(false);
+    request.flush({ items: [], total: 0, offset: 0, limit: 50 });
+
+    await listing;
+  });
+
   it('get asks for one job', async () => {
     const result = {
       outcome: 'created',
@@ -41,6 +64,7 @@ describe('JobsApi', () => {
       reclaimsMade: 0,
       createdAt: '2026-11-14T12:00:00Z',
       updatedAt: '2026-11-14T12:00:01Z',
+      submittedBy: null,
       result,
       steps: [],
       children: [],

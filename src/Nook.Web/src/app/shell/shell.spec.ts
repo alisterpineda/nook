@@ -35,6 +35,12 @@ class WorkStub {}
 @Component({ template: '<h1>Public access</h1>' })
 class PublicAccessStub {}
 
+@Component({ template: '<h1>Jobs</h1>' })
+class JobsStub {}
+
+@Component({ template: '<h1>Audit log</h1>' })
+class AuditLogStub {}
+
 @Component({ template: '<h1>Authors</h1>' })
 class AuthorsStub {}
 
@@ -100,6 +106,8 @@ describe('Shell', () => {
               { path: 'library', component: WorksStub },
               { path: 'works/:id', component: WorkStub },
               { path: 'public-access', component: PublicAccessStub },
+              { path: 'jobs', component: JobsStub },
+              { path: 'audit-log', component: AuditLogStub },
               { path: 'authors', component: AuthorsStub },
               { path: 'people/:id', component: PersonStub },
             ],
@@ -300,6 +308,17 @@ describe('Shell', () => {
     expect(document.title).toBe('Authors · Nook');
   });
 
+  it('names the Jobs page and the Audit log page in the header', async () => {
+    const shell = await openShell('/jobs?show=all');
+    expect(trail(shell)).toEqual([['Jobs', null]]);
+    expect(document.title).toBe('Jobs · Nook');
+
+    await router.navigateByUrl('/audit-log');
+    await harness.fixture.whenStable();
+    expect(trail(shell)).toEqual([['Audit log', null]]);
+    expect(document.title).toBe('Audit log · Nook');
+  });
+
   it('the header shows the section being browsed under Library', async () => {
     const shell = await openShell(`/library?section=${comics.id}`);
 
@@ -429,7 +448,7 @@ describe('Shell', () => {
       expect(link.hasAttribute('closeMobileSidebarOnClick')).toBe(true);
     }
   });
-  it('lists Public access under Manage for an admin only', async () => {
+  it('shows Jobs and Audit log to an admin and to no one else', async () => {
     const shell = await openShell('/library');
 
     expect(
@@ -437,7 +456,11 @@ describe('Shell', () => {
         link.textContent?.trim(),
         link.getAttribute('href'),
       ]),
-    ).toEqual([['Public access', '/public-access']]);
+    ).toEqual([
+      ['Public access', '/public-access'],
+      ['Jobs', '/jobs'],
+      ['Audit log', '/audit-log'],
+    ]);
 
     for (const user of [grace, viewer]) {
       await signInAs(user);
@@ -455,6 +478,19 @@ describe('Shell', () => {
 
     expect(current()).toEqual(['Public access']);
     expect(groupLinks(shell, 'Manage')[0].hasAttribute('closeMobileSidebarOnClick')).toBe(true);
+  });
+
+  it('marks Jobs or Audit log current on its own page and nothing else', async () => {
+    const shell = await openShell('/jobs?page=2');
+    const current = () =>
+      Array.from(shell.querySelectorAll('nav a[aria-current="page"]'), (link) =>
+        link.textContent?.trim(),
+      );
+    expect(current()).toEqual(['Jobs']);
+
+    await router.navigateByUrl('/audit-log?person=x');
+    await harness.fixture.whenStable();
+    expect(current()).toEqual(['Audit log']);
   });
 
   it('opens the Add books dialog from the sidebar for a contributor', async () => {
@@ -586,6 +622,14 @@ describe('Shell', () => {
 
     httpTesting.expectNone('/api/activity/uploads');
     expect(TestBed.inject(FakeActivityHub).open).toBe(false);
+  });
+
+  it('opens the hub for an admin whose role may not upload, without following uploads', async () => {
+    await signInAs({ ...ada, canUpload: false });
+    await openShell('/library');
+
+    httpTesting.expectNone('/api/activity/uploads');
+    expect(TestBed.inject(FakeActivityHub).open).toBe(true);
   });
 
   it('shows Activity to a user who may upload and not to a viewer', async () => {
