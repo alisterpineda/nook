@@ -29,6 +29,18 @@ public abstract class JobType
     /// </summary>
     public virtual Task OnSucceededAsync(string payloadJson, IServiceProvider services) => Task.CompletedTask;
 
+    /// <summary>
+    /// Runs once a job of this type is recorded as failed for good, with no run left that may start again, in a scope
+    /// of its own. <paramref name="error"/> is what the last run threw, or null when the job failed without a run
+    /// throwing, as when the worker running it kept dying. A job that is retried and fails again runs it again. The job
+    /// reads as failed a moment before this runs, and this runs at most once for each time the job stays failed: an
+    /// exception from it is logged and changes nothing on the job, and a process that stops in between never runs it.
+    /// </summary>
+    public virtual Task OnFailedAsync(string payloadJson, Exception? error, IServiceProvider services) => Task.CompletedTask;
+
+    /// <summary>The id of the upload a job's payload belongs to, or null when it belongs to none.</summary>
+    public virtual Guid? SubmissionIdOf(string payloadJson) => null;
+
     /// <summary>Cleans up what the job's payload points at, once the job has been deleted.</summary>
     public virtual Task OnDeletedAsync(string payloadJson, IServiceProvider services) => Task.CompletedTask;
 }

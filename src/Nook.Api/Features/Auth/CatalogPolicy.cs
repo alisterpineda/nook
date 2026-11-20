@@ -11,6 +11,12 @@ public static class Policies
     /// may see is narrowed by their section grants.
     /// </summary>
     public const string Catalog = "catalog";
+
+    /// <summary>Uploading: open to a user whose role may upload.</summary>
+    public const string Upload = "upload";
+
+    /// <summary>The claim the cookie carries for a user whose role may upload.</summary>
+    public const string CanUploadClaim = "can_upload";
 }
 
 /// <summary>Signed in, or public access on.</summary>

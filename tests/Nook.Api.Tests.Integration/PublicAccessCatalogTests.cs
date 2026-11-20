@@ -56,6 +56,22 @@ public class PublicAccessCatalogTests(NookApiFactory factory) : IClassFixture<No
     }
 
     [Fact]
+    public async Task Work_detail_leaves_out_who_added_it_for_a_visitor()
+    {
+        var open = TestData.NewSection("Open");
+        var work = TestData.NewWork("Added by someone", open.Id);
+        await factory.AddRowsAsync(open, work, CatalogApiTests.UploadAdded(work, "Ada Adder"));
+        await factory.SetPublicAccessAsync(true, ContentAccess.Read, ContentAccess.None, (open.Id, ContentAccess.Browse));
+        using var visitor = factory.CreateClient();
+
+        var raw = await visitor.GetStringAsync($"/api/works/{work.Id}", TestContext.Current.CancellationToken);
+
+        Assert.Contains("Added by someone", raw);
+        Assert.DoesNotContain("addedBy", raw);
+        Assert.DoesNotContain("Ada Adder", raw);
+    }
+
+    [Fact]
     public async Task Visitor_sees_the_default_area_only_at_its_own_level()
     {
         var title = $"Unsectioned {Guid.NewGuid():N}";

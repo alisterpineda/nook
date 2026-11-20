@@ -72,16 +72,24 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
         await AssertRefusedAsync(client => client.UploadAsync(bytes: null, "notes.txt", section.Id));
     }
 
-    [Theory]
-    [InlineData(BuiltInRole.Contributor)]
-    [InlineData(BuiltInRole.Viewer)]
-    public async Task Contributor_or_viewer_is_forbidden_from_uploading(BuiltInRole role)
+    [Fact]
+    public async Task Contributor_may_upload()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Contributor);
+
+        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", sectionId: null);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Viewer_is_forbidden_from_uploading()
     {
         var section = await _app.AddSectionAsync();
         using var admin = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         var jobsBefore = await admin.CountJobsAsync();
         var stagedBefore = _factory.CountStagedFiles();
-        using var client = await _app.CreateSignedInClientAsync(role);
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Viewer);
 
         var response = await client.UploadAsync(TestData.NotABook, "notes.txt", section.Id);
 
@@ -89,6 +97,86 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
         Assert.Equal(jobsBefore, await admin.CountJobsAsync());
         Assert.Equal(stagedBefore, _factory.CountStagedFiles());
     }
+
+    [Fact]
+    public async Task A_role_made_to_upload_may_and_one_that_is_not_may_not()
+    {
+        var uploaders = NewRole("Uploaders", canUpload: true);
+        var readers = NewRole("Readers", canUpload: false);
+        await _app.AddRowsAsync(uploaders, readers);
+        using var uploader = await _app.CreateSignedInClientAsync(uploaders.Id);
+        using var reader = await _app.CreateSignedInClientAsync(readers.Id);
+
+        var allowed = await uploader.UploadAsync(TestData.NotABook, "notes.txt", sectionId: null);
+        var refused = await reader.UploadAsync(TestData.NotABook, "notes.txt", sectionId: null);
+
+        Assert.Equal(HttpStatusCode.Accepted, allowed.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+    }
+
+    [Fact]
+    public async Task Upload_into_a_section_the_role_cannot_see_is_forbidden_and_stages_nothing()
+    {
+        var section = await _app.AddSectionAsync("Hidden");
+        var role = NewRole("Shut out of one section", canUpload: true, allSections: false, defaultArea: ContentAccess.Download);
+        await _app.AddRowsAsync(role);
+        using var client = await _app.CreateSignedInClientAsync(role.Id);
+        var stagedBefore = _factory.CountStagedFiles();
+
+        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", section.Id);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(stagedBefore, _factory.CountStagedFiles());
+    }
+
+    [Fact]
+    public async Task Upload_into_a_section_the_role_can_see_is_accepted()
+    {
+        var section = await _app.AddSectionAsync("Visible");
+        var role = NewRole("Sees one section", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
+        await _app.AddRowsAsync(role, new RoleSection { RoleId = role.Id, SectionId = section.Id, Access = ContentAccess.Browse });
+        using var client = await _app.CreateSignedInClientAsync(role.Id);
+
+        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", section.Id);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Upload_into_the_Default_area_is_forbidden_to_a_role_shut_out_of_it()
+    {
+        var role = NewRole("Shut out of Default", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
+        await _app.AddRowsAsync(role);
+        using var client = await _app.CreateSignedInClientAsync(role.Id);
+        var stagedBefore = _factory.CountStagedFiles();
+
+        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", sectionId: null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(stagedBefore, _factory.CountStagedFiles());
+    }
+
+    [Fact]
+    public async Task Upload_into_an_unknown_section_stays_a_validation_error_for_a_role_that_sees_no_section()
+    {
+        var role = NewRole("Sees nothing", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
+        await _app.AddRowsAsync(role);
+        using var client = await _app.CreateSignedInClientAsync(role.Id);
+
+        var response = await client.UploadAsync(TestData.NotABook, "notes.txt", Guid.CreateVersion7());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private static Role NewRole(
+        string name, bool canUpload, bool allSections = true, ContentAccess defaultArea = ContentAccess.Download) => new()
+    {
+        Name = $"{name} {Guid.NewGuid():N}",
+        ContentAccess = ContentAccess.Download,
+        DefaultAreaAccess = defaultArea,
+        AllSections = allSections,
+        CanUpload = canUpload,
+    };
 
     [Fact]
     public void Upload_limit_defaults_to_200_megabytes()

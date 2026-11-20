@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Nook.Api.Data;
 
 namespace Nook.Api.Features.Works;
@@ -81,7 +82,9 @@ public record WorkItemResponse(Guid Id, ItemFormat Format, IReadOnlyList<WorkPar
 
 /// <summary>
 /// Everything Nook knows about one work. Contributors and parts come in display order. <c>Access</c> is the caller's
-/// level for the work: whether they may only browse it, read it in the browser, or download its files.
+/// level for the work: whether they may only browse it, read it in the browser, or download its files. <c>AddedBy</c>
+/// is the name of whoever uploaded the work, as written when they did. It is left out for a visitor with no account
+/// and for a work with no record of an upload.
 /// </summary>
 public record WorkDetailResponse(
     Guid Id,
@@ -100,4 +103,5 @@ public record WorkDetailResponse(
     IReadOnlyList<WorkItemResponse> Items,
     DateTimeOffset AddedAt,
     DateTimeOffset UpdatedAt,
-    ContentAccess Access);
+    ContentAccess Access,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AddedBy);

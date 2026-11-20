@@ -48,10 +48,31 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var response = await client.LoginAsync(user.Email!, ApiTestExtensions.Password);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new CurrentUserResponse(user.Id, user.Email!, BuiltInRole.Contributor), await response.ReadAsync<CurrentUserResponse>());
+        Assert.Equal(new CurrentUserResponse(user.Id, user.Email!, BuiltInRole.Contributor, user.ShownName, true), await response.ReadAsync<CurrentUserResponse>());
         Assert.Equal(
-            new CurrentUserResponse(user.Id, user.Email!, BuiltInRole.Contributor),
+            new CurrentUserResponse(user.Id, user.Email!, BuiltInRole.Contributor, user.ShownName, true),
             await client.GetAsync<CurrentUserResponse>("/api/auth/me"));
+    }
+
+    [Fact]
+    public async Task Me_gives_the_shown_name_and_whether_the_user_may_upload()
+    {
+        var (_, namedClient) = await factory.CreateSignedInUserAsync(BuiltInRole.Admin, "Ada Lovelace");
+        using var namedClientSession = namedClient;
+        var unnamed = await factory.CreateUserAsync(BuiltInRole.Viewer, email: $"reader-{Guid.NewGuid():N}@example.test");
+        using var unnamedClient = factory.CreateClient();
+        using var contributorClient = await factory.CreateSignedInClientAsync(BuiltInRole.Contributor);
+        (await unnamedClient.LoginAsync(unnamed.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+
+        var admin = await namedClient.GetAsync<CurrentUserResponse>("/api/auth/me");
+        var viewer = await unnamedClient.GetAsync<CurrentUserResponse>("/api/auth/me");
+        var contributor = await contributorClient.GetAsync<CurrentUserResponse>("/api/auth/me");
+
+        Assert.Equal("Ada Lovelace", admin.DisplayName);
+        Assert.True(admin.CanUpload);
+        Assert.Equal(unnamed.Email![..unnamed.Email!.IndexOf('@')], viewer.DisplayName);
+        Assert.False(viewer.CanUpload);
+        Assert.True(contributor.CanUpload);
     }
 
     [Fact]

@@ -36,6 +36,8 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
 
     public DbSet<JobStep> JobSteps => Set<JobStep>();
 
+    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         // Every enum is stored as its member name, so new members need no migration.
@@ -137,6 +139,19 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
             step.HasOne<Job>().WithMany().HasForeignKey(s => s.JobId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<AuditEntry>(entry =>
+        {
+            entry.ToTable("audit_entries");
+
+            // Details are stored as given; only the reader of an action's entries parses them.
+            entry.Property(e => e.Details).HasColumnType("jsonb");
+
+            // No relationships: an entry is a record of what was, and outlives the rows it names.
+            entry.HasIndex(e => new { e.ActorId, e.Action, e.CreatedAt });
+            entry.HasIndex(e => new { e.SubjectType, e.SubjectId, e.Action });
+            entry.HasIndex(e => e.SubmissionId);
+        });
+
         builder.Entity<WorkExternalId>(externalId =>
         {
             // A work holds each scheme and value once; lookups by scheme and value find the works that hold it.
@@ -170,7 +185,7 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
 
     /// <summary>
     /// The four built-in roles, under their fixed ids. Admin, contributor and viewer may do everything with every
-    /// work; only admin may upload. Anonymous, what a visitor with no account gets, starts with nothing.
+    /// work; admin and contributor may upload. Anonymous, what a visitor with no account gets, starts with nothing.
     /// </summary>
     private static Role[] BuiltInRoles()
     {
@@ -178,7 +193,7 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
         return
         [
             Seed(BuiltInRole.Admin, ContentAccess.Download, allSections: true, canUpload: true),
-            Seed(BuiltInRole.Contributor, ContentAccess.Download, allSections: true, canUpload: false),
+            Seed(BuiltInRole.Contributor, ContentAccess.Download, allSections: true, canUpload: true),
             Seed(BuiltInRole.Viewer, ContentAccess.Download, allSections: true, canUpload: false),
             Seed(BuiltInRole.Anonymous, ContentAccess.None, allSections: false, canUpload: false),
         ];

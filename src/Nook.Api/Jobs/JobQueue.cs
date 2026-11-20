@@ -27,12 +27,14 @@ public sealed class JobQueue(NookDbContext db, JobTypeRegistry types, JobSignal 
     /// <param name="payload">What the job works on, stored as JSON for its type to read.</param>
     /// <param name="parentJobId">The job this one belongs under, if any.</param>
     /// <param name="notBefore">The job is not run before this time.</param>
+    /// <param name="id">The job's id, when the caller needs to name the job before it is saved; otherwise a new one.</param>
     public async Task<Guid> EnqueueAsync(
         string type,
         object payload,
         Guid? parentJobId = null,
         DateTimeOffset? notBefore = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? id = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(type);
         ArgumentNullException.ThrowIfNull(payload);
@@ -46,6 +48,10 @@ public sealed class JobQueue(NookDbContext db, JobTypeRegistry types, JobSignal 
             NotBefore = notBefore,
             AttemptsAllowed = types.AttemptsFor(type),
         };
+        if (id is { } given)
+        {
+            job.Id = given;
+        }
 
         // The context is the scope's, so this save also writes anything else the scope has changed.
         db.Jobs.Add(job);

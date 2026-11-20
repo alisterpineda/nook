@@ -43,6 +43,12 @@ internal sealed class JobRecorder
     /// </summary>
     public ConcurrentQueue<(string Note, JobStatus? Status)> SuccessHooks { get; } = new();
 
+    /// <summary>
+    /// The note of each job whose failure hook ran, in the order they ran, with the job's status as the hook read it
+    /// from the database and the message of the error it was given.
+    /// </summary>
+    public ConcurrentQueue<(string Note, JobStatus? Status, string? Error)> FailureHooks { get; } = new();
+
     /// <summary>The note of each payload whose job ran a step that should never run.</summary>
     public ConcurrentQueue<string> SkippedStepsRun { get; } = new();
 
@@ -138,6 +144,14 @@ internal class FailingJob : JobType
         var note = JobJson.Deserialize<RecordingPayload>(payloadJson).Note;
         var status = await RecordingJob.ReadStatusAsync(Name, note, services);
         services.GetRequiredService<JobRecorder>().SuccessHooks.Enqueue((note, status));
+    }
+
+    /// <summary>Records the note with the job's status as the database holds it then and the error the hook was given.</summary>
+    public override async Task OnFailedAsync(string payloadJson, Exception? error, IServiceProvider services)
+    {
+        var note = JobJson.Deserialize<RecordingPayload>(payloadJson).Note;
+        var status = await RecordingJob.ReadStatusAsync(Name, note, services);
+        services.GetRequiredService<JobRecorder>().FailureHooks.Enqueue((note, status, error?.Message));
     }
 }
 

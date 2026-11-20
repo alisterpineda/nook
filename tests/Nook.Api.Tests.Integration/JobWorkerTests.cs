@@ -169,6 +169,31 @@ public sealed class JobWorkerTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Fact]
+    public async Task The_failure_hook_runs_once_a_job_stays_failed_and_not_while_it_may_run_again()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var recorder = _app.Services.GetRequiredService<JobRecorder>();
+        var twice = Guid.NewGuid().ToString();
+        var once = Guid.NewGuid().ToString();
+
+        var twiceJob = await client.WaitForJobAsync(await EnqueueAsync(FailingTwiceJob.TypeName, twice));
+        var onceJob = await client.WaitForJobAsync(await EnqueueAsync(FailingJob.TypeName, once));
+
+        // The one worker runs a job's hook before it takes the next job, so both hooks have run once a job that
+        // succeeds after them has.
+        var later = Guid.NewGuid().ToString();
+        await client.WaitForJobAsync(await EnqueueAsync(RecordingJob.TypeName, later));
+        await WaitForSuccessHooksAsync(later);
+
+        Assert.Equal(JobStatus.Failed, twiceJob.Status);
+        Assert.Equal(2, twiceJob.AttemptsMade);
+        Assert.Equal(JobStatus.Failed, onceJob.Status);
+        Assert.Equal([(twice, (JobStatus?)JobStatus.Failed, (string?)FailingJob.ErrorMessage)], recorder.FailureHooks.Where(h => h.Note == twice));
+        Assert.Equal([(once, (JobStatus?)JobStatus.Failed, (string?)FailingJob.ErrorMessage)], recorder.FailureHooks.Where(h => h.Note == once));
+        Assert.DoesNotContain(recorder.FailureHooks, h => h.Note == later);
+    }
+
+    [Fact]
     public async Task Success_hook_that_throws_leaves_the_job_succeeded()
     {
         using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);

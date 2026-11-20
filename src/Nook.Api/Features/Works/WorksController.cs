@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
 using Nook.Api.Features.Auth;
 using Nook.Api.Features.Sections;
 using Nook.Api.Storage;
@@ -126,11 +127,30 @@ public partial class WorksController(
                 w.CreatedAt,
                 w.UpdatedAt,
                 // Set from the grants once the work is found, since they are not in the database.
-                ContentAccess.None))
+                ContentAccess.None,
+                null))
             .AsSplitQuery()
             .SingleOrDefaultAsync(cancellationToken);
+        if (work is null)
+        {
+            return NotFound();
+        }
 
-        return work is null ? NotFound() : work with { Access = grants.In(work.SectionId) };
+        // Who added the work goes to signed-in users only: the name of whoever's upload was recorded first.
+        string? addedBy = null;
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            addedBy = await db.AuditEntries
+                .Where(e => e.Action == AuditActions.UploadAdded
+                    && e.SubjectType == AuditSubjectTypes.Work
+                    && e.SubjectId == id)
+                .OrderBy(e => e.CreatedAt)
+                .ThenBy(e => e.Id)
+                .Select(e => e.ActorName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return work with { Access = grants.In(work.SectionId), AddedBy = addedBy };
     }
 
     /// <summary>

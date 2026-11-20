@@ -122,11 +122,15 @@ public sealed partial class JobWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
 
+        // The job given up on, for its type's failure hook once the claim has committed.
+        ClaimedJob? givenUp = null;
+
         // The database is set to retry, so the transaction has to run inside its retry strategy.
-        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        var result = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             // A retry starts from what the database holds, not from what a failed attempt loaded.
             db.ChangeTracker.Clear();
+            givenUp = null;
             var now = UtcNow();
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -158,6 +162,7 @@ public sealed partial class JobWorker(
                 job.Status = JobStatus.Failed;
                 job.Error = WorkerKeptDyingError;
                 job.LeaseExpiresAt = null;
+                givenUp = new ClaimedJob(job.Id, job.Type, job.Payload, now);
             }
             else
             {
@@ -179,6 +184,13 @@ public sealed partial class JobWorker(
             await transaction.CommitAsync(CancellationToken.None);
             return (claimed, true);
         });
+
+        if (givenUp is not null)
+        {
+            await RunFailureHookAsync(givenUp, error: null);
+        }
+
+        return result;
     }
 
     private async Task RunAsync(ClaimedJob claimed, CancellationToken stoppingToken)
@@ -217,7 +229,7 @@ public sealed partial class JobWorker(
         catch (Exception exception)
         {
             LogRunFailed(logger, exception, claimed.Id, claimed.Type, null);
-            await RecordAsync(lease, step: null, job => EndInFailure(job, exception.Message));
+            await FailAsync(type, claimed, lease, step: null, exception);
             return;
         }
 
@@ -237,7 +249,7 @@ public sealed partial class JobWorker(
             catch (Exception exception)
             {
                 LogRunFailed(logger, exception, claimed.Id, claimed.Type, step.Name);
-                await RecordAsync(lease, (stepId, exception.Message), job => EndInFailure(job, exception.Message));
+                await FailAsync(type, claimed, lease, (stepId, exception.Message), exception);
                 return;
             }
 
@@ -257,6 +269,45 @@ public sealed partial class JobWorker(
 
         // A run with no steps has nothing left to do.
         await SucceedAsync(type, claimed, lease, stepId: null, run.ResultJson);
+    }
+
+    /// <summary>
+    /// Records a run that failed, finishing its step with the error, and when that leaves the job failed for good,
+    /// which this worker's write must have done, runs the type's failure hook in a scope of its own. An exception from
+    /// the hook is logged and changes nothing on the job, which stays failed.
+    /// </summary>
+    private async Task FailAsync(
+        JobType type, ClaimedJob claimed, HeldLease lease, (Guid Id, string? Error)? step, Exception exception)
+    {
+        var stays = false;
+        var ended = await RecordAsync(lease, step, job =>
+        {
+            EndInFailure(job, exception.Message);
+            stays = job.Status == JobStatus.Failed;
+        });
+        if (ended && stays)
+        {
+            await RunFailureHookAsync(claimed, exception, type);
+        }
+    }
+
+    private async Task RunFailureHookAsync(ClaimedJob claimed, Exception? error, JobType? type = null)
+    {
+        type ??= types.Find(claimed.Type);
+        if (type is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            await type.OnFailedAsync(claimed.Payload, error, scope.ServiceProvider);
+        }
+        catch (Exception exception)
+        {
+            LogFailureHookFailed(logger, exception, claimed.Id, claimed.Type);
+        }
     }
 
     /// <summary>
@@ -594,6 +645,9 @@ public sealed partial class JobWorker(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Job {JobId} of type {JobType} succeeded, but its success hook failed.")]
     private static partial void LogSuccessHookFailed(ILogger logger, Exception exception, Guid jobId, string jobType);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Job {JobId} of type {JobType} failed, and its failure hook failed too.")]
+    private static partial void LogFailureHookFailed(ILogger logger, Exception exception, Guid jobId, string jobType);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Job {JobId} of type {JobType} outlived its worker's lease and is run again.")]
     private static partial void LogJobReclaimed(ILogger logger, Guid jobId, string jobType);

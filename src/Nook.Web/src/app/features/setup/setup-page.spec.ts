@@ -22,6 +22,8 @@ describe('SetupPage', () => {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
     role: 'admin',
+    displayName: 'Ada Admin',
+    canUpload: true,
   };
 
   let fixture: ComponentFixture<SetupPage>;
@@ -51,7 +53,10 @@ describe('SetupPage', () => {
 
   afterEach(() => httpTesting.verify());
 
-  async function submit(email: string, password: string): Promise<void> {
+  async function submit(email: string, password: string, name?: string): Promise<void> {
+    if (name !== undefined) {
+      typeInto(fieldLabelled(page, 'Your name'), name);
+    }
     typeInto(fieldLabelled(page, 'Email'), email);
     typeInto(fieldLabelled(page, 'Password'), password);
     const button = Array.from(page.querySelectorAll('button')).find(
@@ -94,6 +99,20 @@ describe('SetupPage', () => {
 
       await vi.waitFor(() => expect(router.url).toBe('/library'));
       expect(TestBed.inject(Session).user()).toEqual(ada);
+    });
+
+    it('sends the name with the email and password', async () => {
+      await submit('ada@example.com', 'correct horse battery', 'Ada Admin');
+
+      const request = await vi.waitFor(() => httpTesting.expectOne('/api/setup'));
+      expect(request.request.body).toEqual({
+        email: 'ada@example.com',
+        password: 'correct horse battery',
+        displayName: 'Ada Admin',
+      });
+      request.flush(ada);
+
+      await vi.waitFor(() => expect(router.url).toBe('/library'));
     });
 
     it("shows the API's message under the password field on a validation error", async () => {

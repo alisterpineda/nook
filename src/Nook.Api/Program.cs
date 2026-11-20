@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
 using Nook.Api.Features.Auth;
 using Nook.Api.Features.PublicAccess;
 using Nook.Api.Features.Publications;
@@ -62,6 +63,7 @@ builder.Services.AddSingleton<PublicationTokens>();
 builder.Services.AddSingleton<PublicationCache>();
 builder.Services.AddScoped<InstanceSettings>();
 builder.Services.AddScoped<SectionAccess>();
+builder.Services.AddScoped<AuditLog>();
 
 builder.Services.AddOptions<UploadOptions>()
     .BindConfiguration(UploadOptions.Section)

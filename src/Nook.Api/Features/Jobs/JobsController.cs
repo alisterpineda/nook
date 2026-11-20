@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
 using Nook.Api.Jobs;
 
 namespace Nook.Api.Features.Jobs;
@@ -12,7 +13,7 @@ namespace Nook.Api.Features.Jobs;
 [ApiController]
 [Route("api/jobs")]
 [Authorize(Roles = nameof(BuiltInRole.Admin))]
-public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry types) : ControllerBase
+public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry types, AuditLog audit) : ControllerBase
 {
     private static readonly Expression<Func<Job, JobSummaryResponse>> ToSummary = j => new JobSummaryResponse(
         j.Id,
@@ -95,6 +96,9 @@ public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry ty
             children);
     }
 
+    /// <summary>The upload a job belongs to, or null when its type is gone or it belongs to none.</summary>
+    private Guid? SubmissionIdOf(string type, string payload) => types.Find(type)?.SubmissionIdOf(payload);
+
     /// <summary>
     /// Sends a failed job back to pending, to run again from its first step with a fresh set of attempts. A job that
     /// is not failed is refused.
@@ -106,7 +110,25 @@ public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry ty
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Retry(Guid id, CancellationToken cancellationToken)
     {
-        return await queue.RetryAsync(id, cancellationToken) switch
+        var found = await db.Jobs.AsNoTracking()
+            .Where(j => j.Id == id)
+            .Select(j => new { j.Type, j.Payload })
+            .SingleOrDefaultAsync(cancellationToken);
+        var outcome = await queue.RetryAsync(id, cancellationToken);
+        if (outcome == JobRetryOutcome.Retried && found is not null)
+        {
+            await audit.AddAsync(
+                User,
+                AuditActions.JobRetried,
+                new AuditSubject(AuditSubjectTypes.Job, id, found.Type),
+                new { },
+                SubmissionIdOf(found.Type, found.Payload));
+
+            // The retry has landed, so its entry is written whether or not the caller is still there.
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+
+        return outcome switch
         {
             JobRetryOutcome.Retried => NoContent(),
             JobRetryOutcome.NotFound => NotFound(),
@@ -155,6 +177,14 @@ public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry ty
                     Problem(statusCode: StatusCodes.Status409Conflict, title: "A job with jobs under it cannot be deleted."),
                     null);
             }
+
+            await audit.AddAsync(
+                User,
+                AuditActions.JobDeleted,
+                new AuditSubject(AuditSubjectTypes.Job, job.Id, job.Type),
+                new { },
+                SubmissionIdOf(job.Type, job.Payload),
+                cancellationToken: cancellationToken);
 
             // The steps go with the job, by the database's cascade.
             db.Jobs.Remove(job);

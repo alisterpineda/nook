@@ -186,6 +186,10 @@ const notFoundHeading = 'Work not found';
                 </ul>
               </dd>
             }
+            @if (work.addedBy) {
+              <dt class="text-muted-foreground">Added by</dt>
+              <dd>{{ work.addedBy }} on {{ work.addedAt | date: 'longDate' }}</dd>
+            }
           </dl>
         }
 
@@ -272,7 +276,8 @@ export class WorkDetailPage {
       !!work.language ||
       work.tags.length > 0 ||
       work.externalIds.length > 0 ||
-      this.filesAreDetails(work)
+      this.filesAreDetails(work) ||
+      !!work.addedBy
     );
   }
 

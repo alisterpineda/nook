@@ -70,3 +70,24 @@ public class SetupRaceTests(NookApiFactory factory) : IClassFixture<NookApiFacto
         Assert.Equal(1, await db.Users.CountAsync(cancellationToken));
     }
 }
+
+public class SetupNameTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
+{
+    [Fact]
+    public async Task Setup_stores_the_name_the_first_admin_gave()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = factory.CreateClient();
+
+        var created = await client.PostAsJsonAsync(
+            "/api/setup",
+            new { email = "named@example.test", password = ApiTestExtensions.Password, displayName = "Nora Admin" },
+            cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        Assert.Equal("Nora Admin", (await created.ReadAsync<CurrentUserResponse>()).DisplayName);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        Assert.Equal("Nora Admin", (await db.Users.SingleAsync(cancellationToken)).DisplayName);
+    }
+}

@@ -81,6 +81,7 @@ public static class AuthServiceExtensions
                 options.MapInboundClaims = false;
                 options.ClaimActions.MapJsonKey(oidc.GroupsClaim, oidc.GroupsClaim);
                 options.ClaimActions.MapJsonKey("email_verified", "email_verified");
+                options.ClaimActions.MapJsonKey("name", "name");
 
                 options.SaveTokens = false;
 
@@ -149,7 +150,8 @@ public static class AuthServiceExtensions
 
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
-            .AddPolicy(Policies.Catalog, policy => policy.AddRequirements(new CatalogRequirement()));
+            .AddPolicy(Policies.Catalog, policy => policy.AddRequirements(new CatalogRequirement()))
+            .AddPolicy(Policies.Upload, policy => policy.RequireClaim(Policies.CanUploadClaim, "true"));
 
         // Scoped, since it reads the settings table.
         services.AddScoped<IAuthorizationHandler, CatalogHandler>();

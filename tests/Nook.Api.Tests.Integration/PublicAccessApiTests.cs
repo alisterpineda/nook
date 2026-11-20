@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
 using Nook.Api.Features.PublicAccess;
 
 namespace Nook.Api.Tests.Integration;
@@ -160,6 +164,93 @@ public class PublicAccessApiTests(NookApiFactory factory) : IClassFixture<NookAp
 
         Assert.Equal(HttpStatusCode.Unauthorized, read.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, save.StatusCode);
+    }
+
+    [Fact]
+    public async Task Saving_public_access_is_logged_with_the_settings_before_and_after()
+    {
+        var (fiction, poetry) = (TestData.NewSection("Fiction"), TestData.NewSection("Poetry"));
+        await factory.AddRowsAsync(fiction, poetry);
+        await factory.SetPublicAccessAsync(false, ContentAccess.Browse, ContentAccess.None, (fiction.Id, ContentAccess.Browse));
+        var (admin, client) = await factory.CreateSignedInUserAsync(BuiltInRole.Admin, "Pat Public");
+        using var clientSession = client;
+        var before = await client.GetAsync<PublicAccessResponse>(Url);
+
+        var response = await client.PutPublicAccessAsync(new PublicAccessRequest(
+            true, ContentAccess.Read, ContentAccess.Browse, [new(poetry.Id, ContentAccess.Download)]));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var after = await client.GetAsync<PublicAccessResponse>(Url);
+        var entry = Assert.Single(await ChangeEntriesAsync(admin.Id));
+        Assert.Equal(admin.Id, entry.ActorId);
+        Assert.Equal("Pat Public", entry.ActorName);
+        Assert.Equal(admin.Email, entry.ActorEmail);
+        Assert.Equal(("public-access", (Guid?)null, "Public access"), (entry.SubjectType, entry.SubjectId, entry.SubjectName));
+        using var details = System.Text.Json.JsonDocument.Parse(entry.Details);
+        Assert.Equal(before, details.RootElement.GetProperty("before").Deserialize<PublicAccessResponse>(ApiTestExtensions.Json), PublicAccessComparer.Instance);
+        Assert.Equal(after, details.RootElement.GetProperty("after").Deserialize<PublicAccessResponse>(ApiTestExtensions.Json), PublicAccessComparer.Instance);
+        Assert.False(details.RootElement.GetProperty("before").GetProperty("enabled").GetBoolean());
+        Assert.True(details.RootElement.GetProperty("after").GetProperty("enabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A_refused_save_is_not_logged()
+    {
+        var section = TestData.NewSection("Plays");
+        await factory.AddRowsAsync(section);
+        var (user, admin) = await factory.CreateSignedInUserAsync(BuiltInRole.Admin);
+        using var adminSession = admin;
+
+        var response = await admin.PutPublicAccessAsync(new PublicAccessRequest(
+            true, ContentAccess.Read, ContentAccess.None, [new(section.Id, ContentAccess.Read), new(Guid.NewGuid(), ContentAccess.Browse)]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(await ChangeEntriesAsync(user.Id));
+    }
+
+    [Fact]
+    public async Task A_save_that_runs_again_after_a_lost_commit_answer_is_logged_once()
+    {
+        var section = TestData.NewSection("Zines");
+        await factory.AddRowsAsync(section);
+        var marker = section.Id.ToString();
+        await using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.ConfigureDbContext<NookDbContext>(options =>
+                options.AddInterceptors(new LostCommitAnswerInterceptor(context =>
+                    context.ChangeTracker.Entries<AuditEntry>().Select(e => e.Entity).FirstOrDefault(e =>
+                        e.Action == AuditActions.PublicAccessChanged
+                        && e.Details.Contains(marker, StringComparison.Ordinal))?.Id)))));
+        var (user, admin) = await app.CreateSignedInUserAsync(BuiltInRole.Admin);
+        using var adminSession = admin;
+
+        var response = await admin.PutPublicAccessAsync(new PublicAccessRequest(
+            true, ContentAccess.Read, ContentAccess.None, [new(section.Id, ContentAccess.Read)]));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Single(await ChangeEntriesAsync(user.Id));
+        var saved = await admin.GetAsync<PublicAccessResponse>(Url);
+        Assert.Equal(ContentAccess.Read, LevelOf(saved, section));
+    }
+
+    private async Task<List<AuditEntry>> ChangeEntriesAsync(Guid actorId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        return await db.AuditEntries
+            .Where(e => e.Action == AuditActions.PublicAccessChanged && e.ActorId == actorId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    private sealed class PublicAccessComparer : IEqualityComparer<PublicAccessResponse>
+    {
+        public static readonly PublicAccessComparer Instance = new();
+
+        public bool Equals(PublicAccessResponse? x, PublicAccessResponse? y) =>
+            x is not null && y is not null
+            && (x.Enabled, x.Access, x.DefaultAreaAccess) == (y.Enabled, y.Access, y.DefaultAreaAccess)
+            && x.Sections.Select(s => (s.Id, s.Name, s.Access)).SequenceEqual(y.Sections.Select(s => (s.Id, s.Name, s.Access)));
+
+        public int GetHashCode(PublicAccessResponse obj) => 0;
     }
 
     private static PublicAccessRequest Everything() =>

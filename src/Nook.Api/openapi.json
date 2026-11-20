@@ -1678,7 +1678,9 @@
         "required": [
           "id",
           "email",
-          "role"
+          "role",
+          "displayName",
+          "canUpload"
         ],
         "type": "object",
         "properties": {
@@ -1691,6 +1693,12 @@
           },
           "role": {
             "$ref": "#/components/schemas/BuiltInRole"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "canUpload": {
+            "type": "boolean"
           }
         }
       },
@@ -2429,6 +2437,12 @@
           },
           "password": {
             "type": "string"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -2556,7 +2570,8 @@
           "items",
           "addedAt",
           "updatedAt",
-          "access"
+          "access",
+          "addedBy"
         ],
         "type": "object",
         "properties": {
@@ -2652,6 +2667,12 @@
           },
           "access": {
             "$ref": "#/components/schemas/ContentAccess"
+          },
+          "addedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

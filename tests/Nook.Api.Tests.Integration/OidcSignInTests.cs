@@ -179,6 +179,30 @@ public class OidcSignInTests(NookApiFactory factory, KeycloakFixture keycloak, P
     }
 
     [Fact]
+    public async Task Single_sign_on_gives_a_new_user_the_name_the_provider_sent()
+    {
+        var me = await SignInAsync(App(), "fay");
+
+        Assert.Equal("Fay First", me.DisplayName);
+        Assert.Equal("Fay First", (await FindUserAsync("fay@sso.test")).DisplayName);
+    }
+
+    [Fact]
+    public async Task Single_sign_on_names_an_existing_user_who_has_no_name_and_keeps_a_name_already_set()
+    {
+        var app = App();
+        await app.CreateUserAsync(BuiltInRole.Contributor, "dee@sso.test");
+        await app.CreateUserAsync(BuiltInRole.Contributor, "eli@sso.test", displayName: "Eli Renamed");
+
+        var unnamed = await SignInAsync(app, "dee");
+        var named = await SignInAsync(app, "eli");
+
+        Assert.Equal("Dee Nameless", unnamed.DisplayName);
+        Assert.Equal("Eli Renamed", named.DisplayName);
+        Assert.Equal("Eli Renamed", (await FindUserAsync("eli@sso.test")).DisplayName);
+    }
+
+    [Fact]
     public async Task An_existing_role_is_kept_when_no_group_is_named()
     {
         var app = App();

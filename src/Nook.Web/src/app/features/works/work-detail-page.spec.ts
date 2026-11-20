@@ -82,6 +82,7 @@ describe('WorkDetailPage', () => {
     addedAt: '2026-11-01T12:00:00Z',
     updatedAt: '2026-11-02T12:00:00Z',
     access: 'download',
+    addedBy: null,
   };
 
   const bare: WorkDetailResponse = {
@@ -498,6 +499,22 @@ describe('WorkDetailPage', () => {
       'Tags',
       'Identifiers',
     ]);
+  });
+
+  it('says who added the work when the response names them', async () => {
+    const page = await openWork({ ...bare, addedBy: 'Ada Adder' });
+
+    expect(details(page)).toEqual([['Added by', 'Ada Adder on November 1, 2026']]);
+  });
+
+  it('says nothing about who added it otherwise', async () => {
+    // The API leaves the field out when there is no one to name.
+    const unnamed: Partial<WorkDetailResponse> = { ...dune };
+    delete unnamed.addedBy;
+    const page = await openWork(unnamed as WorkDetailResponse);
+
+    expect(details(page).map(([label]) => label)).not.toContain('Added by');
+    expect(text(page)).not.toContain('Added by');
   });
 
   it('shows the cover at the large size', async () => {

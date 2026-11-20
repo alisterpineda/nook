@@ -1,7 +1,9 @@
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 using Nook.Api.Features;
+using Nook.Api.Features.Audit;
 using Nook.Api.Features.Sections;
 using Nook.Api.Features.Works;
 
@@ -241,6 +243,54 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
         Assert.Empty(detail.ExternalIds);
         Assert.Empty(detail.Items);
     }
+
+    [Fact]
+    public async Task Work_detail_names_who_added_it_to_a_signed_in_user()
+    {
+        var work = TestData.NewWork("Added by someone");
+        await factory.AddRowsAsync(work);
+        var oldest = UploadAdded(work, "Ada Adder");
+        await factory.AddRowsAsync(oldest, UploadAdded(work, "Later Joiner"));
+        // The save stamps both rows alike, so the first is moved back to make it the oldest.
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            await db.AuditEntries.Where(e => e.Id == oldest.Id).ExecuteUpdateAsync(
+                s => s.SetProperty(e => e.CreatedAt, DateTimeOffset.UtcNow.AddHours(-2)),
+                TestContext.Current.CancellationToken);
+        }
+        using var client = await factory.CreateSignedInClientAsync();
+
+        var detail = await client.GetAsync<WorkDetailResponse>($"/api/works/{work.Id}");
+
+        Assert.Equal("Ada Adder", detail.AddedBy);
+    }
+
+    [Fact]
+    public async Task Work_detail_has_no_one_to_name_for_a_work_with_no_upload_entry()
+    {
+        var work = TestData.NewWork("Added long ago");
+        await factory.AddRowsAsync(work);
+        using var client = await factory.CreateSignedInClientAsync();
+
+        var detail = await client.GetAsync<WorkDetailResponse>($"/api/works/{work.Id}");
+        var raw = await client.GetStringAsync($"/api/works/{work.Id}", TestContext.Current.CancellationToken);
+
+        Assert.Null(detail.AddedBy);
+        Assert.DoesNotContain("addedBy", raw);
+    }
+
+    internal static AuditEntry UploadAdded(Work work, string actorName) => new()
+    {
+        ActorId = Guid.CreateVersion7(),
+        ActorName = actorName,
+        ActorEmail = "actor@example.test",
+        Action = AuditActions.UploadAdded,
+        SubjectType = AuditSubjectTypes.Work,
+        SubjectId = work.Id,
+        SubjectName = work.Title,
+        Details = "{}",
+    };
 
     [Fact]
     public async Task Work_detail_of_an_unknown_work_is_not_found()

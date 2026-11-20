@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
+using Nook.Api.Features.Auth;
+using Nook.Api.Features.Sections;
 using Nook.Api.Ingest;
 using Nook.Api.Jobs;
 using Nook.Api.Storage;
@@ -12,9 +15,10 @@ namespace Nook.Api.Features.Uploads;
 /// <summary>Files sent in to be ingested into a section or the Default area.</summary>
 [ApiController]
 [Route("api/uploads")]
-[Authorize(Roles = nameof(BuiltInRole.Admin))]
+[Authorize(Policy = Policies.Upload)]
 public class UploadsController(
-    NookDbContext db, JobQueue queue, NookStorage storage, IOptions<UploadOptions> options) : ControllerBase
+    NookDbContext db, JobQueue queue, NookStorage storage, IOptions<UploadOptions> options, SectionAccess access,
+    AuditLog audit) : ControllerBase
 {
     /// <summary>
     /// Stages a file and starts the job that ingests it into the section, or into the Default area when none is given.
@@ -45,10 +49,26 @@ public class UploadsController(
                 detail: UploadSizeLimitFilter.TooLargeDetail(maxBytes));
         }
 
-        if (sectionId is { } id && !await db.Sections.AnyAsync(s => s.Id == id, cancellationToken))
+        string? sectionName = null;
+        if (sectionId is { } id)
+        {
+            sectionName = await db.Sections.Where(s => s.Id == id).Select(s => s.Name).SingleOrDefaultAsync(cancellationToken);
+        }
+
+        if (sectionId is not null && sectionName is null)
         {
             ModelState.AddModelError(nameof(request.SectionId), "There is no section with this id.");
             return ValidationProblem(ModelState);
+        }
+
+        // Uploading is for a role that may see the section, as the sections list shows it.
+        var grants = await access.ForAsync(User, cancellationToken);
+        if (grants.In(sectionId) < ContentAccess.Browse)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Forbidden",
+                detail: "Your role cannot see this section, so it cannot add books to it.");
         }
 
         // The staged name is new and carries no extension; the uploaded name travels in the payload only.
@@ -62,8 +82,20 @@ public class UploadsController(
                 await file.CopyToAsync(staged, cancellationToken);
             }
 
-            var payload = new IngestPayload(sectionId, stagedName, Path.GetFileName(file.FileName));
-            jobId = await queue.EnqueueAsync(IngestJob.TypeName, payload, cancellationToken: cancellationToken);
+            var fileName = Path.GetFileName(file.FileName);
+            jobId = Guid.CreateVersion7();
+
+            // The entry is added to this scope's context, so the save that stores the job stores it too.
+            var submission = await audit.AddAsync(
+                User,
+                AuditActions.UploadSubmitted,
+                new AuditSubject(AuditSubjectTypes.Job, jobId, fileName),
+                new { fileName, sectionId, sectionName },
+                isSubmission: true,
+                cancellationToken: cancellationToken);
+
+            var payload = new IngestPayload(sectionId, stagedName, fileName, submission.Id);
+            await queue.EnqueueAsync(IngestJob.TypeName, payload, id: jobId, cancellationToken: cancellationToken);
         }
         catch
         {

@@ -85,8 +85,8 @@ export class Session {
   }
 
   /** Creates the first admin, whom the API signs in. */
-  async createFirstAdmin(email: string, password: string): Promise<void> {
-    const body: SetupRequest = { email, password };
+  async createFirstAdmin(email: string, password: string, displayName = ''): Promise<void> {
+    const body: SetupRequest = { email, password, displayName: displayName.trim() || undefined };
     this.currentUser.set(
       await firstValueFrom(this.http.post<CurrentUserResponse>('/api/setup', body)),
     );

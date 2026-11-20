@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 using Nook.Api.Features;
+using Nook.Api.Features.Audit;
 using Nook.Api.Features.Jobs;
 using Nook.Api.Jobs;
 
@@ -389,6 +390,84 @@ public sealed class JobApiTests : IClassFixture<NookApiFactory>, IDisposable
         using var admin = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
         Assert.Equal(HttpStatusCode.OK, await GetStatusCodeAsync(admin, id));
         Assert.DoesNotContain(note, Recorder.Cleanups);
+    }
+
+    [Fact]
+    public async Task Retrying_a_job_is_logged_with_who_did_it()
+    {
+        var (admin, client) = await _app.CreateSignedInUserAsync(BuiltInRole.Admin, "Rae Retry");
+        using var clientSession = client;
+        var id = await EnqueueAsync(Guid.NewGuid().ToString(), type: FlakyJob.TypeName);
+        Assert.Equal(JobStatus.Failed, (await client.WaitForJobAsync(id)).Status);
+
+        var response = await client.RetryJobAsync(id);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entry = Assert.Single(await EntriesAsync(id, AuditActions.JobRetried));
+        Assert.Equal(admin.Id, entry.ActorId);
+        Assert.Equal("Rae Retry", entry.ActorName);
+        Assert.Equal(admin.Email, entry.ActorEmail);
+        Assert.Equal(AuditSubjectTypes.Job, entry.SubjectType);
+        Assert.Equal(FlakyJob.TypeName, entry.SubjectName);
+        Assert.Null(entry.SubmissionId);
+    }
+
+    [Fact]
+    public async Task Retrying_a_job_that_is_not_failed_is_not_logged()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var id = await EnqueueAsync(Guid.NewGuid().ToString(), notBefore: Never);
+
+        var response = await client.RetryJobAsync(id);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(await EntriesAsync(id, AuditActions.JobRetried));
+    }
+
+    [Fact]
+    public async Task Deleting_a_job_is_logged_with_who_did_it()
+    {
+        var (admin, client) = await _app.CreateSignedInUserAsync(BuiltInRole.Admin);
+        using var clientSession = client;
+        var id = await EnqueueAsync(Guid.NewGuid().ToString(), notBefore: Never);
+
+        var response = await client.DeleteJobAsync(id);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entry = Assert.Single(await EntriesAsync(id, AuditActions.JobDeleted));
+        Assert.Equal(admin.Id, entry.ActorId);
+        Assert.Equal(admin.ShownName, entry.ActorName);
+        Assert.Equal(admin.Email, entry.ActorEmail);
+        Assert.Equal(AuditSubjectTypes.Job, entry.SubjectType);
+        Assert.Equal(RecordingJob.TypeName, entry.SubjectName);
+        Assert.Null(entry.SubmissionId);
+    }
+
+    [Fact]
+    public async Task Deleting_a_running_job_is_not_logged()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var id = await EnqueueAsync(Guid.NewGuid().ToString(), notBefore: Never);
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            await db.Jobs.Where(j => j.Id == id).ExecuteUpdateAsync(
+                s => s.SetProperty(j => j.Status, JobStatus.Running), TestContext.Current.CancellationToken);
+        }
+
+        var response = await client.DeleteJobAsync(id);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(await EntriesAsync(id, AuditActions.JobDeleted));
+    }
+
+    private async Task<List<AuditEntry>> EntriesAsync(Guid jobId, string action)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        return await db.AuditEntries
+            .Where(e => e.SubjectId == jobId && e.Action == action)
+            .ToListAsync(TestContext.Current.CancellationToken);
     }
 
     public void Dispose() => _app.Dispose();

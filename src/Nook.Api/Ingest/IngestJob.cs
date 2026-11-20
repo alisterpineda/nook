@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
 using Nook.Api.Features.Works;
 using Nook.Api.Jobs;
 using Nook.Api.Storage;
@@ -67,7 +68,7 @@ public sealed class IngestJob : JobType
                     }
                 }
 
-                throw new InvalidOperationException($"The uploaded file '{payload.FileName}' is in an unsupported format.");
+                throw new UnsupportedFormatException(payload.FileName);
             })
             .AddStep("check-duplicate", async cancellationToken =>
             {
@@ -81,6 +82,8 @@ public sealed class IngestJob : JobType
                 // of the item it made.
                 if (await matcher.FindItemWithHashAsync(payload.SectionId, sha256, cancellationToken) is { } found)
                 {
+                    await LogDuplicateAsync(found.WorkId, found.ItemId, cancellationToken);
+
                     run.Complete(new IngestResult(IngestOutcome.Duplicate, found.ItemId, found.WorkId));
                 }
             })
@@ -121,12 +124,50 @@ public sealed class IngestJob : JobType
                     await FileUnderLockAsync(transaction, cancellationToken);
                 }));
 
+        // Adds the entry saying who uploaded the file and what became of it, to be stored by the save that follows.
+        // An upload has at most one such entry, so a run that finds one adds none, and a job queued before uploads were
+        // logged has no submission to find its uploader by. Returns whether an entry was added.
+        async Task<bool> AddOutcomeAsync(
+            string action, Guid workId, string workTitle, Guid itemId, CancellationToken cancellationToken)
+        {
+            if (payload.SubmissionId is not { } submissionId
+                || await db.AuditEntries.AnyAsync(
+                    e => e.SubmissionId == submissionId
+                        && (e.Action == AuditActions.UploadAdded || e.Action == AuditActions.UploadDuplicate),
+                    cancellationToken))
+            {
+                return false;
+            }
+
+            var added = await services.GetRequiredService<AuditLog>().AddForSubmissionAsync(
+                submissionId,
+                action,
+                submission => (
+                    new AuditSubject(AuditSubjectTypes.Work, workId, workTitle),
+                    new { jobId = submission.SubjectId, itemId }),
+                cancellationToken);
+            return added is not null;
+        }
+
+        // Records that the upload matched an item already held, and saves the entry, since nothing else is saved on
+        // the way to ending as a duplicate.
+        async Task LogDuplicateAsync(Guid workId, Guid itemId, CancellationToken cancellationToken)
+        {
+            var title = await db.Works.Where(w => w.Id == workId).Select(w => w.Title).SingleAsync(cancellationToken);
+            if (await AddOutcomeAsync(AuditActions.UploadDuplicate, workId, title, itemId, cancellationToken))
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         // Runs with the lock held, so no other ingest matches or saves until this one commits or rolls back.
         async Task FileUnderLockAsync(IDbContextTransaction transaction, CancellationToken cancellationToken)
         {
             // Two copies of one file uploaded together both pass check-duplicate, so it is asked again here.
             if (await matcher.FindItemWithHashAsync(payload.SectionId, sha256!, cancellationToken) is { } existing)
             {
+                await LogDuplicateAsync(existing.WorkId, existing.ItemId, cancellationToken);
+
                 await transaction.CommitAsync(CancellationToken.None);
                 run.Complete(new IngestResult(IngestOutcome.Duplicate, existing.ItemId, existing.WorkId));
                 return;
@@ -184,6 +225,8 @@ public sealed class IngestJob : JobType
                     Size = size,
                     Sha256 = sha256!,
                 });
+
+                await AddOutcomeAsync(AuditActions.UploadAdded, work.Id, work.Title, item.Id, cancellationToken);
 
                 built = (item.Id, work.Id);
                 saving = true;
@@ -276,6 +319,32 @@ public sealed class IngestJob : JobType
     /// </summary>
     public override Task OnSucceededAsync(string payloadJson, IServiceProvider services) =>
         DeleteStagedFileAsync(payloadJson, services);
+
+    /// <summary>
+    /// Adds the entry saying who uploaded the file and that its ingest failed, with the kind of failure, each time the
+    /// job stays failed. A job queued before uploads were logged has no submission to find its uploader by.
+    /// </summary>
+    public override async Task OnFailedAsync(string payloadJson, Exception? error, IServiceProvider services)
+    {
+        var payload = JobJson.Deserialize<IngestPayload>(payloadJson);
+        var kind = error switch
+        {
+            UnsupportedFormatException => UploadFailureKind.UnsupportedFormat,
+            UnreadableBookException => UploadFailureKind.Unreadable,
+            _ => UploadFailureKind.Internal,
+        };
+        var added = await services.GetRequiredService<AuditLog>().AddForSubmissionAsync(
+            payload.SubmissionId,
+            AuditActions.UploadFailed,
+            submission => (new AuditSubject(AuditSubjectTypes.Job, submission.SubjectId, submission.SubjectName), new { kind }));
+        if (added is not null)
+        {
+            await services.GetRequiredService<NookDbContext>().SaveChangesAsync();
+        }
+    }
+
+    public override Guid? SubmissionIdOf(string payloadJson) =>
+        JobJson.Deserialize<IngestPayload>(payloadJson).SubmissionId;
 
     /// <summary>Deletes the staged file, which only this job used.</summary>
     public override Task OnDeletedAsync(string payloadJson, IServiceProvider services) =>

@@ -52,6 +52,8 @@ describe('routes', () => {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
     role: 'admin',
+    displayName: 'Admin User',
+    canUpload: true,
   };
   const noWorks: PageOfWorkSummaryResponse = { items: [], total: 0, offset: 0, limit: 50 };
   const noPeople: PageOfPersonSummaryResponse = { items: [], total: 0, offset: 0, limit: 50 };
@@ -79,6 +81,7 @@ describe('routes', () => {
     addedAt: '2026-11-01T12:00:00Z',
     updatedAt: '2026-11-01T12:00:00Z',
     access: 'download',
+    addedBy: null,
   };
 
   /** What the API answers on each path for `visitor`, who is an admin unless they carry another role. */

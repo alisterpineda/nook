@@ -75,13 +75,49 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
         await _factory.WaitForStagedFilesAsync(stagedBefore);
     }
 
+    [Fact]
+    public async Task A_run_reclaimed_after_it_saved_logs_the_work_once()
+    {
+        var section = await _app.AddSectionAsync();
+        var epub = new EpubBuilder().WithTitle("The Dispossessed").WithCreator($"Ursula K. Le Guin {IngestTestExtensions.UniqueSuffix()}").Build();
+        var (user, uploader) = await _app.CreateSignedInUserAsync(BuiltInRole.Contributor);
+        using var uploaderSession = uploader;
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var response = await uploader.UploadAsync(epub, "dispossessed.epub", section.Id);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, response.StatusCode);
+        var saved = await client.WaitForJobAsync((await response.ReadAsync<Nook.Api.Features.Uploads.UploadResponse>()).JobId);
+        Assert.Equal(JobStatus.Succeeded, saved.Status);
+
+        Guid submissionId;
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            submissionId = (await db.AuditEntries.SingleAsync(
+                e => e.Action == "upload.submitted" && e.SubjectId == saved.Id, TestContext.Current.CancellationToken)).Id;
+        }
+
+        var id = await InsertIngestOfADeadWorkerAsync(epub, section, diedIn: "file-item", submissionId);
+        var job = await client.WaitForJobAsync(id);
+
+        Assert.Equal(JobStatus.Succeeded, job.Status);
+        Assert.Equal(1, job.ReclaimsMade);
+        Assert.Equal(IngestOutcome.Duplicate, job.ReadIngestResult().Outcome);
+        await using var check = _app.Services.CreateAsyncScope();
+        var context = check.ServiceProvider.GetRequiredService<NookDbContext>();
+        var outcomes = await context.AuditEntries
+            .Where(e => e.SubmissionId == submissionId && e.Id != submissionId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("upload.added", Assert.Single(outcomes).Action);
+    }
+
     public void Dispose() => _app.Dispose();
 
     /// <summary>
     /// Stages the file and writes its ingest job as a worker that died in the named step leaves it: running, its
     /// lease run out, and that step still running after the steps before it succeeded.
     /// </summary>
-    private async Task<Guid> InsertIngestOfADeadWorkerAsync(byte[] bytes, LibrarySection section, string diedIn)
+    private async Task<Guid> InsertIngestOfADeadWorkerAsync(
+        byte[] bytes, LibrarySection section, string diedIn, Guid? submissionId = null)
     {
         var stagedName = Guid.NewGuid().ToString();
         await File.WriteAllBytesAsync(
@@ -94,7 +130,7 @@ public sealed class IngestReclaimTests : IClassFixture<NookApiFactory>, IDisposa
         {
             Type = IngestJob.TypeName,
             Status = JobStatus.Running,
-            Payload = JobJson.Serialize(new IngestPayload(section.Id, stagedName, "book.epub")),
+            Payload = JobJson.Serialize(new IngestPayload(section.Id, stagedName, "book.epub", submissionId)),
             AttemptsAllowed = 1,
             LeaseExpiresAt = died,
         };

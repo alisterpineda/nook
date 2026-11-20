@@ -1331,6 +1331,8 @@ export interface components {
             id: string;
             email: string;
             role: components["schemas"]["BuiltInRole"];
+            displayName: string;
+            canUpload: boolean;
         };
         /** Format: binary */
         IFormFile: string;
@@ -1528,6 +1530,7 @@ export interface components {
         SetupRequest: {
             email: string;
             password: string;
+            displayName?: null | string;
         };
         SetupStatusResponse: {
             required: boolean;
@@ -1581,6 +1584,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             access: components["schemas"]["ContentAccess"];
+            addedBy: null | string;
         };
         WorkExternalIdResponse: {
             scheme: string;

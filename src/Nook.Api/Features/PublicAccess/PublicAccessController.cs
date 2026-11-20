@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
+using Nook.Api.Features.Audit;
 
 namespace Nook.Api.Features.PublicAccess;
 
@@ -9,13 +10,16 @@ namespace Nook.Api.Features.PublicAccess;
 [ApiController]
 [Route("api/public-access")]
 [Authorize(Roles = nameof(BuiltInRole.Admin))]
-public class PublicAccessController(NookDbContext db, InstanceSettings settings) : ControllerBase
+public class PublicAccessController(NookDbContext db, InstanceSettings settings, AuditLog audit) : ControllerBase
 {
     /// <summary>Every public access setting, with each section by name.</summary>
     [HttpGet]
     [ProducesResponseType<PublicAccessResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<PublicAccessResponse>> Get(CancellationToken cancellationToken)
+    public async Task<ActionResult<PublicAccessResponse>> Get(CancellationToken cancellationToken) =>
+        await ReadAsync(cancellationToken);
+
+    private async Task<PublicAccessResponse> ReadAsync(CancellationToken cancellationToken)
     {
         var enabled = await settings.PublicAccessEnabledAsync(cancellationToken);
         var anonymous = await db.Roles.AsNoTracking().SingleAsync(r => r.Id == Role.AnonymousId, cancellationToken);
@@ -77,6 +81,9 @@ public class PublicAccessController(NookDbContext db, InstanceSettings settings)
             return ValidationProblem(ModelState);
         }
 
+        // Chosen once, outside the retry strategy, so a pass that runs again after a commit whose answer was lost finds
+        // the entry the commit kept.
+        var entryId = Guid.CreateVersion7();
         var opened = request.Sections.Where(s => s.Access != ContentAccess.None).ToList();
         var sectionIds = request.Sections.Select(s => s.Id).ToList();
 
@@ -105,6 +112,9 @@ public class PublicAccessController(NookDbContext db, InstanceSettings settings)
                 return missing;
             }
 
+            var written = await db.AuditEntries.AnyAsync(e => e.Id == entryId, cancellationToken);
+            var before = written ? null : await ReadAsync(cancellationToken);
+
             anonymous.ContentAccess = request.Access;
             anonymous.DefaultAreaAccess = request.DefaultAreaAccess;
 
@@ -118,6 +128,18 @@ public class PublicAccessController(NookDbContext db, InstanceSettings settings)
 
             // Saves the role and its sections along with the switch.
             await settings.SetPublicAccessEnabledAsync(request.Enabled, cancellationToken);
+
+            if (!written)
+            {
+                await audit.AddAsync(
+                    User,
+                    AuditActions.PublicAccessChanged,
+                    new AuditSubject(AuditSubjectTypes.PublicAccess, null, "Public access"),
+                    new { before, after = await ReadAsync(cancellationToken) },
+                    id: entryId,
+                    cancellationToken: cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
             await transaction.CommitAsync(cancellationToken);
             return new List<Guid>();

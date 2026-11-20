@@ -11,6 +11,7 @@ namespace Nook.Api.Features.Auth;
 [ApiController]
 [Route("api/auth")]
 public class AuthController(
+    NookDbContext db,
     UserManager<NookUser> users,
     SignInManager<NookUser> signIn,
     IOptions<OidcOptions> oidc,
@@ -80,7 +81,7 @@ public class AuthController(
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "The email or password is incorrect.");
         }
 
-        return CurrentUserResponse.From(user);
+        return await CurrentAsync(user);
     }
 
     /// <summary>Signs out and clears the session cookie.</summary>
@@ -99,6 +100,9 @@ public class AuthController(
     public async Task<ActionResult<CurrentUserResponse>> Me()
     {
         var user = await users.GetUserAsync(User);
-        return user is null ? Unauthorized() : CurrentUserResponse.From(user);
+        return user is null ? Unauthorized() : await CurrentAsync(user);
     }
+
+    private Task<CurrentUserResponse> CurrentAsync(NookUser user) =>
+        CurrentUserResponse.FromAsync(db, user, HttpContext.RequestAborted);
 }

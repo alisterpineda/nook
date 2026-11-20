@@ -11,7 +11,7 @@ namespace Nook.Api.Features.Setup;
 
 public record SetupStatusResponse(bool Required);
 
-public record SetupRequest([Required, EmailAddress] string Email, [Required] string Password);
+public record SetupRequest([Required, EmailAddress] string Email, [Required] string Password, string? DisplayName = null);
 
 /// <summary>First-run setup: creating the first admin. Open to anyone, and closed for good once any user exists.</summary>
 [ApiController]
@@ -36,7 +36,7 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> CreateFirstAdmin(SetupRequest request, CancellationToken cancellationToken)
     {
-        var user = new NookUser { UserName = request.Email, Email = request.Email, RoleId = Role.AdminId };
+        var user = new NookUser { UserName = request.Email, Email = request.Email, RoleId = Role.AdminId, DisplayName = NookUser.CleanDisplayName(request.DisplayName) };
 
         // The database is set to retry, so the transaction has to run inside its retry strategy.
         var result = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -82,6 +82,6 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
         }
 
         await signIn.SignInAsync(user, isPersistent: true);
-        return CurrentUserResponse.From(user);
+        return await CurrentUserResponse.FromAsync(db, user, cancellationToken);
     }
 }

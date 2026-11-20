@@ -105,6 +105,77 @@ namespace Nook.Api.Data.Migrations
                     b.ToTable("asp_net_user_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("Nook.Api.Data.AuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorEmail")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("actor_email");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("actor_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("details");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject_name");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject_type");
+
+                    b.Property<Guid?>("SubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submission_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_entries");
+
+                    b.HasIndex("SubmissionId")
+                        .HasDatabaseName("ix_audit_entries_submission_id");
+
+                    b.HasIndex("ActorId", "Action", "CreatedAt")
+                        .HasDatabaseName("ix_audit_entries_actor_id_action_created_at");
+
+                    b.HasIndex("SubjectType", "SubjectId", "Action")
+                        .HasDatabaseName("ix_audit_entries_subject_type_subject_id_action");
+
+                    b.ToTable("audit_entries", (string)null);
+                });
+
             modelBuilder.Entity("Nook.Api.Data.Item", b =>
                 {
                     b.Property<Guid>("Id")
@@ -310,6 +381,10 @@ namespace Nook.Api.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("text")
+                        .HasColumnName("display_name");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
@@ -542,7 +617,7 @@ namespace Nook.Api.Data.Migrations
                             Id = new Guid("01a1c7e7-8000-7000-8000-0000000000a2"),
                             AllSections = true,
                             BuiltIn = "Contributor",
-                            CanUpload = false,
+                            CanUpload = true,
                             ContentAccess = "Download",
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 16, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             DefaultAreaAccess = "Download",

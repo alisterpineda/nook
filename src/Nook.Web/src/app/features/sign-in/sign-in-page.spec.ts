@@ -30,6 +30,8 @@ describe('SignInPage', () => {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
     role: 'admin',
+    displayName: 'Admin User',
+    canUpload: true,
   };
 
   let fixture: ComponentFixture<SignInPage>;

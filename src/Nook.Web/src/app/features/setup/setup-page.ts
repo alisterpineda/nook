@@ -33,6 +33,16 @@ type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'
         </header>
         <form hlmCardContent class="grid gap-6" [formGroup]="form" (ngSubmit)="submit()">
           <div class="grid gap-2">
+            <label hlmLabel for="setup-name">Your name</label>
+            <input
+              hlmInput
+              id="setup-name"
+              type="text"
+              autocomplete="name"
+              formControlName="displayName"
+            />
+          </div>
+          <div class="grid gap-2">
             <label hlmLabel for="setup-email">Email</label>
             <input
               hlmInput
@@ -74,7 +84,11 @@ export class SetupPage {
   private readonly session = inject(Session);
   private readonly router = inject(Router);
 
-  protected readonly form = inject(NonNullableFormBuilder).group({ email: '', password: '' });
+  protected readonly form = inject(NonNullableFormBuilder).group({
+    displayName: '',
+    email: '',
+    password: '',
+  });
   protected readonly submitting = signal(false);
   protected readonly emailErrors = signal<string[]>([]);
   protected readonly passwordErrors = signal<string[]>([]);
@@ -88,10 +102,10 @@ export class SetupPage {
     this.submitting.set(true);
     this.showErrors({});
 
-    const { email, password } = this.form.getRawValue();
+    const { displayName, email, password } = this.form.getRawValue();
     let destination: string;
     try {
-      await this.session.createFirstAdmin(email, password);
+      await this.session.createFirstAdmin(email, password, displayName);
       destination = '/library';
     } catch (error) {
       if (!(error instanceof HttpErrorResponse) || error.status !== HttpStatusCode.Conflict) {

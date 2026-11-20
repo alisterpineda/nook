@@ -49,6 +49,8 @@ public sealed class OidcSignIn(
             return Fail(Failed, "the provider sent no subject");
         }
 
+        var providerName = NookUser.CleanDisplayName(principal.FindFirstValue("name"));
+
         var user = await users.FindByLoginAsync(Scheme, subject);
         if (user is null)
         {
@@ -78,6 +80,7 @@ public sealed class OidcSignIn(
                     UserName = email,
                     Email = email,
                     EmailConfirmed = emailVerified,
+                    DisplayName = providerName,
                     RoleId = Role.IdOf(RoleFromGroups(principal, BuiltInRole.Viewer)),
                 };
 
@@ -121,13 +124,19 @@ public sealed class OidcSignIn(
         }
 
         var roleId = Role.IdOf(RoleFromGroups(principal, user.BuiltInRoleOrViewer));
-        if (roleId != user.RoleId)
+        var needsName = string.IsNullOrWhiteSpace(user.DisplayName) && providerName is not null;
+        if (roleId != user.RoleId || needsName)
         {
             user.RoleId = roleId;
+            if (needsName)
+            {
+                user.DisplayName = providerName;
+            }
+
             var updated = await users.UpdateAsync(user);
             if (!updated.Succeeded)
             {
-                return Fail(Failed, "the user's role could not be saved", updated);
+                return Fail(Failed, "the user's role or name could not be saved", updated);
             }
         }
 

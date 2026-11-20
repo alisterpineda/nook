@@ -47,16 +47,22 @@ describe('Shell', () => {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
     role: 'admin',
+    displayName: 'Admin User',
+    canUpload: true,
   };
   const grace: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000002',
     email: 'grace@example.com',
     role: 'contributor',
+    displayName: 'Contributor User',
+    canUpload: true,
   };
   const viewer: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000003',
     email: 'viewer@example.com',
     role: 'viewer',
+    displayName: 'Viewer User',
+    canUpload: false,
   };
   const books: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
   const comics: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000b', name: 'Comics' };

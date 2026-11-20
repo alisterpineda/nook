@@ -19,16 +19,22 @@ describe('route guards', () => {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
     role: 'admin',
+    displayName: 'Admin User',
+    canUpload: true,
   };
   const mel: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000002',
     email: 'mel@example.com',
     role: 'contributor',
+    displayName: 'Contributor User',
+    canUpload: true,
   };
   const gus: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000003',
     email: 'gus@example.com',
     role: 'viewer',
+    displayName: 'Viewer User',
+    canUpload: false,
   };
 
   let harness: RouterTestingHarness;
@@ -102,6 +108,7 @@ describe('route guards', () => {
       addedAt: '2026-11-01T12:00:00Z',
       updatedAt: '2026-11-01T12:00:00Z',
       access: 'download',
+      addedBy: null,
     } satisfies WorkDetailResponse);
   }
 

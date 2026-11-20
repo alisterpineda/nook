@@ -23,12 +23,17 @@ internal static class ApiTestExtensions
     /// <summary>The name of the session cookie.</summary>
     private const string SessionCookie = "nook";
 
-    /// <summary>Creates a user with <see cref="Password"/>, and a new email unless one is given.</summary>
+    /// <summary>Creates a user with <see cref="Password"/>, and a new email unless one is given, and no display name unless one is given.</summary>
+    public static Task<NookUser> CreateUserAsync(
+        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor, string? email = null, string? displayName = null) =>
+        factory.CreateUserAsync(Role.IdOf(role), email, displayName);
+
+    /// <summary>Creates a user as <see cref="CreateUserAsync(WebApplicationFactory{Program}, BuiltInRole, string?, string?)"/> does, in any role, built in or not.</summary>
     public static async Task<NookUser> CreateUserAsync(
-        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor, string? email = null)
+        this WebApplicationFactory<Program> factory, Guid roleId, string? email = null, string? displayName = null)
     {
         email ??= $"{Guid.NewGuid():N}@example.test";
-        var user = new NookUser { UserName = email, Email = email, RoleId = Role.IdOf(role) };
+        var user = new NookUser { UserName = email, Email = email, RoleId = roleId, DisplayName = displayName };
 
         await using var scope = factory.Services.CreateAsyncScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
@@ -39,10 +44,24 @@ internal static class ApiTestExtensions
     }
 
     /// <summary>A client that holds the session cookie of a new user.</summary>
-    public static async Task<HttpClient> CreateSignedInClientAsync(
-        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor)
+    public static Task<HttpClient> CreateSignedInClientAsync(
+        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor) =>
+        factory.CreateSignedInClientAsync(Role.IdOf(role));
+
+    /// <summary>A new user, with a client that holds their session cookie, for a test that needs to know who signed in.</summary>
+    public static async Task<(NookUser User, HttpClient Client)> CreateSignedInUserAsync(
+        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor, string? displayName = null)
     {
-        var user = await factory.CreateUserAsync(role);
+        var user = await factory.CreateUserAsync(role, displayName: displayName);
+        var client = factory.CreateClient();
+        (await client.LoginAsync(user.Email!, Password)).EnsureSuccessStatusCode();
+        return (user, client);
+    }
+
+    /// <summary>A client that holds the session cookie of a new user in any role, built in or not.</summary>
+    public static async Task<HttpClient> CreateSignedInClientAsync(this WebApplicationFactory<Program> factory, Guid roleId)
+    {
+        var user = await factory.CreateUserAsync(roleId);
         var client = factory.CreateClient();
 
         var response = await client.LoginAsync(user.Email!, Password);
