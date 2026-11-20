@@ -21,6 +21,9 @@ public sealed class JobTypeRegistry
     /// <summary>The type with this name, or null when none is registered.</summary>
     public JobType? Find(string name) => _types.GetValueOrDefault(name);
 
+    /// <summary>The upload a job belongs to, or null when its type is gone or it belongs to none.</summary>
+    public Guid? SubmissionIdOf(string type, string payload) => Find(type)?.SubmissionIdOf(payload);
+
     /// <summary>
     /// How many runs a job of this type may make. A type that is not registered gets one, so its job is stored,
     /// runs once and fails where it can be seen.

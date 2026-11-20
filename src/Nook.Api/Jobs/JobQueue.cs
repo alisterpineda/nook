@@ -17,7 +17,8 @@ public enum JobRetryOutcome
 }
 
 /// <summary>Adds jobs for the worker to run, and hands failed ones back to it.</summary>
-public sealed class JobQueue(NookDbContext db, JobTypeRegistry types, JobSignal signal, TimeProvider timeProvider)
+public sealed class JobQueue(
+    NookDbContext db, JobTypeRegistry types, JobSignal signal, TimeProvider timeProvider, IJobChangeNotifier notifier)
 {
     /// <summary>
     /// Stores a pending job and returns its id. A type that is not registered is still stored, with one
@@ -59,6 +60,7 @@ public sealed class JobQueue(NookDbContext db, JobTypeRegistry types, JobSignal 
 
         // Workers in this process start on it now; others find it at their next poll.
         signal.Wake();
+        await notifier.ChangedAsync(job.Id);
         return job.Id;
     }
 
@@ -102,6 +104,7 @@ public sealed class JobQueue(NookDbContext db, JobTypeRegistry types, JobSignal 
         }
 
         signal.Wake();
+        await notifier.ChangedAsync(id);
         return JobRetryOutcome.Retried;
     }
 }

@@ -4,11 +4,14 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nook.Api.Data;
+using Nook.Api.Features.Activity;
 using Nook.Api.Features.Audit;
 using Nook.Api.Features.Auth;
+using Nook.Api.Features.Jobs;
 using Nook.Api.Features.PublicAccess;
 using Nook.Api.Features.Publications;
 using Nook.Api.Features.Sections;
@@ -64,6 +67,8 @@ builder.Services.AddSingleton<PublicationCache>();
 builder.Services.AddScoped<InstanceSettings>();
 builder.Services.AddScoped<SectionAccess>();
 builder.Services.AddScoped<AuditLog>();
+builder.Services.AddScoped<UploadActivity>();
+builder.Services.AddScoped<JobActions>();
 
 builder.Services.AddOptions<UploadOptions>()
     .BindConfiguration(UploadOptions.Section)
@@ -71,6 +76,12 @@ builder.Services.AddOptions<UploadOptions>()
     .ValidateOnStart();
 
 builder.Services.AddNookAuth(builder.Configuration);
+if (!buildingOpenApiDocument)
+{
+    // Before AddNookJobs, whose no-op default yields to it.
+    builder.Services.AddSingleton<IJobChangeNotifier, JobChangeNotifier>();
+}
+
 builder.Services.AddNookJobs();
 builder.Services.AddNookIngest();
 if (!buildingOpenApiDocument)
@@ -93,6 +104,15 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(enumsByName);
     options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
 });
+
+// The hub writes enums as the controllers do, so a client reads "unsupportedFormat" and not a number.
+builder.Services.AddSignalR().AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.PayloadSerializerOptions.Converters.Add(enumsByName);
+    options.PayloadSerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+});
+builder.Services.AddSingleton<IUserIdProvider, ActivityUserIdProvider>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -145,6 +165,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+app.MapHub<ActivityHub>(ActivityHub.Path);
 app.MapRobotsTxt();
 
 // The web app routes in the browser, so any other path that is not a file gets its index.html.

@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nook.Api.Data;
-using Nook.Api.Features.Audit;
 using Nook.Api.Jobs;
 
 namespace Nook.Api.Features.Jobs;
@@ -13,9 +12,10 @@ namespace Nook.Api.Features.Jobs;
 [ApiController]
 [Route("api/jobs")]
 [Authorize(Roles = nameof(BuiltInRole.Admin))]
-public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry types, AuditLog audit) : ControllerBase
+public class JobsController(NookDbContext db, JobActions actions) : ControllerBase
 {
-    private static readonly Expression<Func<Job, JobSummaryResponse>> ToSummary = j => new JobSummaryResponse(
+    /// <summary>The summary of a job, as the list and the activity hub give it.</summary>
+    internal static readonly Expression<Func<Job, JobSummaryResponse>> ToSummary = j => new JobSummaryResponse(
         j.Id,
         j.Type,
         j.Status,
@@ -96,9 +96,6 @@ public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry ty
             children);
     }
 
-    /// <summary>The upload a job belongs to, or null when its type is gone or it belongs to none.</summary>
-    private Guid? SubmissionIdOf(string type, string payload) => types.Find(type)?.SubmissionIdOf(payload);
-
     /// <summary>
     /// Sends a failed job back to pending, to run again from its first step with a fresh set of attempts. A job that
     /// is not failed is refused.
@@ -108,33 +105,8 @@ public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry ty
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Retry(Guid id, CancellationToken cancellationToken)
-    {
-        var found = await db.Jobs.AsNoTracking()
-            .Where(j => j.Id == id)
-            .Select(j => new { j.Type, j.Payload })
-            .SingleOrDefaultAsync(cancellationToken);
-        var outcome = await queue.RetryAsync(id, cancellationToken);
-        if (outcome == JobRetryOutcome.Retried && found is not null)
-        {
-            await audit.AddAsync(
-                User,
-                AuditActions.JobRetried,
-                new AuditSubject(AuditSubjectTypes.Job, id, found.Type),
-                new { },
-                SubmissionIdOf(found.Type, found.Payload));
-
-            // The retry has landed, so its entry is written whether or not the caller is still there.
-            await db.SaveChangesAsync(CancellationToken.None);
-        }
-
-        return outcome switch
-        {
-            JobRetryOutcome.Retried => NoContent(),
-            JobRetryOutcome.NotFound => NotFound(),
-            _ => Problem(statusCode: StatusCodes.Status409Conflict, title: "Only a failed job can be retried."),
-        };
-    }
+    public async Task<IActionResult> Retry(Guid id, CancellationToken cancellationToken) =>
+        (await actions.RetryAsync(User, id, cancellationToken)).ToResult(this);
 
     /// <summary>
     /// Deletes a job that is not running, with the steps of all its runs, and then lets its type clean up whatever the
@@ -145,68 +117,6 @@ public class JobsController(NookDbContext db, JobQueue queue, JobTypeRegistry ty
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
-    {
-        // The database is set to retry, so the transaction has to run inside its retry strategy.
-        var (refusal, deleted) = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            // A retry starts from what the database holds, not from what a failed attempt loaded.
-            db.ChangeTracker.Clear();
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-
-            // Locked until the delete commits, so a worker's claim passes over the job rather than starting it, and a
-            // job a worker claimed first is seen running. Nothing is composed on the query: EF would wrap the SQL in a
-            // subquery.
-            var found = await db.Jobs
-                .FromSql($"SELECT * FROM jobs WHERE id = {id} FOR UPDATE")
-                .ToListAsync(cancellationToken);
-            if (found is not [var job])
-            {
-                return ((IActionResult?)NotFound(), (Job?)null);
-            }
-
-            if (job.Status == JobStatus.Running)
-            {
-                return (Problem(statusCode: StatusCodes.Status409Conflict, title: "A running job cannot be deleted."), null);
-            }
-
-            // A child enqueued meanwhile waits on the lock, and then finds its parent gone.
-            if (await db.Jobs.AnyAsync(j => j.ParentJobId == id, cancellationToken))
-            {
-                return (
-                    Problem(statusCode: StatusCodes.Status409Conflict, title: "A job with jobs under it cannot be deleted."),
-                    null);
-            }
-
-            await audit.AddAsync(
-                User,
-                AuditActions.JobDeleted,
-                new AuditSubject(AuditSubjectTypes.Job, job.Id, job.Type),
-                new { },
-                SubmissionIdOf(job.Type, job.Payload),
-                cancellationToken: cancellationToken);
-
-            // The steps go with the job, by the database's cascade.
-            db.Jobs.Remove(job);
-            await db.SaveChangesAsync(cancellationToken);
-
-            // Not cancelled: a delete the database made must be followed by its cleanup.
-            await transaction.CommitAsync(CancellationToken.None);
-            return (null, job);
-        });
-
-        if (refusal is not null)
-        {
-            return refusal;
-        }
-
-        // Only once the job is gone for good, so a cleanup never takes away what a job still to run needs. A type that
-        // is no longer registered has no cleanup to run.
-        if (types.Find(deleted!.Type) is { } type)
-        {
-            await type.OnDeletedAsync(deleted.Payload, HttpContext.RequestServices);
-        }
-
-        return NoContent();
-    }
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
+        (await actions.DeleteAsync(User, id, cancellationToken)).ToResult(this);
 }

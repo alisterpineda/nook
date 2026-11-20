@@ -13,7 +13,9 @@ public static class JobServiceExtensions
             .ValidateOnStart();
         services.TryAddSingleton<JobTypeRegistry>();
         services.TryAddSingleton<JobSignal>();
+        services.TryAddSingleton<IJobChangeNotifier, NoJobChangeNotifier>();
         services.TryAddScoped<JobQueue>();
+        services.TryAddScoped<JobDeletion>();
         return services;
     }
 

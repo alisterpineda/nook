@@ -30,6 +30,7 @@ public sealed partial class JobWorker(
     IServiceScopeFactory scopeFactory,
     JobTypeRegistry types,
     JobSignal signal,
+    IJobChangeNotifier notifier,
     TimeProvider timeProvider,
     IOptions<JobsOptions> options,
     ILogger<JobWorker> logger) : BackgroundService
@@ -185,9 +186,15 @@ public sealed partial class JobWorker(
             return (claimed, true);
         });
 
+        if (result.Item1 is { } claimedJob)
+        {
+            await notifier.ChangedAsync(claimedJob.Id);
+        }
+
         if (givenUp is not null)
         {
             await RunFailureHookAsync(givenUp, error: null);
+            await notifier.ChangedAsync(givenUp.Id);
         }
 
         return result;
@@ -214,7 +221,11 @@ public sealed partial class JobWorker(
         if (type is null)
         {
             // No later run could find the type either, so the job fails whatever attempts it has left.
-            await RecordAsync(lease, step: null, job => EndInFailure(job, $"Unknown job type '{claimed.Type}'.", mayRunAgain: false));
+            if (await RecordAsync(lease, step: null, job => EndInFailure(job, $"Unknown job type '{claimed.Type}'.", mayRunAgain: false)))
+            {
+                await notifier.ChangedAsync(claimed.Id);
+            }
+
             return;
         }
 
@@ -289,6 +300,11 @@ public sealed partial class JobWorker(
         {
             await RunFailureHookAsync(claimed, exception, type);
         }
+
+        if (ended)
+        {
+            await notifier.ChangedAsync(claimed.Id);
+        }
     }
 
     private async Task RunFailureHookAsync(ClaimedJob claimed, Exception? error, JobType? type = null)
@@ -333,6 +349,8 @@ public sealed partial class JobWorker(
         {
             LogSuccessHookFailed(logger, exception, claimed.Id, claimed.Type);
         }
+
+        await notifier.ChangedAsync(claimed.Id);
     }
 
     /// <summary>The number for a new run's step rows: one more than the highest any earlier run used.</summary>
@@ -462,6 +480,7 @@ public sealed partial class JobWorker(
         if (handedBack)
         {
             LogJobHandedBack(logger, lease.JobId);
+            await notifier.ChangedAsync(lease.JobId);
         }
     }
 
