@@ -58,9 +58,12 @@ public sealed class JobQueue(
         db.Jobs.Add(job);
         await db.SaveChangesAsync(cancellationToken);
 
+        // Told while it is still pending: the notifier reads the job as it stands, and a worker woken first could
+        // have claimed it by then, so no one would hear it was queued.
+        await notifier.ChangedAsync(job.Id);
+
         // Workers in this process start on it now; others find it at their next poll.
         signal.Wake();
-        await notifier.ChangedAsync(job.Id);
         return job.Id;
     }
 
@@ -103,8 +106,9 @@ public sealed class JobQueue(
                 : JobRetryOutcome.NotFound;
         }
 
-        signal.Wake();
+        // Told before the worker is woken, as for a new job, so the notice says pending.
         await notifier.ChangedAsync(id);
+        signal.Wake();
         return JobRetryOutcome.Retried;
     }
 }

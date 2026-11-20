@@ -46,12 +46,18 @@ public class ActivityHubTests : IClassFixture<NookApiFactory>, IDisposable
         await using var admin = await factory.ConnectToActivityHubAsync(BuiltInRole.Admin);
         await using var contributor = await factory.ConnectToActivityHubAsync(BuiltInRole.Contributor);
 
+        // A notice gives the job as it stands when it is read, so only a job no worker may claim yet is sure to be
+        // told of as pending.
+        var waiting = await factory.EnqueueJobAsync(
+            CountingJob.TypeName, new CountingPayload(Guid.NewGuid()), notBefore: DateTimeOffset.UtcNow.AddYears(1));
+        var queued = await admin.NextAsync<JobSummaryResponse>("JobChanged", j => j.Id == waiting);
+        Assert.Equal(JobStatus.Pending, queued.Status);
+
         var id = await factory.EnqueueJobAsync(CountingJob.TypeName, new CountingPayload(key));
         await counter.WaitUntilStartedAsync(key);
         counter.Release(key);
         var seen = await StatusesUntilAsync(admin, id, JobStatus.Succeeded);
 
-        Assert.Contains(JobStatus.Pending, seen);
         Assert.Contains(JobStatus.Running, seen);
         Assert.Equal(JobStatus.Succeeded, seen[^1]);
         await contributor.AssertNoneAsync<JobSummaryResponse>("JobChanged", j => j.Id == id);
@@ -70,8 +76,8 @@ public class ActivityHubTests : IClassFixture<NookApiFactory>, IDisposable
 
         var retry = await admin.Client.RetryJobAsync(id);
         Assert.Equal(System.Net.HttpStatusCode.NoContent, retry.StatusCode);
-        var seen = await StatusesUntilAsync(admin, id, JobStatus.Succeeded);
-        Assert.Contains(JobStatus.Pending, seen);
+        // The retry's own notice may already find the job running, so what is sure is that its new run is told of.
+        await StatusesUntilAsync(admin, id, JobStatus.Succeeded);
 
         var delete = await admin.Client.DeleteJobAsync(id);
         Assert.Equal(System.Net.HttpStatusCode.NoContent, delete.StatusCode);
