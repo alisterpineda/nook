@@ -19,11 +19,14 @@ import {
   type TimelineItem,
 } from '@readium/shared';
 import {
+  readerFontFamilies,
   readerThemeColours,
   type ReaderContentsEntry,
   type ReaderEngine,
   type ReaderEngineDetails,
+  type ReaderLineHeight,
   type ReaderLocator,
+  type ReaderMargins,
   type ReaderOpenOptions,
   type ReaderOpened,
   type ReaderPlace,
@@ -277,10 +280,16 @@ export class ReadiumEngine implements ReaderEngine {
     }
     const layoutChanged = settings.layout !== before.layout;
     const fontSizeChanged = settings.fontSize !== before.fontSize;
+    const fontChanged = settings.font !== before.font;
+    const lineHeightChanged = settings.lineHeight !== before.lineHeight;
+    const marginsChanged = settings.margins !== before.margins;
     const preferences: IEpubPreferences = {
       ...(layoutChanged ? layoutPreferences(settings) : {}),
       ...(fontSizeChanged ? fontSizePreferences(settings) : {}),
       ...(settings.theme !== before.theme ? themePreferences(settings) : {}),
+      ...(fontChanged ? fontPreferences(settings) : {}),
+      ...(lineHeightChanged ? lineHeightPreferences(settings) : {}),
+      ...(marginsChanged ? marginsPreferences(settings) : {}),
     };
     if (Object.keys(preferences).length === 0) {
       return;
@@ -289,8 +298,11 @@ export class ReadiumEngine implements ReaderEngine {
     await navigator.submitPreferences(new EpubPreferences(preferences));
     this.settings = settings;
     // The navigator does not keep the place across a font-size change: left alone, it lands about a third of a
-    // chapter back. Going back to the place held before also makes sure a position is reported after a layout change.
-    if ((layoutChanged || fontSizeChanged) && !this.closed) {
+    // chapter back. A change of font, line height or margins moves the text in the same way. Going back to the place
+    // held before also makes sure a position is reported after a layout change.
+    const textMoved =
+      layoutChanged || fontSizeChanged || fontChanged || lineHeightChanged || marginsChanged;
+    if (textMoved && !this.closed) {
       await this.move((navigator, done) => navigator.go(place, false, done));
     }
   }
@@ -548,6 +560,9 @@ function preferencesFor(settings: ReaderSettings): IEpubPreferences {
     ...layoutPreferences(settings),
     ...fontSizePreferences(settings),
     ...themePreferences(settings),
+    ...fontPreferences(settings),
+    ...lineHeightPreferences(settings),
+    ...marginsPreferences(settings),
   };
 }
 
@@ -568,6 +583,44 @@ function themePreferences(settings: ReaderSettings): IEpubPreferences {
     textColor: colours.text,
     linkColor: colours.link,
     visitedColor: colours.link,
+  };
+}
+
+// Null takes a preference back, which leaves the font to the book.
+function fontPreferences(settings: ReaderSettings): IEpubPreferences {
+  return { fontFamily: settings.font === 'book' ? null : readerFontFamilies[settings.font] };
+}
+
+// Each line height as a multiple of the text size. The navigator takes one from 1 to 2.5.
+const lineHeights: Record<Exclude<ReaderLineHeight, 'book'>, number> = {
+  tight: 1.2,
+  medium: 1.5,
+  loose: 1.8,
+};
+
+function lineHeightPreferences(settings: ReaderSettings): IEpubPreferences {
+  return { lineHeight: settings.lineHeight === 'book' ? null : lineHeights[settings.lineHeight] };
+}
+
+// Each margin width as the space kept at either edge of the screen, in pixels, and the longest a line may grow, in
+// characters. The edge space is what shows on a narrow screen; on a wide one the line length does, by setting how
+// wide the column of text is. Normal is the navigator's own page gutter and line length; left to itself the navigator
+// keeps no edge space at all in scrolled layout, which here gets the same as pages do.
+const margins: Record<ReaderMargins, { readonly edge: number; readonly lineLength: number }> = {
+  narrow: { edge: 8, lineLength: 100 },
+  normal: { edge: 20, lineLength: 80 },
+  // The navigator ignores a longest line shorter than its optimal one, which is 65.
+  wide: { edge: 40, lineLength: 65 },
+};
+
+// The navigator keeps the edge space of the two layouts apart: the gutter is for pages and the padding for scrolling.
+function marginsPreferences(settings: ReaderSettings): IEpubPreferences {
+  const { edge, lineLength } = margins[settings.margins];
+  return {
+    pageGutter: edge,
+    scrollPaddingLeft: edge,
+    scrollPaddingRight: edge,
+    maximalLineLength: lineLength,
   };
 }
 

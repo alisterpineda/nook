@@ -23,10 +23,13 @@ describe('SystemTheme', () => {
   it('adds the dark class when the system is dark', () => {
     stubSystemSetting(true);
 
-    TestBed.inject(SystemTheme).start();
+    const theme = TestBed.inject(SystemTheme);
+    expect(theme.dark()).toBe(false);
+    theme.start();
 
     expect(window.matchMedia).toHaveBeenCalledWith('(prefers-color-scheme: dark)');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(theme.dark()).toBe(true);
   });
 
   it('leaves the dark class off when the system is light', () => {
@@ -39,12 +42,15 @@ describe('SystemTheme', () => {
 
   it('follows a change of the system setting', () => {
     stubSystemSetting(false);
-    TestBed.inject(SystemTheme).start();
+    const theme = TestBed.inject(SystemTheme);
+    theme.start();
 
     listeners.forEach((listener) => listener({ matches: true }));
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(theme.dark()).toBe(true);
 
     listeners.forEach((listener) => listener({ matches: false }));
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(theme.dark()).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { Location } from '@angular/common';
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component, Provider } from '@angular/core';
+import { Component, Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -13,7 +13,9 @@ import {
   ReaderSettings,
   readerThemeColours,
 } from './reader-engine';
+import { SystemTheme } from '../../core/system-theme';
 import { ReaderPage } from './reader-page';
+import { KeptReaderSettings } from './reader-settings-store';
 import { FakeReaderEngine, provideFakeReaderEngine } from './testing/fake-reader-engine';
 
 const workId = '0198a1b2-0000-7000-8000-000000000001';
@@ -21,12 +23,27 @@ const itemId = '0198a1b2-0000-7000-8000-0000000000f1';
 const readerUrl = `/works/${workId}/read/${itemId}`;
 const settingsKey = 'nook.reader.settings';
 
+/** How a book is shown when nothing is kept and the app is light, with `changed` in place of what it names. */
+function settingsWith(changed: Partial<ReaderSettings> = {}): ReaderSettings {
+  return {
+    layout: 'paginated',
+    fontSize: 100,
+    theme: 'light',
+    font: 'book',
+    lineHeight: 'book',
+    margins: 'normal',
+    ...changed,
+  };
+}
+
 @Component({ template: `<h1>Dune</h1>` })
 class WorkDetailStub {}
 
 describe('ReaderPage', () => {
   let engine: FakeReaderEngine;
   let harness: RouterTestingHarness;
+  /** Whether the app is in its dark colours. */
+  const appIsDark = signal(false);
 
   /** Sets up the router with the reader and a stand-in work page, the engine loaded by `providers`. */
   async function setUp(providers: Provider[]): Promise<void> {
@@ -37,14 +54,21 @@ describe('ReaderPage', () => {
           { path: 'works/:workId/read/:itemId', component: ReaderPage },
         ]),
         provideLocationMocks(),
+        { provide: SystemTheme, useValue: { dark: appIsDark } },
         ...providers,
       ],
     });
     harness = await RouterTestingHarness.create();
   }
 
+  // The settings' selects bring a chosen item into view, which the test DOM has no way to do.
+  beforeAll(() => {
+    Element.prototype.scrollIntoView ??= () => undefined;
+  });
+
   beforeEach(() => {
     engine = new FakeReaderEngine();
+    appIsDark.set(false);
     localStorage.clear();
   });
 
@@ -106,7 +130,76 @@ describe('ReaderPage', () => {
 
   /** The contents panel, which is shown over the page rather than inside it, or null when it is not open. */
   function contentsPanel(): HTMLElement | null {
-    return document.querySelector<HTMLElement>('[role="dialog"]');
+    return (
+      Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((dialog) =>
+        dialog.querySelector('[data-testid="reader-toc"]'),
+      ) ?? null
+    );
+  }
+
+  /** The display settings panel, shown over the page like the contents, or null when it is not open. */
+  function settingsPanel(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[data-testid="reader-settings"]');
+  }
+
+  /** Presses the display settings button and gives the panel once it is open. */
+  async function openedSettingsPanel(): Promise<HTMLElement> {
+    buttonLabelled(page(), 'Display settings').click();
+    await vi.waitFor(() => {
+      page();
+      expect(settingsPanel()).not.toBeNull();
+    });
+    return settingsPanel()!;
+  }
+
+  /** The control a setting of the settings panel is chosen with: a select's button, or a group of buttons. */
+  function control(panel: HTMLElement, setting: string): HTMLElement {
+    const label = Array.from(panel.querySelectorAll('label')).find((one) => text(one) === setting);
+    const found = label
+      ? panel.querySelector<HTMLElement>(`#${label.htmlFor}`)
+      : panel.querySelector<HTMLElement>(`[aria-label="${setting}"]`);
+    if (!found) {
+      throw new Error(`No setting called ${setting}`);
+    }
+    return found;
+  }
+
+  /** The choices of an open select's list, which is shown over the page. */
+  function listed(): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'));
+  }
+
+  /** Makes a choice for a setting of the settings panel: from its select's list, or by pressing its button. */
+  async function choose(panel: HTMLElement, setting: string, label: string): Promise<void> {
+    const chooser = control(panel, setting);
+    if (chooser.getAttribute('role') !== 'combobox') {
+      buttonLabelled(chooser, label).click();
+      page();
+      return;
+    }
+    chooser.click();
+    await vi.waitFor(() => {
+      page();
+      expect(listed().map((option) => text(option))).toContain(label);
+    });
+    listed()
+      .find((option) => text(option) === label)!
+      .click();
+    await vi.waitFor(() => {
+      page();
+      expect(listed()).toEqual([]);
+    });
+  }
+
+  /** The label of the choice a setting of the settings panel shows as the one in use. */
+  function chosen(panel: HTMLElement, setting: string): string {
+    page();
+    const chooser = control(panel, setting);
+    return text(
+      chooser.getAttribute('role') === 'combobox'
+        ? chooser
+        : chooser.querySelector('[aria-pressed="true"]'),
+    );
   }
 
   async function openedContentsPanel(): Promise<HTMLElement> {
@@ -150,11 +243,7 @@ describe('ReaderPage', () => {
       expect(engine.opened?.manifestUrl).toBe(`/api/items/${itemId}/publication/manifest.json`);
       expect(element.contains(engine.opened!.host)).toBe(true);
       expect(engine.opened?.options.place).toBeUndefined();
-      expect(engine.opened?.options.settings).toEqual({
-        layout: 'paginated',
-        fontSize: 100,
-        theme: 'light',
-      });
+      expect(engine.opened?.options.settings).toEqual(settingsWith());
       expect(element.querySelector('[role="alert"]')).toBeNull();
     });
 
@@ -312,31 +401,110 @@ describe('ReaderPage', () => {
     });
 
     it('opens the book with the saved settings', async () => {
-      const saved: ReaderSettings = { layout: 'scrolled', fontSize: 150, theme: 'sepia' };
+      const saved: ReaderSettings = {
+        layout: 'scrolled',
+        fontSize: 150,
+        theme: 'sepia',
+        font: 'serif',
+        lineHeight: 'loose',
+        margins: 'wide',
+      };
       localStorage.setItem(settingsKey, JSON.stringify(saved));
 
       const element = await openReader();
 
       expect(engine.opened?.options.settings).toEqual(saved);
-      expect(buttonLabelled(element, 'Scrolled layout').getAttribute('aria-pressed')).toBe('true');
       expect(element.getAttribute('data-reader-theme')).toBe('sepia');
+      const panel = await openedSettingsPanel();
+      expect(chosen(panel, 'Theme')).toBe('Sepia');
+      expect(chosen(panel, 'Font')).toBe('Serif');
+      expect(chosen(panel, 'Line height')).toBe('Loose');
+      expect(chosen(panel, 'Margins')).toBe('Wide');
+      expect(text(panel.querySelector('[data-testid="reader-font-size"]'))).toBe('150%');
+      expect(chosen(panel, 'Layout')).toBe('Scrolled');
+    });
+
+    it('keeps the display settings in a panel opened from the toolbar', async () => {
+      const element = await openReader();
+
+      expect(buttons(element)).toEqual(['Display settings', 'Previous page', 'Next page']);
+      expect(settingsPanel()).toBeNull();
+
+      const panel = await openedSettingsPanel();
+      expect(text(panel.querySelector('h2'))).toBe('Display');
+      expect(buttons(panel)).toEqual([
+        'Auto',
+        'Book',
+        'Smaller text',
+        'Larger text',
+        'Book',
+        'Normal',
+        'Paginated',
+        'Scrolled',
+        'Close',
+      ]);
+
+      control(panel, 'Line height').click();
+      await vi.waitFor(() => {
+        page();
+        expect(listed().map((option) => text(option))).toEqual([
+          'Book',
+          'Tight',
+          'Medium',
+          'Loose',
+        ]);
+      });
+      // The list is drawn outside the page, and takes the book's theme too.
+      expect(listed()[0].closest('[data-reader-theme]')?.getAttribute('data-reader-theme')).toBe(
+        'light',
+      );
+    });
+
+    it('sets the font, the line height and the margins from their choices', async () => {
+      await openReader();
+      const panel = await openedSettingsPanel();
+      expect(chosen(panel, 'Font')).toBe('Book');
+      expect(chosen(panel, 'Line height')).toBe('Book');
+      expect(chosen(panel, 'Margins')).toBe('Normal');
+
+      await choose(panel, 'Font', 'Sans');
+      await choose(panel, 'Line height', 'Tight');
+      await choose(panel, 'Margins', 'Narrow');
+      // A choice already in use stays as it is.
+      await choose(panel, 'Margins', 'Narrow');
+      await choose(panel, 'Line height', 'Book');
+
+      expect(chosen(panel, 'Font')).toBe('Sans');
+      expect(chosen(panel, 'Line height')).toBe('Book');
+      expect(chosen(panel, 'Margins')).toBe('Narrow');
+      expect(applied()).toEqual([
+        settingsWith({ font: 'sans' }),
+        settingsWith({ font: 'sans', lineHeight: 'tight' }),
+        settingsWith({ font: 'sans', lineHeight: 'tight', margins: 'narrow' }),
+        settingsWith({ font: 'sans', margins: 'narrow' }),
+      ]);
+      expect(JSON.parse(localStorage.getItem(settingsKey)!)).toEqual({
+        ...settingsWith({ font: 'sans', margins: 'narrow' }),
+        theme: 'auto',
+      });
     });
 
     it('switches between paginated and scrolled', async () => {
-      const element = await openReader();
-      const layout = buttonLabelled(element, 'Scrolled layout');
-      expect(layout.getAttribute('aria-pressed')).toBe('false');
+      await openReader();
+      const panel = await openedSettingsPanel();
+      expect(chosen(panel, 'Layout')).toBe('Paginated');
 
-      layout.click();
-      page();
-      expect(layout.getAttribute('aria-pressed')).toBe('true');
-      layout.click();
-      page();
-      expect(layout.getAttribute('aria-pressed')).toBe('false');
+      await choose(panel, 'Layout', 'Scrolled');
+      expect(chosen(panel, 'Layout')).toBe('Scrolled');
+      // The layout already chosen stays chosen.
+      await choose(panel, 'Layout', 'Scrolled');
+      expect(chosen(panel, 'Layout')).toBe('Scrolled');
+      await choose(panel, 'Layout', 'Paginated');
+      expect(chosen(panel, 'Layout')).toBe('Paginated');
 
       expect(applied()).toEqual([
-        { layout: 'scrolled', fontSize: 100, theme: 'light' },
-        { layout: 'paginated', fontSize: 100, theme: 'light' },
+        settingsWith({ layout: 'scrolled' }),
+        settingsWith({ layout: 'paginated' }),
       ]);
     });
 
@@ -345,14 +513,18 @@ describe('ReaderPage', () => {
         settingsKey,
         JSON.stringify({ layout: 'paginated', fontSize: 80, theme: 'light' }),
       );
-      const element = await openReader();
-      const smaller = buttonLabelled(element, 'Smaller text');
-      const larger = buttonLabelled(element, 'Larger text');
+      await openReader();
+      const panel = await openedSettingsPanel();
+      const smaller = buttonLabelled(panel, 'Smaller text');
+      const larger = buttonLabelled(panel, 'Larger text');
+      const size = () => text(panel.querySelector('[data-testid="reader-font-size"]'));
+      expect(size()).toBe('80%');
 
       larger.click();
       smaller.click();
       smaller.click();
       page();
+      expect(size()).toBe('70%');
       expect(smaller.disabled).toBe(true);
       expect(larger.disabled).toBe(false);
       smaller.click();
@@ -365,8 +537,8 @@ describe('ReaderPage', () => {
         settingsKey,
         JSON.stringify({ layout: 'paginated', fontSize: 240, theme: 'light' }),
       );
-      const element = await openReader();
-      const larger = buttonLabelled(element, 'Larger text');
+      await openReader();
+      const larger = buttonLabelled(await openedSettingsPanel(), 'Larger text');
 
       larger.click();
       page();
@@ -376,16 +548,20 @@ describe('ReaderPage', () => {
       expect(applied().map((settings) => settings.fontSize)).toEqual([250]);
     });
 
-    it('cycles light, dark and sepia and recolours the reader', async () => {
+    it('shows the book in the chosen theme and recolours the reader', async () => {
       engine.contents = contents;
       const element = await openReader();
       expect(element.getAttribute('data-reader-theme')).toBe('light');
+      const settings = await openedSettingsPanel();
+      expect(chosen(settings, 'Theme')).toBe('Auto');
 
       const seen: string[] = [];
-      for (const label of ['Theme: light', 'Theme: dark', 'Theme: sepia']) {
-        buttonLabelled(element, label).click();
-        page();
+      for (const label of ['Dark', 'Sepia', 'Light']) {
+        await choose(settings, 'Theme', label);
+        expect(chosen(settings, 'Theme')).toBe(label);
         seen.push(element.getAttribute('data-reader-theme')!);
+        // The panel is drawn outside the page, and takes the theme too.
+        expect(settings.getAttribute('data-reader-theme')).toBe(seen.at(-1));
       }
 
       expect(seen).toEqual(['dark', 'sepia', 'light']);
@@ -396,7 +572,8 @@ describe('ReaderPage', () => {
       expect(element.style.getPropertyValue('--foreground')).toBe(readerThemeColours.light.text);
       expect(applied().map((settings) => settings.theme)).toEqual(['dark', 'sepia', 'light']);
 
-      buttonLabelled(element, 'Theme: light').click();
+      await choose(settings, 'Theme', 'Dark');
+      buttonLabelled(settings, 'Close').click();
       buttonLabelled(element, 'Contents').click();
       const panel = await openedContentsPanel();
       expect(panel.querySelector('hlm-sheet-content')?.getAttribute('data-reader-theme')).toBe(
@@ -404,18 +581,46 @@ describe('ReaderPage', () => {
       );
     });
 
-    it('saves a changed setting', async () => {
+    it("follows the app's light or dark while the theme is on auto", async () => {
+      appIsDark.set(true);
       const element = await openReader();
+      expect(engine.opened?.options.settings.theme).toBe('dark');
+      expect(element.getAttribute('data-reader-theme')).toBe('dark');
 
-      buttonLabelled(element, 'Scrolled layout').click();
-      buttonLabelled(element, 'Larger text').click();
-      buttonLabelled(element, 'Theme: light').click();
+      appIsDark.set(false);
+      page();
+      expect(element.getAttribute('data-reader-theme')).toBe('light');
+      expect(element.style.getPropertyValue('--background')).toBe(
+        readerThemeColours.light.background,
+      );
+      expect(applied()).toEqual([settingsWith({ theme: 'light' })]);
 
-      expect(JSON.parse(localStorage.getItem(settingsKey)!)).toEqual({
-        layout: 'scrolled',
-        fontSize: 110,
-        theme: 'dark',
-      });
+      const panel = await openedSettingsPanel();
+      await choose(panel, 'Theme', 'Sepia');
+      appIsDark.set(true);
+      page();
+      expect(element.getAttribute('data-reader-theme')).toBe('sepia');
+      expect(applied().map((settings) => settings.theme)).toEqual(['light', 'sepia']);
+
+      await choose(panel, 'Theme', 'Auto');
+      page();
+      expect(element.getAttribute('data-reader-theme')).toBe('dark');
+      expect(applied().map((settings) => settings.theme)).toEqual(['light', 'sepia', 'dark']);
+      const kept = JSON.parse(localStorage.getItem(settingsKey)!) as KeptReaderSettings;
+      expect(kept.theme).toBe('auto');
+    });
+
+    it('saves a changed setting', async () => {
+      await openReader();
+      const panel = await openedSettingsPanel();
+
+      await choose(panel, 'Layout', 'Scrolled');
+      buttonLabelled(panel, 'Larger text').click();
+      await choose(panel, 'Theme', 'Dark');
+
+      expect(JSON.parse(localStorage.getItem(settingsKey)!)).toEqual(
+        settingsWith({ layout: 'scrolled', fontSize: 110, theme: 'dark' }),
+      );
     });
 
     it('applies a setting changed while the book was opening once it has opened', async () => {
@@ -433,13 +638,13 @@ describe('ReaderPage', () => {
         expect(engine.opened).not.toBeNull();
       });
 
-      buttonLabelled(page(), 'Theme: light').click();
+      await choose(await openedSettingsPanel(), 'Theme', 'Dark');
       expect(applied()).toEqual([]);
       finishOpening();
       await settle();
 
       expect(engine.opened?.options.settings.theme).toBe('light');
-      expect(applied()).toEqual([{ layout: 'paginated', fontSize: 100, theme: 'dark' }]);
+      expect(applied()).toEqual([settingsWith({ theme: 'dark' })]);
     });
 
     it("exposes the reader's state for browser checks in dev mode", async () => {
@@ -479,7 +684,7 @@ describe('ReaderPage', () => {
         errors: [],
       });
 
-      buttonLabelled(page(), 'Larger text').click();
+      buttonLabelled(await openedSettingsPanel(), 'Larger text').click();
       expect(window.__nookReader?.fontSize).toBe(110);
 
       await window.__nookReader?.goToFraction(0.9);

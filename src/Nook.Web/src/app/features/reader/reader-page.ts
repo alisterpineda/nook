@@ -1,12 +1,15 @@
 import {
   Component,
+  DOCUMENT,
   DestroyRef,
   ElementRef,
   afterNextRender,
   computed,
+  effect,
   inject,
   isDevMode,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -16,15 +19,16 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideAArrowDown,
   lucideAArrowUp,
+  lucideALargeSmall,
   lucideArrowLeft,
   lucideChevronLeft,
   lucideChevronRight,
   lucideListTree,
-  lucidePalette,
-  lucideScrollText,
 } from '@ng-icons/lucide';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
+import { HlmSelectImports } from '@spartan-ng/helm/select';
 import { HlmSheetImports } from '@spartan-ng/helm/sheet';
+import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import { publicationManifestUrl } from '../../api/publications-api';
 import {
   READER_ENGINE,
@@ -37,11 +41,22 @@ import {
   ReaderSettings,
   ReaderTapZone,
   ReaderTheme,
+  readerFontFamilies,
+  readerFonts,
+  readerLayouts,
+  readerLineHeights,
+  readerMargins,
   readerThemeColours,
-  readerThemes,
 } from './reader-engine';
 import { ReaderPlaceStore } from './reader-place-store';
-import { ReaderSettingsStore, readerFontSize } from './reader-settings-store';
+import { SystemTheme } from '../../core/system-theme';
+import {
+  KeptReaderSettings,
+  ReaderSettingsStore,
+  readerFontSize,
+  readerThemeChoices,
+} from './reader-settings-store';
+import { ReaderThemed } from './reader-themed';
 
 const couldNotShow = 'This book could not be shown.';
 
@@ -77,31 +92,116 @@ declare global {
   }
 }
 
+/** The display settings that are one of a few named choices. */
+type ReaderChoiceSetting = 'theme' | 'font' | 'lineHeight' | 'margins' | 'layout';
+
+/** One of the choices a display setting offers. */
+interface ReaderChoiceOption<V> {
+  readonly value: V;
+  readonly label: string;
+  /** The font the label is set in. */
+  readonly font?: string;
+}
+
+/** A display setting that is one of a few named choices, as the settings panel lists it. */
+interface ReaderChoice<K extends ReaderChoiceSetting = ReaderChoiceSetting> {
+  readonly setting: K;
+  readonly label: string;
+  /** The id of the control the setting is chosen with. */
+  readonly id: string;
+  readonly options: readonly ReaderChoiceOption<KeptReaderSettings[K]>[];
+  /** What the reader calls a choice, or nothing for a value that is not one of them. */
+  readonly labelOf: (value: unknown) => string;
+}
+
 /**
- * One book, full-screen: a toolbar with the way back to its work, the book's table of contents, how the book is shown
- * (layout, font size and theme) and the page turns, the book itself, which the reader engine renders and moves through,
- * and a readout of how far through the book and which chapter the reader is in.
+ * A setting with the choices it offers: every one of `values`, the list the kept setting is checked against, in that
+ * order and under its name in `labels`.
+ */
+function choiceOf<K extends ReaderChoiceSetting>(
+  setting: K,
+  label: string,
+  id: string,
+  values: readonly KeptReaderSettings[K][],
+  labels: Record<KeptReaderSettings[K], string>,
+  fonts: Partial<Record<KeptReaderSettings[K], string>> = {},
+): ReaderChoice<K> {
+  const options = values.map((value) => ({ value, label: labels[value], font: fonts[value] }));
+  const labelOf = (value: unknown) => options.find((option) => option.value === value)?.label ?? '';
+  return { setting, label, id, options, labelOf };
+}
+
+/** The settings chosen from a list, with what the reader calls each choice. */
+const choices = {
+  theme: choiceOf('theme', 'Theme', 'reader-theme', readerThemeChoices, {
+    auto: 'Auto',
+    light: 'Light',
+    dark: 'Dark',
+    sepia: 'Sepia',
+  }),
+  font: choiceOf(
+    'font',
+    'Font',
+    'reader-font',
+    readerFonts,
+    { book: 'Book', serif: 'Serif', sans: 'Sans' },
+    readerFontFamilies,
+  ),
+  lineHeight: choiceOf('lineHeight', 'Line height', 'reader-line-height', readerLineHeights, {
+    book: 'Book',
+    tight: 'Tight',
+    medium: 'Medium',
+    loose: 'Loose',
+  }),
+  margins: choiceOf('margins', 'Margins', 'reader-margins', readerMargins, {
+    narrow: 'Narrow',
+    normal: 'Normal',
+    wide: 'Wide',
+  }),
+  layout: choiceOf('layout', 'Layout', 'reader-flow', readerLayouts, {
+    paginated: 'Paginated',
+    scrolled: 'Scrolled',
+  }),
+};
+
+/** From this width up the display settings come in from the side; below it, from the bottom. */
+const wideScreen = '(min-width: 640px)';
+
+/**
+ * One book, full-screen: a toolbar with the way back to its work, the book's table of contents, the display settings
+ * and the page turns, the book itself, which the reader engine renders and moves through, and a readout of how far
+ * through the book and which chapter the reader is in.
+ * The display settings (theme, font, text size, line height, margins and layout) are in a panel of their own.
  * The book opens where it was last left in this browser, and the place is kept as the reader moves. How books are shown
- * is kept in this browser too, the same for every book, and the reader's own colours follow the book's theme.
+ * is kept in this browser too, the same for every book, and the reader's own colours follow the book's theme. A
+ * theme left on auto is the app's light or dark, and changes when the app's does.
  */
 @Component({
   selector: 'app-reader-page',
-  imports: [HlmButtonImports, HlmSheetImports, NgIcon, NgTemplateOutlet, RouterLink],
+  imports: [
+    HlmButtonImports,
+    HlmSelectImports,
+    HlmSheetImports,
+    HlmToggleGroupImports,
+    NgIcon,
+    NgTemplateOutlet,
+    ReaderThemed,
+    RouterLink,
+  ],
   providers: [
     provideIcons({
       lucideAArrowDown,
       lucideAArrowUp,
+      lucideALargeSmall,
       lucideArrowLeft,
       lucideChevronLeft,
       lucideChevronRight,
       lucideListTree,
-      lucidePalette,
-      lucideScrollText,
     }),
   ],
   host: {
     class: 'bg-background text-foreground flex h-dvh flex-col',
-    '[attr.data-reader-theme]': 'settings().theme',
+    '[attr.data-reader-theme]': 'theme()',
     '[style.--background]': 'colours().background',
     '[style.--foreground]': 'colours().text',
   },
@@ -133,7 +233,7 @@ declare global {
             <span class="sr-only">Contents</span>
           </button>
           <hlm-sheet
-            side="left"
+            side="right"
             [state]="contentsOpen() ? 'open' : 'closed'"
             (stateChanged)="contentsOpen.set($event === 'open')"
           >
@@ -141,14 +241,10 @@ declare global {
             <hlm-sheet-content
               *hlmSheetPortal
               class="gap-0 overflow-y-auto"
-              [attr.data-reader-theme]="settings().theme"
-              [style.--background]="colours().background"
-              [style.--foreground]="colours().text"
-              [style.--popover]="colours().background"
-              [style.--popover-foreground]="colours().text"
+              [appReaderThemed]="theme()"
             >
               <hlm-sheet-header>
-                <h2 hlmSheetTitle>Contents</h2>
+                <h2 hlmSheetTitle class="leading-8">Contents</h2>
               </hlm-sheet-header>
               <nav class="px-2 pb-4" data-testid="reader-toc">
                 <ng-container
@@ -164,52 +260,108 @@ declare global {
           variant="outline"
           size="icon-sm"
           type="button"
-          title="Scrolled layout"
-          data-testid="reader-flow"
-          [attr.aria-pressed]="settings().layout === 'scrolled'"
-          (click)="toggleLayout()"
+          title="Display settings"
+          data-testid="reader-settings-open"
+          (click)="openSettings()"
         >
-          <ng-icon name="lucideScrollText" />
-          <span class="sr-only">Scrolled layout</span>
+          <ng-icon name="lucideALargeSmall" />
+          <span class="sr-only">Display settings</span>
         </button>
-        <button
-          hlmBtn
-          variant="outline"
-          size="icon-sm"
-          type="button"
-          title="Smaller text"
-          data-testid="reader-font-smaller"
-          [disabled]="settings().fontSize <= fontSize.min"
-          (click)="changeFontSize(-fontSize.step)"
+        <hlm-sheet
+          [side]="settingsSide()"
+          [state]="settingsOpen() ? 'open' : 'closed'"
+          (stateChanged)="settingsOpen.set($event === 'open')"
         >
-          <ng-icon name="lucideAArrowDown" />
-          <span class="sr-only">Smaller text</span>
-        </button>
-        <button
-          hlmBtn
-          variant="outline"
-          size="icon-sm"
-          type="button"
-          title="Larger text"
-          data-testid="reader-font-larger"
-          [disabled]="settings().fontSize >= fontSize.max"
-          (click)="changeFontSize(fontSize.step)"
-        >
-          <ng-icon name="lucideAArrowUp" />
-          <span class="sr-only">Larger text</span>
-        </button>
-        <button
-          hlmBtn
-          variant="outline"
-          size="icon-sm"
-          type="button"
-          [title]="themeLabel()"
-          data-testid="reader-theme"
-          (click)="nextTheme()"
-        >
-          <ng-icon name="lucidePalette" />
-          <span class="sr-only">{{ themeLabel() }}</span>
-        </button>
+          <hlm-sheet-content
+            *hlmSheetPortal
+            class="max-h-dvh gap-0 overflow-y-auto"
+            data-testid="reader-settings"
+            [appReaderThemed]="theme()"
+          >
+            <hlm-sheet-header>
+              <h2 hlmSheetTitle class="leading-8">Display</h2>
+            </hlm-sheet-header>
+            <div class="flex flex-col gap-4 px-4 pb-6">
+              <ng-container
+                [ngTemplateOutlet]="choice"
+                [ngTemplateOutletContext]="{ $implicit: choices.theme }"
+              />
+              <ng-container
+                [ngTemplateOutlet]="choice"
+                [ngTemplateOutletContext]="{ $implicit: choices.font }"
+              />
+              <div class="flex items-center justify-between gap-4">
+                <span id="reader-font-size-label">Text size</span>
+                <div
+                  class="flex items-center gap-2"
+                  role="group"
+                  aria-labelledby="reader-font-size-label"
+                >
+                  <button
+                    hlmBtn
+                    variant="outline"
+                    size="icon-sm"
+                    type="button"
+                    title="Smaller text"
+                    data-testid="reader-font-smaller"
+                    [disabled]="settings().fontSize <= fontSize.min"
+                    (click)="changeFontSize(-fontSize.step)"
+                  >
+                    <ng-icon name="lucideAArrowDown" />
+                    <span class="sr-only">Smaller text</span>
+                  </button>
+                  <span
+                    class="w-12 text-center tabular-nums"
+                    aria-live="polite"
+                    data-testid="reader-font-size"
+                    >{{ settings().fontSize }}%</span
+                  >
+                  <button
+                    hlmBtn
+                    variant="outline"
+                    size="icon-sm"
+                    type="button"
+                    title="Larger text"
+                    data-testid="reader-font-larger"
+                    [disabled]="settings().fontSize >= fontSize.max"
+                    (click)="changeFontSize(fontSize.step)"
+                  >
+                    <ng-icon name="lucideAArrowUp" />
+                    <span class="sr-only">Larger text</span>
+                  </button>
+                </div>
+              </div>
+              <ng-container
+                [ngTemplateOutlet]="choice"
+                [ngTemplateOutletContext]="{ $implicit: choices.lineHeight }"
+              />
+              <ng-container
+                [ngTemplateOutlet]="choice"
+                [ngTemplateOutletContext]="{ $implicit: choices.margins }"
+              />
+              <div class="flex items-center justify-between gap-4">
+                <span>{{ choices.layout.label }}</span>
+                <div
+                  hlmToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  [attr.aria-label]="choices.layout.label"
+                  [attr.data-testid]="choices.layout.id"
+                  [nullable]="false"
+                  [value]="settings().layout"
+                  (valueChange)="choose(choices.layout, $event)"
+                >
+                  @for (option of choices.layout.options; track option.value) {
+                    <button hlmToggleGroupItem type="button" [value]="option.value">
+                      {{ option.label }}
+                    </button>
+                  }
+                </div>
+              </div>
+            </div>
+          </hlm-sheet-content>
+        </hlm-sheet>
         <div class="ms-auto flex gap-2">
           <button
             hlmBtn
@@ -243,6 +395,31 @@ declare global {
         {{ couldNotShow }}
       </p>
     }
+    <!-- A display setting chosen from a list: its name, and a select showing the choice in use. -->
+    <ng-template #choice let-row>
+      <div class="flex items-center justify-between gap-4">
+        <label [for]="row.id">{{ row.label }}</label>
+        <hlm-select
+          [value]="chosen(row)"
+          [itemToString]="row.labelOf"
+          (valueChange)="choose(row, $event)"
+        >
+          <hlm-select-trigger size="sm" class="w-32" [buttonId]="row.id">
+            <hlm-select-value />
+          </hlm-select-trigger>
+          <!-- The list is drawn outside the page, like the panels, so it carries the theme itself. -->
+          <hlm-select-content *hlmSelectPortal [appReaderThemed]="theme()">
+            <hlm-select-group>
+              @for (option of row.options; track option.value) {
+                <hlm-select-item [value]="option.value" [style.font-family]="option.font">
+                  {{ option.label }}
+                </hlm-select-item>
+              }
+            </hlm-select-group>
+          </hlm-select-content>
+        </hlm-select>
+      </div>
+    </ng-template>
     <!-- An entry's nested entries are listed inside it, indented, as deep as the book goes. -->
     <ng-template #entries let-list>
       <ul>
@@ -290,7 +467,7 @@ declare global {
   `,
   // The engine's frames are made outside this component's template, so the rule has to reach past its encapsulation.
   // The navigator positions them but leaves their size to the page.
-  // The reader's own colours follow the book's theme, not the app's, on the page and on the contents panel, which is
+  // The reader's own colours follow the book's theme, not the app's, on the page and on its panels and lists, which are
   // drawn outside it. Each is marked with the theme: the app's stylesheet gives light and dark their colours, and the
   // rule here gives sepia its own. The background and text are the very colours the book is drawn in.
   styles: `
@@ -305,6 +482,8 @@ declare global {
       color-scheme: light;
       --muted: #e9dcc0;
       --muted-foreground: #7d6650;
+      --accent: #e9dcc0;
+      --accent-foreground: #5b4636;
       --destructive: oklch(0.577 0.245 27.325);
       --border: #d8c8a8;
       --input: #d8c8a8;
@@ -317,6 +496,8 @@ export class ReaderPage {
   private readonly route = inject(ActivatedRoute);
   private readonly places = inject(ReaderPlaceStore);
   private readonly settingsStore = inject(ReaderSettingsStore);
+  private readonly document = inject(DOCUMENT);
+  private readonly systemTheme = inject(SystemTheme);
   private readonly book = viewChild.required<ElementRef<HTMLElement>>('book');
 
   protected readonly couldNotShow = couldNotShow;
@@ -333,11 +514,24 @@ export class ReaderPage {
     const place = this.place();
     return place ? `${Math.round(place.fraction * 100)}%` : '';
   });
+  /** How books are shown, as chosen in the display settings. */
+  protected readonly settings = signal<KeptReaderSettings>(this.settingsStore.read());
+  /** The theme the book is in: the one chosen, or on auto the app's light or dark. */
+  protected readonly theme = computed<ReaderTheme>(() => {
+    const { theme } = this.settings();
+    return theme !== 'auto' ? theme : this.systemTheme.dark() ? 'dark' : 'light';
+  });
   /** How the book is shown: what the engine was last given, or is given as soon as the book has opened. */
-  protected readonly settings = signal<ReaderSettings>(this.settingsStore.read());
+  private readonly shown = computed<ReaderSettings>(() => ({
+    ...this.settings(),
+    theme: this.theme(),
+  }));
   protected readonly fontSize = readerFontSize;
-  protected readonly colours = computed(() => readerThemeColours[this.settings().theme]);
-  protected readonly themeLabel = computed(() => `Theme: ${this.settings().theme}`);
+  protected readonly colours = computed(() => readerThemeColours[this.theme()]);
+  protected readonly choices = choices;
+  protected readonly settingsOpen = signal(false);
+  /** Which edge the display settings come in from, chosen each time they are opened. */
+  protected readonly settingsSide = signal<'bottom' | 'right'>('bottom');
 
   private engine: ReaderEngine | null = null;
   /** Whether the reader's state is set on the window for checks run in a browser. */
@@ -359,6 +553,20 @@ export class ReaderPage {
         .subscribe((params) => this.show(params.get('workId') ?? '', params.get('itemId') ?? '')),
     );
     destroyRef.onDestroy(() => this.leave());
+    // A book on the auto theme changes colours with the app. A theme chosen in the settings is applied as it is chosen.
+    effect(() => {
+      this.systemTheme.dark();
+      untracked(() => {
+        if (this.settings().theme !== 'auto') {
+          return;
+        }
+        // The page takes the new colours whatever the book is doing; a book still opening is given them once it has.
+        this.expose();
+        if (this.status() === 'open') {
+          this.applySettings();
+        }
+      });
+    });
   }
 
   /** Shows the item's book in place of the one on screen, if any. */
@@ -369,6 +577,7 @@ export class ReaderPage {
     this.place.set(null);
     this.contents.set([]);
     this.contentsOpen.set(false);
+    this.settingsOpen.set(false);
     this.settings.set(this.settingsStore.read());
     this.status.set('opening');
     this.relocateCount = 0;
@@ -395,7 +604,7 @@ export class ReaderPage {
         return;
       }
       this.engine = engine;
-      const settings = this.settings();
+      const settings = this.shown();
       const { contents } = await engine.open(
         this.book().nativeElement,
         publicationManifestUrl(this.itemId),
@@ -413,7 +622,7 @@ export class ReaderPage {
         this.status.set('open');
         this.expose();
         // A setting changed while the book was opening was kept but not yet given to the engine.
-        if (this.settings() !== settings) {
+        if (this.shown() !== settings) {
           this.applySettings();
         }
       }
@@ -445,9 +654,24 @@ export class ReaderPage {
     void this.move((engine) => engine.goTo(entry));
   }
 
-  protected toggleLayout(): void {
-    const { layout } = this.settings();
-    this.change({ layout: layout === 'paginated' ? 'scrolled' : 'paginated' });
+  /** Opens the display settings beside the book on a wide screen and under it on a narrow one. */
+  protected openSettings(): void {
+    const wide = this.document.defaultView?.matchMedia?.(wideScreen).matches ?? false;
+    this.settingsSide.set(wide ? 'right' : 'bottom');
+    this.settingsOpen.set(true);
+  }
+
+  /** The choice in use for a setting. */
+  protected chosen(choice: ReaderChoice): string {
+    return this.settings()[choice.setting];
+  }
+
+  /** Takes the choice made for a setting, when it is one the setting offers and not the one already in use. */
+  protected choose<K extends ReaderChoiceSetting>(choice: ReaderChoice<K>, value: unknown): void {
+    const option = choice.options.find((offered) => offered.value === value);
+    if (option && option.value !== this.settings()[choice.setting]) {
+      this.change({ [choice.setting]: option.value });
+    }
   }
 
   /** Makes the text larger or smaller by `by` percent, within the smallest and largest size. */
@@ -458,13 +682,8 @@ export class ReaderPage {
     }
   }
 
-  protected nextTheme(): void {
-    const { theme } = this.settings();
-    this.change({ theme: readerThemes[(readerThemes.indexOf(theme) + 1) % readerThemes.length] });
-  }
-
   /** Keeps a changed setting for every book and shows this one with it. */
-  private change(changed: Partial<ReaderSettings>): void {
+  private change(changed: Partial<KeptReaderSettings>): void {
     this.settings.update((settings) => ({ ...settings, ...changed }));
     this.settingsStore.save(this.settings());
     this.expose();
@@ -475,7 +694,7 @@ export class ReaderPage {
   }
 
   private applySettings(): void {
-    const settings = this.settings();
+    const settings = this.shown();
     void this.move((engine) => engine.apply(settings));
   }
 
@@ -534,7 +753,7 @@ export class ReaderPage {
       flow: settings.layout,
       tocLabels: labelsOf(this.contents()),
       fontSize: settings.fontSize,
-      theme: settings.theme,
+      theme: this.theme(),
       relocateCount: this.relocateCount,
       errors: [...this.errors],
       goToFraction: (fraction) => this.move((engine) => engine.goToFraction(fraction)),

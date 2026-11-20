@@ -26,6 +26,9 @@ export interface ReaderPlace {
 /** Whether a book flows into pages turned one at a time or into one long column per chapter. */
 export type ReaderLayout = 'paginated' | 'scrolled';
 
+/** Every layout, in the order the reader offers them. */
+export const readerLayouts: readonly ReaderLayout[] = ['paginated', 'scrolled'];
+
 /** The colours the book and the reader around it are shown in. */
 export type ReaderTheme = 'light' | 'dark' | 'sepia';
 
@@ -45,12 +48,43 @@ export const readerThemeColours: Record<
   sepia: { background: '#f4ecd8', text: '#5b4636', link: '#8a4b0f' },
 };
 
+/** The typeface the text is set in: the book's own, or a serif or sans-serif one of the reader's device. */
+export type ReaderFont = 'book' | 'serif' | 'sans';
+
+/** Every font, in the order the reader offers them. */
+export const readerFonts: readonly ReaderFont[] = ['book', 'serif', 'sans'];
+
+/**
+ * The font families a font other than the book's own is asked for by. No font is sent with the app: each list names
+ * fonts that devices come with, and the first one the device has is used.
+ */
+export const readerFontFamilies: Record<Exclude<ReaderFont, 'book'>, string> = {
+  serif:
+    "'Iowan Old Style', Sitka, 'Sitka Text', Palatino, 'Book Antiqua', 'URW Palladio L', P052, serif",
+  sans: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+};
+
+/** How far apart the lines of text are: as the book sets them, or one of three spacings of the reader's. */
+export type ReaderLineHeight = 'book' | 'tight' | 'medium' | 'loose';
+
+/** Every line height, in the order the reader offers them. */
+export const readerLineHeights: readonly ReaderLineHeight[] = ['book', 'tight', 'medium', 'loose'];
+
+/** How much space is left beside the text: at the edges of a narrow screen, and around the column on a wide one. */
+export type ReaderMargins = 'narrow' | 'normal' | 'wide';
+
+/** Every margin width, in the order the reader offers them. */
+export const readerMargins: readonly ReaderMargins[] = ['narrow', 'normal', 'wide'];
+
 /** How a book is shown. The same settings apply to every book. */
 export interface ReaderSettings {
   readonly layout: ReaderLayout;
   /** The text size as a percentage of the book's own, from 70 to 250. */
   readonly fontSize: number;
   readonly theme: ReaderTheme;
+  readonly font: ReaderFont;
+  readonly lineHeight: ReaderLineHeight;
+  readonly margins: ReaderMargins;
 }
 
 /** One entry in a book's table of contents, with the entries nested under it. */
