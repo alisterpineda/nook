@@ -1,11 +1,18 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideUsers } from '@ng-icons/lucide';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
-import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
+import { HlmEmptyImports } from '@spartan-ng/helm/empty';
+import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
+import { distinctUntilChanged, map } from 'rxjs';
+import { reloadable } from '../../core/reloadable';
 import { PeopleApi } from '../../api/people-api';
 import { components } from '../../api/schema';
-import { somethingWentWrong } from '../../core/messages';
+import { LoadFailed } from '../../ui/load-failed';
+import { LoadingRegion } from '../../ui/loading';
+import { pageHeading } from '../../ui/page-heading';
 
 type PageOfPersonSummaryResponse = components['schemas']['PageOfPersonSummaryResponse'];
 
@@ -20,16 +27,37 @@ const pageSize = 50;
 /** One page of the people who wrote a work the user can see, each with how many of those works they wrote. */
 @Component({
   selector: 'app-authors-list-page',
-  imports: [HlmButtonImports, RouterLink],
+  imports: [
+    LoadingRegion,
+    NgIcon,
+    RouterLink,
+    HlmButtonImports,
+    HlmEmptyImports,
+    HlmSkeletonImports,
+    LoadFailed,
+  ],
+  providers: [provideIcons({ lucideUsers })],
   template: `
     @let shownPage = page();
-    <h1 class="mb-4 text-lg font-semibold">Authors</h1>
+    <h1 class="mb-6" [class]="pageHeading">Authors</h1>
     @let current = listing();
-    @if (current.status === 'failed') {
-      <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
-    } @else if (current.status === 'loaded') {
+    @if (current.status === 'loading') {
+      <app-loading class="flex flex-col gap-3">
+        @for (width of skeletonWidths; track $index) {
+          <div hlmSkeleton class="h-4" [style.width.rem]="width" aria-hidden="true"></div>
+        }
+      </app-loading>
+    } @else if (current.status === 'failed') {
+      <app-load-failed (retry)="reload()" />
+    } @else {
       @if (current.page.total === 0) {
-        <p class="text-muted-foreground text-sm">No authors yet</p>
+        <div hlmEmpty class="border">
+          <div hlmEmptyHeader>
+            <div hlmEmptyMedia variant="icon"><ng-icon name="lucideUsers" /></div>
+            <div hlmEmptyTitle>No authors yet</div>
+            <p hlmEmptyDescription>The authors of the books in the library will be listed here.</p>
+          </div>
+        </div>
       } @else {
         <ul class="flex flex-col gap-1" aria-label="Authors">
           @for (person of current.page.items; track person.id) {
@@ -42,7 +70,7 @@ const pageSize = 50;
           }
         </ul>
         @let pageCount = pageCountOf(current.page.total);
-        <nav class="mt-4 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
+        <nav class="mt-8 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
           <p class="text-muted-foreground text-sm">{{ totalText(current.page.total) }}</p>
           <div class="flex items-center gap-2">
             <span class="text-muted-foreground text-sm"
@@ -75,11 +103,13 @@ const pageSize = 50;
   `,
 })
 export class AuthorsListPage {
+  protected readonly pageHeading = pageHeading;
   private readonly peopleApi = inject(PeopleApi);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  protected readonly somethingWentWrong = somethingWentWrong;
+  /** How wide, in rem, each line standing in for an author is while the list loads. */
+  protected readonly skeletonWidths = [11, 14, 9, 13, 10, 15, 12, 9, 14, 11];
 
   // The pager changes the URL without recreating the page, so the list follows the URL rather than reading it once,
   // and an answer for a page the user has already left is dropped.
@@ -88,12 +118,12 @@ export class AuthorsListPage {
   /** The page the URL names, counting from 1. */
   protected readonly page = toSignal(this.page$, { requireSync: true });
 
-  protected readonly listing = toSignal(
-    this.page$.pipe(
-      switchMap((page) => from(this.load(page)).pipe(startWith<Listing>({ status: 'loading' }))),
-    ),
-    { requireSync: true },
-  );
+  private readonly loading = reloadable(this.page$, (query) => this.load(query));
+
+  protected readonly listing = toSignal(this.loading.state$, { requireSync: true });
+
+  /** Asks again for what failed to load. */
+  protected readonly reload = this.loading.reload;
 
   /** Puts the page in the URL, leaving it out for the first. */
   protected goToPage(page: number): void {

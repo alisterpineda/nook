@@ -1,15 +1,24 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideLibraryBig, lucideSearchX, lucideUpload } from '@ng-icons/lucide';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
+import { HlmEmptyImports } from '@spartan-ng/helm/empty';
 import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
-import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
+import { distinctUntilChanged, map } from 'rxjs';
+import { reloadable } from '../../core/reloadable';
 import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
 import { readTerm } from '../../core/search-term';
-import { LibraryArea, readArea, sameArea } from '../../core/library-area';
-import { somethingWentWrong } from '../../core/messages';
+import { LibraryArea, areaParam, readArea, sameArea } from '../../core/library-area';
+import { Sections, libraryName } from '../../core/sections';
+import { Session } from '../../core/session';
+import { LoadFailed } from '../../ui/load-failed';
+import { pageHeading } from '../../ui/page-heading';
 import { WorkCard } from './work-card';
+import { workGrid } from './work-grid';
+import { WorkGridSkeleton } from './work-grid-skeleton';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkSort = NonNullable<components['schemas']['WorkSort']>;
@@ -51,15 +60,26 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
 
 /**
  * One page of the works in the section the URL names, of the works in no section when it names the Default area,
- * or of every work the user can see when it names none, in the sort order and at the page the URL names.
+ * or of every work the user can see when it names none, in the sort order and at the page the URL names. Its heading
+ * names the section, or the words searched for.
  */
 @Component({
   selector: 'app-works-list-page',
-  imports: [HlmButtonImports, HlmToggleGroupImports, WorkCard],
+  imports: [
+    NgIcon,
+    RouterLink,
+    HlmButtonImports,
+    HlmEmptyImports,
+    HlmToggleGroupImports,
+    LoadFailed,
+    WorkCard,
+    WorkGridSkeleton,
+  ],
+  providers: [provideIcons({ lucideLibraryBig, lucideSearchX, lucideUpload })],
   template: `
     @let shownQuery = query();
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-      <h1 class="text-lg font-semibold">Library</h1>
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
+      <h1 [class]="pageHeading">{{ heading() }}</h1>
       <div
         hlmToggleGroup
         type="single"
@@ -78,22 +98,40 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
       </div>
     </div>
     @let current = listing();
-    @if (current.status === 'failed') {
-      <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
-    } @else if (current.status === 'loaded') {
+    @if (current.status === 'loading') {
+      <app-work-grid-skeleton />
+    } @else if (current.status === 'failed') {
+      <app-load-failed (retry)="reload()" />
+    } @else {
       @if (current.page.total === 0) {
-        <p class="text-muted-foreground text-sm">
+        <div hlmEmpty class="border">
           @if (shownQuery.term === null) {
-            No works yet
+            <div hlmEmptyHeader>
+              <div hlmEmptyMedia variant="icon"><ng-icon name="lucideLibraryBig" /></div>
+              <div hlmEmptyTitle>No works yet</div>
+              <p hlmEmptyDescription>Books added here will show up on this page.</p>
+            </div>
+            @if (isAdmin()) {
+              <div hlmEmptyContent>
+                <a hlmBtn size="sm" routerLink="/upload" [queryParams]="uploadParams()">
+                  <ng-icon name="lucideUpload" />
+                  Add books
+                </a>
+              </div>
+            }
           } @else {
-            No works match "{{ shownQuery.term }}"
+            <div hlmEmptyHeader>
+              <div hlmEmptyMedia variant="icon"><ng-icon name="lucideSearchX" /></div>
+              <div hlmEmptyTitle>No works match "{{ shownQuery.term }}"</div>
+              <p hlmEmptyDescription>Check the spelling, or try fewer or different words.</p>
+            </div>
+            <div hlmEmptyContent>
+              <a hlmBtn variant="outline" size="sm" routerLink="/library">Clear search</a>
+            </div>
           }
-        </p>
+        </div>
       } @else {
-        <ul
-          class="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-x-4 gap-y-6"
-          aria-label="Works"
-        >
+        <ul [class]="workGrid" aria-label="Works">
           @for (work of current.page.items; track work.id) {
             <li>
               <app-work-card [work]="work" />
@@ -101,7 +139,7 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
           }
         </ul>
         @let pageCount = pageCountOf(current.page.total);
-        <nav class="mt-4 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
+        <nav class="mt-8 flex flex-wrap items-center justify-between gap-2" aria-label="Pages">
           <p class="text-muted-foreground text-sm">
             {{ totalText(current.page.total, shownQuery.term !== null) }}
           </p>
@@ -136,11 +174,15 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
   `,
 })
 export class WorksListPage {
+  protected readonly pageHeading = pageHeading;
   private readonly worksApi = inject(WorksApi);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  protected readonly somethingWentWrong = somethingWentWrong;
+  private readonly sections = inject(Sections);
+
+  protected readonly isAdmin = inject(Session).isAdmin;
+  protected readonly workGrid = workGrid;
   protected readonly sortOptionsFor = sortOptionsFor;
 
   // The sidebar, the sort control and the pager all change the URL without recreating the page, so the list follows
@@ -158,12 +200,27 @@ export class WorksListPage {
 
   protected readonly query = toSignal(this.query$, { requireSync: true });
 
-  protected readonly listing = toSignal(
-    this.query$.pipe(
-      switchMap((query) => from(this.load(query)).pipe(startWith<Listing>({ status: 'loading' }))),
-    ),
-    { requireSync: true },
-  );
+  private readonly loading = reloadable(this.query$, (query) => this.load(query));
+
+  protected readonly listing = toSignal(this.loading.state$, { requireSync: true });
+
+  /** Asks again for what failed to load. */
+  protected readonly reload = this.loading.reload;
+
+  /**
+   * What the list is of: the words searched for, the section or Default area the URL names, or "Library" for every
+   * work and for a section whose name is not known.
+   */
+  protected readonly heading = computed(() => {
+    const { term, area } = this.query();
+    return term === null ? (this.sections.nameOf(area) ?? libraryName) : `Results for "${term}"`;
+  });
+
+  /** The query that has "Add books" open on the area being browsed. */
+  protected readonly uploadParams = computed(() => {
+    const section = areaParam(this.query().area);
+    return section === null ? null : { section };
+  });
 
   /** Shows the first page in the chosen sort order. */
   protected sortBy(value: unknown): void {

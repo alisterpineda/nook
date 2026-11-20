@@ -5,11 +5,14 @@ import { BadgeVariants, HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmInputImports } from '@spartan-ng/helm/input';
 import { HlmLabelImports } from '@spartan-ng/helm/label';
+import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
 import { map } from 'rxjs';
 import { SectionsApi } from '../../api/sections-api';
 import { components } from '../../api/schema';
 import { defaultArea, readArea } from '../../core/library-area';
-import { somethingWentWrong } from '../../core/messages';
+import { LoadFailed } from '../../ui/load-failed';
+import { LoadingRegion } from '../../ui/loading';
+import { pageHeading } from '../../ui/page-heading';
 import { UploadQueue, UploadRow, UploadStatus, isFinished } from './upload-queue';
 
 type SectionResponse = components['schemas']['SectionResponse'];
@@ -36,12 +39,25 @@ const statusLabels: Record<UploadStatus, { text: string; variant: BadgeVariants[
  */
 @Component({
   selector: 'app-upload-page',
-  imports: [RouterLink, HlmBadgeImports, HlmButtonImports, HlmInputImports, HlmLabelImports],
+  imports: [
+    LoadingRegion,
+    RouterLink,
+    HlmBadgeImports,
+    HlmButtonImports,
+    HlmInputImports,
+    HlmLabelImports,
+    HlmSkeletonImports,
+    LoadFailed,
+  ],
   template: `
-    <h1 class="mb-4 text-lg font-semibold">Add books</h1>
+    <h1 class="mb-6" [class]="pageHeading">Add books</h1>
     @let current = sections();
-    @if (current.status === 'failed') {
-      <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
+    @if (current.status === 'loading') {
+      <app-loading class="block">
+        <div hlmSkeleton class="h-36 w-full rounded-lg" aria-hidden="true"></div>
+      </app-loading>
+    } @else if (current.status === 'failed') {
+      <app-load-failed (retry)="reloadSections()" />
     } @else if (current.status === 'loaded') {
       @if (current.sections.length > 0) {
         @let selected = selectedSectionId();
@@ -118,10 +134,10 @@ const statusLabels: Record<UploadStatus, { text: string; variant: BadgeVariants[
   `,
 })
 export class UploadPage {
+  protected readonly pageHeading = pageHeading;
   private readonly sectionsApi = inject(SectionsApi);
   private readonly queue = inject(UploadQueue);
 
-  protected readonly somethingWentWrong = somethingWentWrong;
   protected readonly defaultArea = defaultArea;
   protected readonly statusLabels = statusLabels;
   protected readonly rows = this.queue.rows;
@@ -204,6 +220,11 @@ export class UploadPage {
       return;
     }
     this.queue.add(Array.from(files), this.selectedSectionId());
+  }
+
+  protected reloadSections(): void {
+    this.sections.set({ status: 'loading' });
+    void this.loadSections();
   }
 
   private async loadSections(): Promise<void> {

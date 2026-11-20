@@ -1,21 +1,25 @@
 import { Routes } from '@angular/router';
+import { tabTitle } from './core/app-name';
 import { adminGuard, libraryGuard, setupGuard, signedOutGuard } from './core/guards';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'library' },
   {
     path: 'setup',
+    title: tabTitle('Set up'),
     canActivate: [setupGuard],
     loadComponent: () => import('./features/setup/setup-page').then((m) => m.SetupPage),
   },
   {
     path: 'sign-in',
+    title: tabTitle('Sign in'),
     canActivate: [signedOutGuard],
     loadComponent: () => import('./features/sign-in/sign-in-page').then((m) => m.SignInPage),
   },
   {
     // The reader fills the screen, so it stands outside the shell and its sidebar.
     path: 'works/:workId/read/:itemId',
+    title: tabTitle(),
     canActivate: [libraryGuard],
     loadComponent: () => import('./features/reader/reader-page').then((m) => m.ReaderPage),
   },

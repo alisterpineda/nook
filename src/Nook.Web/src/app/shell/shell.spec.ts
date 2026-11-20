@@ -10,6 +10,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
+import { PageName } from '../core/page-name';
 import { Session } from '../core/session';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { fieldLabelled } from '../testing/field-labelled';
@@ -177,7 +178,7 @@ describe('Shell', () => {
   }
 
   async function signOutFromTheFooterMenu(shell: HTMLElement): Promise<void> {
-    buttonNamed(shell, ada.email).click();
+    shell.querySelector<HTMLElement>('[data-slot="sidebar-footer"] button')!.click();
     await harness.fixture.whenStable();
     const signOut = await vi.waitFor(() => {
       const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
@@ -258,6 +259,90 @@ describe('Shell', () => {
     expect(selectedLinks(shell)).toEqual(['Library']);
   });
 
+  /** What each step of the header's trail says, and where the ones that are links lead. */
+  function trail(shell: HTMLElement): (string | null)[][] {
+    return Array.from(
+      shell.querySelectorAll('nav[aria-label="Breadcrumb"] [data-slot="breadcrumb-item"]'),
+      (step) => [
+        step.textContent?.trim() ?? '',
+        step.querySelector('a')?.getAttribute('href') ?? null,
+      ],
+    );
+  }
+
+  it('the header names the page and the tab is titled after it', async () => {
+    const shell = await openShell('/authors');
+
+    expect(trail(shell)).toEqual([['Authors', null]]);
+    expect(document.title).toBe('Authors · Nook');
+  });
+
+  it('the header shows the section being browsed under Library', async () => {
+    const shell = await openShell(`/library?section=${comics.id}`);
+
+    expect(trail(shell)).toEqual([
+      ['Library', '/library'],
+      ['Comics', null],
+    ]);
+    expect(document.title).toBe('Comics · Nook');
+  });
+
+  it('the header shows a search under Library', async () => {
+    const shell = await openShell('/library?q=dune');
+
+    expect(trail(shell)).toEqual([
+      ['Library', '/library'],
+      ['Search', null],
+    ]);
+  });
+
+  it("the header shows a work's title under Library once the page has said it", async () => {
+    const id = '0198a1b2-0000-7000-8000-000000000001';
+    const shell = await openShell(`/works/${id}`);
+    expect(trail(shell)).toEqual([
+      ['Library', '/library'],
+      ['', null],
+    ]);
+    expect(document.title).toBe('Nook');
+
+    TestBed.inject(PageName).set(id, 'Dune');
+    await harness.fixture.whenStable();
+
+    expect(trail(shell)).toEqual([
+      ['Library', '/library'],
+      ['Dune', null],
+    ]);
+    expect(document.title).toBe('Dune · Nook');
+  });
+
+  it('the header finds the name of a page whose id the URL encodes or follows with parameters', async () => {
+    TestBed.inject(PageName).set('no such', 'Work not found');
+    const shell = await openShell('/works/no%20such;from=mail');
+
+    expect(trail(shell)).toEqual([
+      ['Library', '/library'],
+      ['Work not found', null],
+    ]);
+  });
+
+  it('the header does not show a name another page left behind', async () => {
+    TestBed.inject(PageName).set('0198a1b2-0000-7000-8000-000000000009', 'Dune');
+    const shell = await openShell('/people/0198a1b2-0000-7000-8000-000000000001');
+
+    expect(trail(shell)).toEqual([
+      ['Authors', '/authors'],
+      ['', null],
+    ]);
+  });
+
+  it('the app name in the sidebar leads to the library', async () => {
+    const shell = await openShell('/authors');
+
+    const home = shell.querySelector<HTMLAnchorElement>('[data-slot="sidebar-header"] a');
+    expect(home?.textContent?.trim()).toBe('Nook');
+    expect(home?.getAttribute('href')).toBe('/library');
+  });
+
   it('collapses and expands from its trigger', async () => {
     const shell = await openShell('/library');
     const sidebar = shell.querySelector('hlm-sidebar');
@@ -282,6 +367,7 @@ describe('Shell', () => {
   });
 
   it('sign out ends the session and goes to /sign-in', async () => {
+    TestBed.inject(PageName).set('opened', 'Dune');
     const shell = await openShell('/library');
 
     await signOutFromTheFooterMenu(shell);
@@ -292,6 +378,7 @@ describe('Shell', () => {
 
     await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
     expect(TestBed.inject(Session).user()).toBeNull();
+    expect(TestBed.inject(PageName).of('opened')).toBeNull();
   });
 
   it('stays signed in and says so when the API fails to sign out', async () => {

@@ -27,7 +27,9 @@
       "@spartan-ng/helm/badge": ["./libs/spartan/badge/src/index.ts"],
       "@spartan-ng/helm/toggle-group": ["./libs/spartan/toggle-group/src/index.ts"],
       "@spartan-ng/helm/toggle": ["./libs/spartan/toggle/src/index.ts"],
-      "@spartan-ng/helm/select": ["./libs/spartan/select/src/index.ts"]
+      "@spartan-ng/helm/select": ["./libs/spartan/select/src/index.ts"],
+      "@spartan-ng/helm/empty": ["./libs/spartan/empty/src/index.ts"],
+      "@spartan-ng/helm/breadcrumb": ["./libs/spartan/breadcrumb/src/index.ts"]
     }
   },
   "angularCompilerOptions": {

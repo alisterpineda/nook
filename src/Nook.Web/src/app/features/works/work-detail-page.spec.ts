@@ -11,6 +11,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, RouterLink, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
+import { PageName } from '../../core/page-name';
 import { text } from '../../testing/element-text';
 import { WorkDetailPage } from './work-detail-page';
 
@@ -516,6 +517,12 @@ describe('WorkDetailPage', () => {
     expect(text(cover)).toBe('Dune');
   });
 
+  it('tells the header the title of the work it shows', async () => {
+    await openWork(dune);
+
+    expect(TestBed.inject(PageName).of(dune.id)).toBe('Dune');
+  });
+
   it('shows Work not found when the API answers 404', async () => {
     const navigating = harness.navigateByUrl('/works/missing');
     (await workRequest('missing')).flush(
@@ -527,6 +534,7 @@ describe('WorkDetailPage', () => {
     await shown(page);
 
     expect(text(page.querySelector('h1'))).toBe('Work not found');
+    expect(TestBed.inject(PageName).of('missing')).toBe('Work not found');
     expect(page.querySelector('dl')).toBeNull();
   });
 

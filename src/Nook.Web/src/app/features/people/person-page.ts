@@ -1,12 +1,18 @@
-import { HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
+import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
+import { distinctUntilChanged, map } from 'rxjs';
+import { failureOf, reloadable } from '../../core/reloadable';
 import { PeopleApi } from '../../api/people-api';
 import { components } from '../../api/schema';
-import { somethingWentWrong } from '../../core/messages';
+import { PageName } from '../../core/page-name';
+import { LoadFailed } from '../../ui/load-failed';
+import { pageHeading } from '../../ui/page-heading';
+import { NotFound } from '../../ui/not-found';
 import { WorkCard } from '../works/work-card';
+import { workGrid } from '../works/work-grid';
+import { WorkGridSkeleton } from '../works/work-grid-skeleton';
 import { roleLabel } from '../works/work-labels';
 
 type ContributorRole = components['schemas']['ContributorRole'];
@@ -32,21 +38,27 @@ type Showing =
   | { status: 'not-found' }
   | { status: 'failed' };
 
+/** What the page says, and the header with it, when there is no such person. */
+const notFoundHeading = 'Person not found';
+
 /**
  * One person with every work they are credited on, by role in the API's order, and within a role by series with the
  * works in no series after them.
  */
 @Component({
   selector: 'app-person-page',
-  imports: [WorkCard],
+  imports: [HlmSkeletonImports, LoadFailed, NotFound, WorkCard, WorkGridSkeleton],
   template: `
     @let current = showing();
-    @if (current.status === 'failed') {
-      <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
+    @if (current.status === 'loading') {
+      <div hlmSkeleton class="mb-6 h-8 w-56"></div>
+      <app-work-grid-skeleton [count]="6" />
+    } @else if (current.status === 'failed') {
+      <app-load-failed (retry)="reload()" />
     } @else if (current.status === 'not-found') {
-      <h1 class="text-lg font-semibold">Person not found</h1>
-    } @else if (current.status === 'loaded') {
-      <h1 class="mb-4 text-lg font-semibold">{{ current.person.name }}</h1>
+      <app-not-found [heading]="notFoundHeading" backLink="/authors" backLabel="Back to authors" />
+    } @else {
+      <h1 class="mb-6" [class]="pageHeading">{{ current.person.name }}</h1>
       <div class="flex flex-col gap-8">
         @for (group of current.roles; track group.role) {
           <section class="flex flex-col gap-4">
@@ -56,12 +68,9 @@ type Showing =
             @for (run of group.runs; track $index) {
               <div class="flex flex-col gap-2">
                 @if (run.heading !== null) {
-                  <h3 class="text-sm font-medium">{{ run.heading }}</h3>
+                  <h3 class="text-muted-foreground text-sm font-medium">{{ run.heading }}</h3>
                 }
-                <ul
-                  class="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-x-4 gap-y-6"
-                  aria-label="Works"
-                >
+                <ul [class]="workGrid" aria-label="Works">
                   @for (work of run.works; track work.id) {
                     <li>
                       <app-work-card [work]="work" />
@@ -77,35 +86,45 @@ type Showing =
   `,
 })
 export class PersonPage {
+  protected readonly notFoundHeading = notFoundHeading;
+  protected readonly pageHeading = pageHeading;
   private readonly peopleApi = inject(PeopleApi);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly somethingWentWrong = somethingWentWrong;
+  private readonly pageName = inject(PageName);
+
   protected readonly roleLabel = roleLabel;
+  protected readonly workGrid = workGrid;
 
   // Going from one person to another keeps this page, so it follows the id in the URL rather than reading it once,
   // and an answer for a person the user has already left is dropped.
-  protected readonly showing = toSignal(
+  private readonly loading = reloadable(
     this.route.paramMap.pipe(
       map((params) => params.get('id') ?? ''),
       distinctUntilChanged(),
-      switchMap((id) => from(this.load(id)).pipe(startWith<Showing>({ status: 'loading' }))),
     ),
-    { requireSync: true },
+    (id) => this.load(id),
   );
+
+  protected readonly showing = toSignal(this.loading.state$, { requireSync: true });
+
+  /** Asks again for what failed to load. */
+  protected readonly reload = this.loading.reload;
 
   private async load(id: string): Promise<Showing> {
     try {
       const person = await this.peopleApi.get(id);
+      this.pageName.set(id, person.name);
       return {
         status: 'loaded',
         person,
         roles: person.roles.map(({ role, works }) => ({ role, runs: runsOf(works) })),
       };
     } catch (error) {
-      return error instanceof HttpErrorResponse && error.status === HttpStatusCode.NotFound
-        ? { status: 'not-found' }
-        : { status: 'failed' };
+      const status = failureOf(error);
+      // The header waits for a name, so it is told what the page shows in place of one.
+      this.pageName.set(id, status === 'not-found' ? notFoundHeading : 'Person');
+      return { status };
     }
   }
 }

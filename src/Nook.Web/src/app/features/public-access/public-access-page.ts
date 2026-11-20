@@ -3,10 +3,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmLabelImports } from '@spartan-ng/helm/label';
+import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
 import { PublicAccessApi } from '../../api/public-access-api';
 import { components } from '../../api/schema';
 import { ContentAccess } from '../../core/content-access';
 import { somethingWentWrong } from '../../core/messages';
+import { LoadFailed } from '../../ui/load-failed';
+import { LoadingRegion } from '../../ui/loading';
+import { pageHeading } from '../../ui/page-heading';
 import { LevelSelect } from './level-select';
 
 type PublicAccessSectionResponse = components['schemas']['PublicAccessSectionResponse'];
@@ -23,12 +27,28 @@ type Saving = 'idle' | 'saving' | 'saved' | 'failed';
  */
 @Component({
   selector: 'app-public-access-page',
-  imports: [ReactiveFormsModule, HlmButtonImports, HlmLabelImports, LevelSelect],
+  imports: [
+    LoadingRegion,
+    ReactiveFormsModule,
+    HlmButtonImports,
+    HlmLabelImports,
+    HlmSkeletonImports,
+    LevelSelect,
+    LoadFailed,
+  ],
   template: `
-    <h1 class="mb-4 text-lg font-semibold">Public access</h1>
+    <h1 class="mb-6" [class]="pageHeading">Public access</h1>
     @switch (loading()) {
+      @case ('loading') {
+        <app-loading class="grid max-w-md gap-6">
+          <div hlmSkeleton class="h-5 w-64" aria-hidden="true"></div>
+          <div hlmSkeleton class="h-24 w-full" aria-hidden="true"></div>
+          <div hlmSkeleton class="h-9 w-full" aria-hidden="true"></div>
+          <div hlmSkeleton class="h-9 w-full" aria-hidden="true"></div>
+        </app-loading>
+      }
       @case ('failed') {
-        <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
+        <app-load-failed (retry)="reload()" />
       }
       @case ('loaded') {
         <form class="grid max-w-md gap-6" [formGroup]="form" (ngSubmit)="save()">
@@ -92,6 +112,7 @@ type Saving = 'idle' | 'saving' | 'saved' | 'failed';
   `,
 })
 export class PublicAccessPage {
+  protected readonly pageHeading = pageHeading;
   private readonly api = inject(PublicAccessApi);
   private readonly formBuilder = inject(NonNullableFormBuilder);
 
@@ -118,6 +139,11 @@ export class PublicAccessPage {
         this.saving.set('idle');
       }
     });
+    void this.load();
+  }
+
+  protected reload(): void {
+    this.loading.set('loading');
     void this.load();
   }
 

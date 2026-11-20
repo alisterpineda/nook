@@ -9,7 +9,10 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
+import { Sections } from '../../core/sections';
+import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
+import { linkLabelled } from '../../testing/link-labelled';
 import { WorksListPage } from './works-list-page';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
@@ -183,6 +186,67 @@ describe('WorksListPage', () => {
     const { page } = await openList('/library');
 
     expect(text(page.querySelector('h1'))).toBe('Library');
+  });
+
+  it('the heading names the words searched for', async () => {
+    const { page } = await openList('/library?q=%20dune%20', [dune]);
+
+    expect(text(page.querySelector('h1'))).toBe('Results for "dune"');
+  });
+
+  it('the heading reads Default in the Default area', async () => {
+    const { page } = await openList('/library?section=default');
+
+    expect(text(page.querySelector('h1'))).toBe('Default');
+  });
+
+  it('the heading names the section once the sections are known', async () => {
+    const id = '0198a1b2-0000-7000-8000-00000000000a';
+    const { page } = await openList(`/library?section=${id}`);
+    expect(text(page.querySelector('h1'))).toBe('Library');
+
+    const loading = TestBed.inject(Sections).load();
+    httpTesting.expectOne('/api/sections').flush([{ id, name: 'Books' }]);
+    await loading;
+    await harness.fixture.whenStable();
+
+    expect(text(page.querySelector('h1'))).toBe('Books');
+  });
+
+  it('stands a grid of placeholders in for the works while they load', async () => {
+    const navigating = harness.navigateByUrl('/library');
+    const request = await worksRequest();
+    await navigating;
+    const page = harness.routeNativeElement as HTMLElement;
+
+    expect(page.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(page.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+
+    request.flush(pageOf([dune]));
+    await shown(page);
+    expect(page.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it('Retry asks again for works that could not be loaded', async () => {
+    const navigating = harness.navigateByUrl('/library?sort=added');
+    (await worksRequest()).flush(null, { status: 500, statusText: 'Internal Server Error' });
+    await navigating;
+    const page = harness.routeNativeElement as HTMLElement;
+    await shown(page);
+
+    buttonLabelled(page, 'Retry').click();
+    const request = await worksRequest();
+    expect(request.request.params.get('Sort')).toBe('added');
+    request.flush(pageOf([dune]));
+
+    await vi.waitFor(() => expect(captions(page).map((caption) => caption[0])).toEqual(['Dune']));
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('offers a search that found nothing a way back to the whole library', async () => {
+    const { page } = await openList('/library?q=zzz', []);
+
+    expect(linkLabelled(page, 'Clear search').getAttribute('href')).toBe('/library');
   });
 
   it('shows no table', async () => {
@@ -512,7 +576,6 @@ describe('WorksListPage', () => {
 
     await openList('/library?q=dune', [dune]);
     expect(page.textContent).toContain('1 work matches');
-    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Library');
   });
 
   it('says No works match with the term when a search finds none', async () => {

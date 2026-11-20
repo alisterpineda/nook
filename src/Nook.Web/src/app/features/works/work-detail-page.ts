@@ -1,16 +1,21 @@
 import { DatePipe } from '@angular/common';
-import { HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
 import { Component, ElementRef, inject, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
-import { distinctUntilChanged, from, map, startWith, switchMap } from 'rxjs';
+import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
+import { distinctUntilChanged, map } from 'rxjs';
+import { failureOf, reloadable } from '../../core/reloadable';
 import { components } from '../../api/schema';
 import { WorksApi, partFileUrl } from '../../api/works-api';
 import { allows } from '../../core/content-access';
 import { formatBytes } from '../../core/format-bytes';
-import { somethingWentWrong } from '../../core/messages';
+import { PageName } from '../../core/page-name';
+import { LoadFailed } from '../../ui/load-failed';
+import { LoadingRegion } from '../../ui/loading';
+import { pageHeading } from '../../ui/page-heading';
+import { NotFound } from '../../ui/not-found';
 import { WorkCover } from './work-cover';
 import { formatLabel, roleLabel, seriesText } from './work-labels';
 
@@ -24,23 +29,56 @@ type Showing =
   | { status: 'not-found' }
   | { status: 'failed' };
 
+/** What the page says, and the header with it, when there is no such work. */
+const notFoundHeading = 'Work not found';
+
 /** One work with everything the API knows about it, leaving out what the work does not have. */
 @Component({
   selector: 'app-work-detail-page',
-  imports: [DatePipe, HlmBadgeImports, HlmButtonImports, RouterLink, WorkCover],
+  imports: [
+    LoadingRegion,
+    DatePipe,
+    RouterLink,
+    HlmBadgeImports,
+    HlmButtonImports,
+    HlmSkeletonImports,
+    LoadFailed,
+    NotFound,
+    WorkCover,
+  ],
   template: `
     @let current = showing();
-    @if (current.status === 'failed') {
-      <p class="text-destructive text-sm" role="alert">{{ somethingWentWrong }}</p>
+    @if (current.status === 'loading') {
+      <app-loading class="flex max-w-3xl flex-col gap-6">
+        <div class="flex items-start gap-4 sm:gap-6" aria-hidden="true">
+          <div hlmSkeleton class="aspect-[2/3] w-28 shrink-0 sm:w-64"></div>
+          <div class="flex min-w-0 flex-1 flex-col gap-3">
+            <div hlmSkeleton class="h-8 w-3/4"></div>
+            <div hlmSkeleton class="h-4 w-1/3"></div>
+            <div hlmSkeleton class="mt-2 h-9 w-24"></div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-2" aria-hidden="true">
+          <div hlmSkeleton class="h-4 w-full"></div>
+          <div hlmSkeleton class="h-4 w-full"></div>
+          <div hlmSkeleton class="h-4 w-2/3"></div>
+        </div>
+      </app-loading>
+    } @else if (current.status === 'failed') {
+      <app-load-failed (retry)="reload()" />
     } @else if (current.status === 'not-found') {
-      <h1 class="text-lg font-semibold">Work not found</h1>
-    } @else if (current.status === 'loaded') {
+      <app-not-found
+        [heading]="notFoundHeading"
+        backLink="/library"
+        backLabel="Back to the library"
+      />
+    } @else {
       @let work = current.work;
       <article class="flex max-w-3xl flex-col gap-6">
         <div class="flex items-start gap-4 sm:gap-6">
           <app-work-cover class="w-28 shrink-0 sm:w-64" [work]="work" size="large" />
           <header class="flex min-w-0 flex-col gap-2">
-            <h1 class="text-2xl font-semibold">{{ work.title }}</h1>
+            <h1 [class]="pageHeading">{{ work.title }}</h1>
             @if (work.contributors.length > 0) {
               <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Contributors">
                 @for (contributor of work.contributors; track $index) {
@@ -195,10 +233,13 @@ type Showing =
   `,
 })
 export class WorkDetailPage {
+  protected readonly notFoundHeading = notFoundHeading;
+  protected readonly pageHeading = pageHeading;
   private readonly worksApi = inject(WorksApi);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly somethingWentWrong = somethingWentWrong;
+  private readonly pageName = inject(PageName);
+
   protected readonly allows = allows;
   protected readonly formatBytes = formatBytes;
   protected readonly formatLabel = formatLabel;
@@ -210,14 +251,18 @@ export class WorkDetailPage {
 
   // Going from one work to another keeps this page, so it follows the id in the URL rather than reading it once, and
   // an answer for a work the user has already left is dropped.
-  protected readonly showing = toSignal(
+  private readonly loading = reloadable(
     this.route.paramMap.pipe(
       map((params) => params.get('id') ?? ''),
       distinctUntilChanged(),
-      switchMap((id) => from(this.load(id)).pipe(startWith<Showing>({ status: 'loading' }))),
     ),
-    { requireSync: true },
+    (id) => this.load(id),
   );
+
+  protected readonly showing = toSignal(this.loading.state$, { requireSync: true });
+
+  /** Asks again for what failed to load. */
+  protected readonly reload = this.loading.reload;
 
   protected hasDetails(work: WorkDetailResponse): boolean {
     return (
@@ -275,11 +320,14 @@ export class WorkDetailPage {
 
   private async load(id: string): Promise<Showing> {
     try {
-      return { status: 'loaded', work: await this.worksApi.get(id) };
+      const work = await this.worksApi.get(id);
+      this.pageName.set(id, work.title);
+      return { status: 'loaded', work };
     } catch (error) {
-      return error instanceof HttpErrorResponse && error.status === HttpStatusCode.NotFound
-        ? { status: 'not-found' }
-        : { status: 'failed' };
+      const status = failureOf(error);
+      // The header waits for a name, so it is told what the page shows in place of one.
+      this.pageName.set(id, status === 'not-found' ? notFoundHeading : 'Work');
+      return { status };
     }
   }
 }
