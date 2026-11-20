@@ -1,10 +1,11 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { components } from './schema';
-import { UploadsApi } from './uploads-api';
+import { UploadEvent, UploadsApi } from './uploads-api';
 
 type UploadResponse = components['schemas']['UploadResponse'];
+type UploadLimitsResponse = components['schemas']['UploadLimitsResponse'];
 
 describe('UploadsApi', () => {
   let api: UploadsApi;
@@ -23,7 +24,7 @@ describe('UploadsApi', () => {
   it('upload posts the section id and the file as a multipart form', () => {
     const file = new File(['epub bytes'], 'dune.epub', { type: 'application/epub+zip' });
     const response: UploadResponse = { jobId: '0198a1b2-0000-7000-8000-0000000000d1' };
-    const answers: UploadResponse[] = [];
+    const answers: UploadEvent[] = [];
 
     api.upload(sectionId, file).subscribe((answer) => answers.push(answer));
     const request = httpTesting.expectOne('/api/uploads');
@@ -35,7 +36,7 @@ describe('UploadsApi', () => {
     expect(form.get('file')).toBe(file);
     request.flush(response, { status: 202, statusText: 'Accepted' });
 
-    expect(answers).toEqual([response]);
+    expect(answers).toEqual([{ kind: 'accepted', jobId: response.jobId }]);
     httpTesting.verify();
   });
 
@@ -65,5 +66,39 @@ describe('UploadsApi', () => {
 
     expect(request.cancelled).toBe(true);
     httpTesting.verify({ ignoreCancelled: true });
+  });
+
+  it('reports how much of the file has been sent, then the job', () => {
+    const file = new File(['epub bytes'], 'dune.epub', { type: 'application/epub+zip' });
+    const events: UploadEvent[] = [];
+
+    api.upload(sectionId, file).subscribe((event) => events.push(event));
+    const request = httpTesting.expectOne('/api/uploads');
+    expect(request.request.reportProgress).toBe(true);
+    request.event({ type: HttpEventType.UploadProgress, loaded: 40, total: 100 });
+    request.event({ type: HttpEventType.UploadProgress, loaded: 100, total: 100 });
+    request.flush(
+      { jobId: '0198a1b2-0000-7000-8000-0000000000d1' },
+      { status: 202, statusText: 'Accepted' },
+    );
+
+    expect(events).toEqual([
+      { kind: 'progress', percent: 40 },
+      { kind: 'progress', percent: 100 },
+      { kind: 'accepted', jobId: '0198a1b2-0000-7000-8000-0000000000d1' },
+    ]);
+    httpTesting.verify();
+  });
+
+  it('asks for the size limit', async () => {
+    const limits: UploadLimitsResponse = { maxBytes: 1024 };
+
+    const asking = api.limits();
+    const request = httpTesting.expectOne('/api/uploads/limits');
+    expect(request.request.method).toBe('GET');
+    request.flush(limits);
+
+    expect(await asking).toEqual(limits);
+    httpTesting.verify();
   });
 });

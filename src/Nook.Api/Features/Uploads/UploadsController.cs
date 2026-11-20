@@ -20,6 +20,12 @@ public class UploadsController(
     NookDbContext db, JobQueue queue, NookStorage storage, IOptions<UploadOptions> options, SectionAccess access,
     AuditLog audit) : ControllerBase
 {
+    /// <summary>The largest file an upload may carry, the limit <see cref="Upload"/> enforces.</summary>
+    [HttpGet("limits")]
+    [ProducesResponseType<UploadLimitsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<UploadLimitsResponse> Limits() => new UploadLimitsResponse(options.Value.MaxBytes);
+
     /// <summary>
     /// Stages a file and starts the job that ingests it into the section, or into the Default area when none is given.
     /// Any file is accepted: the job decides whether Nook can read it, and fails if not. A file larger than the upload

@@ -12,5 +12,6 @@ if (!apiAddress) {
 module.exports = {
   '/api': {
     target: apiAddress,
+    ws: true,
   },
 };

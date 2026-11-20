@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import {
@@ -33,6 +33,10 @@ import { PageName } from '../core/page-name';
 import { readTerm } from '../core/search-term';
 import { Sections, defaultAreaName, libraryName } from '../core/sections';
 import { Session } from '../core/session';
+import { ActivityButton } from '../features/activity/activity-button';
+import { UploadActivity } from '../features/activity/upload-activity';
+import { AddBooks } from '../features/upload/add-books';
+import { DropOverlay } from '../features/upload/drop-overlay';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { SearchBox } from './search-box';
 
@@ -46,8 +50,8 @@ interface Crumb {
 
 /**
  * The frame around every page of the library: a sidebar that collapses to its icons, with the app's name, then
- * "Library", then "Default" and the caller's sections when there are any, then "Authors", then "Add books" and "Public
- * access" for an admin, the user's menu in its footer, and the page itself beside it under a header that says where
+ * "Library", then "Default" and the caller's sections when there are any, then "Authors" and, for whoever may upload,
+ * "Add books", which opens a dialog, then "Public access" for an admin, the user's menu in its footer, and the page itself beside it under a header that says where
  * the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
  */
 @Component({
@@ -62,6 +66,8 @@ interface Crumb {
     HlmSidebarImports,
     HlmSkeletonImports,
     SearchBox,
+    ActivityButton,
+    DropOverlay,
   ],
   providers: [
     provideIcons({
@@ -131,27 +137,27 @@ interface Crumb {
                   <span>Authors</span>
                 </a>
               </li>
+              @if (session.canUpload()) {
+                <li hlmSidebarMenuItem>
+                  <!-- Preselects the section being browsed, Default included. -->
+                  <button
+                    hlmSidebarMenuButton
+                    type="button"
+                    closeMobileSidebarOnClick
+                    tooltip="Add books"
+                    (click)="addBooks.open([], browsedSection())"
+                  >
+                    <ng-icon name="lucideUpload" />
+                    <span>Add books</span>
+                  </button>
+                </li>
+              }
             </ul>
           </nav>
           @if (isAdmin()) {
             <nav hlmSidebarGroup aria-label="Manage">
               <div hlmSidebarGroupLabel>Manage</div>
               <ul hlmSidebarMenu>
-                <li hlmSidebarMenuItem>
-                  <!-- Carries the section being browsed, Default included, so the upload page can preselect it. -->
-                  <a
-                    hlmSidebarMenuButton
-                    routerLink="/upload"
-                    [queryParams]="browsedSection() ? { section: browsedSection() } : null"
-                    closeMobileSidebarOnClick
-                    tooltip="Add books"
-                    [isActive]="onUpload()"
-                    [attr.aria-current]="onUpload() ? 'page' : null"
-                  >
-                    <ng-icon name="lucideUpload" />
-                    <span>Add books</span>
-                  </a>
-                </li>
                 <li hlmSidebarMenuItem>
                   <a
                     hlmSidebarMenuButton
@@ -233,6 +239,9 @@ interface Crumb {
             </ol>
           </nav>
           <app-search-box class="flex-1 md:w-72 md:flex-none" />
+          @if (session.canUpload()) {
+            <app-activity-button />
+          }
           @if (!session.user()) {
             <a hlmBtn variant="outline" size="sm" routerLink="/sign-in">Sign in</a>
           }
@@ -242,6 +251,8 @@ interface Crumb {
         </div>
       </main>
     </div>
+
+    <app-drop-overlay [section]="browsedSection()" />
 
     <ng-template #userMenu>
       <hlm-dropdown-menu class="min-w-56">
@@ -266,18 +277,19 @@ export class Shell {
     requireSync: true,
   });
 
+  protected readonly addBooks = inject(AddBooks);
   private readonly uploadQueue = inject(UploadQueue);
+  private readonly uploadActivity = inject(UploadActivity);
 
   protected readonly session = inject(Session);
   protected readonly appName = appName;
   protected readonly sections = this.sectionStore.list;
   protected readonly signOutFailed = signal(false);
-  /** The `section` the URL carries, which "Add books" passes on. */
+  /** The `section` the URL carries, which "Add books" preselects. */
   protected readonly browsedSection = computed(() => areaParam(readArea(this.queryParams())));
   protected readonly isAdmin = this.session.isAdmin;
   /** Whether the list of works is open, the only page "Library", "Default" and the sections stand for. */
   protected readonly onLibrary = isActive('/library', this.router, { queryParams: 'ignored' });
-  protected readonly onUpload = isActive('/upload', this.router, { queryParams: 'ignored' });
   protected readonly onPublicAccess = isActive('/public-access', this.router, {
     queryParams: 'ignored',
   });
@@ -340,8 +352,6 @@ export class Shell {
     switch (path) {
       case '/authors':
         return [{ label: 'Authors' }];
-      case '/upload':
-        return [{ label: 'Add books' }];
       case '/public-access':
         return [{ label: 'Public access' }];
     }
@@ -359,6 +369,11 @@ export class Shell {
 
   constructor() {
     void this.sectionStore.load();
+    // Someone who may upload follows their uploads from the server for as long as they are signed in.
+    effect(() => {
+      const canUpload = this.session.canUpload();
+      untracked(() => (canUpload ? this.uploadActivity.start() : void this.uploadActivity.stop()));
+    });
     // The tab is named after the page that is open, once the page is known by name.
     effect(() => {
       const page = this.crumbs().at(-1)?.label;
@@ -378,6 +393,7 @@ export class Shell {
     // The next person signed in on this tab must not see, or keep sending, this user's files, nor see the names of
     // what this user opened.
     this.uploadQueue.reset();
+    await this.uploadActivity.stop();
     this.pageName.clear();
     await this.router.navigateByUrl('/sign-in');
   }

@@ -29,7 +29,10 @@
       "@spartan-ng/helm/toggle": ["./libs/spartan/toggle/src/index.ts"],
       "@spartan-ng/helm/select": ["./libs/spartan/select/src/index.ts"],
       "@spartan-ng/helm/empty": ["./libs/spartan/empty/src/index.ts"],
-      "@spartan-ng/helm/breadcrumb": ["./libs/spartan/breadcrumb/src/index.ts"]
+      "@spartan-ng/helm/breadcrumb": ["./libs/spartan/breadcrumb/src/index.ts"],
+      "@spartan-ng/helm/dialog": ["./libs/spartan/dialog/src/index.ts"],
+      "@spartan-ng/helm/popover": ["./libs/spartan/popover/src/index.ts"],
+      "@spartan-ng/helm/progress": ["./libs/spartan/progress/src/index.ts"]
     }
   },
   "angularCompilerOptions": {

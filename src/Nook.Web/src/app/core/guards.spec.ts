@@ -9,7 +9,8 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
 import { routes } from '../app.routes';
-import { openRequests } from '../testing/open-requests';
+import { provideFakeActivityHub } from '../testing/fake-activity-hub';
+import { flushUploadActivity } from '../testing/upload-fixtures';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
@@ -43,14 +44,23 @@ describe('route guards', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideRouter(routes),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideFakeActivityHub(),
+      ],
     });
     httpTesting = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
     harness = await RouterTestingHarness.create();
   });
 
-  afterEach(() => httpTesting.verify());
+  afterEach(() => {
+    // A signed-in user who may upload has the shell list their uploads, which no spec here is about.
+    flushUploadActivity(httpTesting);
+    httpTesting.verify();
+  });
 
   /** Waits for the guards to send the request, since they send it after the navigation has started. */
   function nextRequest(url: string): Promise<TestRequest> {
@@ -127,8 +137,8 @@ describe('route guards', () => {
     expect(heading()).toBe('Library');
   });
 
-  it('sends a visitor who asks for the upload page to the library', async () => {
-    const navigating = harness.navigateByUrl('/upload');
+  it('sends a visitor who asks for the public access page to the library', async () => {
+    const navigating = harness.navigateByUrl('/public-access');
     await answerSignedOut(true);
     await answerSections();
     await answerWorks();
@@ -268,21 +278,24 @@ describe('route guards', () => {
     expect(router.url).toBe('/library');
   });
 
-  it('adminGuard lets an admin through to /upload', async () => {
-    const navigating = harness.navigateByUrl('/upload');
+  it('adminGuard lets an admin through to /public-access', async () => {
+    const navigating = harness.navigateByUrl('/public-access');
     await answerSignedIn(ada);
-    // The sidebar and the upload page each ask for the sections.
-    for (const request of await openRequests(httpTesting, '/api/sections', 2)) {
-      request.flush([]);
-    }
+    await answerSections();
+    (await nextRequest('/api/public-access')).flush({
+      enabled: false,
+      access: 'none',
+      defaultAreaAccess: 'none',
+      sections: [],
+    });
     await navigating;
 
-    expect(router.url).toBe('/upload');
-    await vi.waitFor(() => expect(heading()).toBe('Add books'));
+    expect(router.url).toBe('/public-access');
+    await vi.waitFor(() => expect(heading()).toBe('Public access'));
   });
 
   it('adminGuard sends a contributor to the works list', async () => {
-    const navigating = harness.navigateByUrl('/upload');
+    const navigating = harness.navigateByUrl('/public-access');
     await answerSignedIn(mel);
     await answerSections();
     await answerWorks();
@@ -292,7 +305,7 @@ describe('route guards', () => {
   });
 
   it('adminGuard sends a viewer to the works list', async () => {
-    const navigating = harness.navigateByUrl('/upload');
+    const navigating = harness.navigateByUrl('/public-access');
     await answerSignedIn(gus);
     await answerSections();
     await answerWorks();

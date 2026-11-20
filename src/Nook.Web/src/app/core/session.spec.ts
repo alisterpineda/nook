@@ -68,6 +68,29 @@ describe('Session', () => {
     }
   });
 
+  it('says a user may upload when the server says so, and not otherwise', async () => {
+    expect(session.canUpload()).toBe(false);
+
+    for (const [role, canUpload] of [
+      ['contributor', true],
+      ['viewer', false],
+      ['admin', true],
+    ] as const) {
+      const loading = session.load();
+      httpTesting.expectOne('/api/auth/me').flush({ ...ada, role, canUpload });
+      await loading;
+
+      expect(session.canUpload()).toBe(canUpload);
+    }
+
+    const loading = session.load();
+    httpTesting.expectOne('/api/auth/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
+    await loading;
+
+    expect(session.canUpload()).toBe(false);
+  });
+
   it('load passes on an error other than 401', async () => {
     const loading = session.load();
 

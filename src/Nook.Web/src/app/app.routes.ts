@@ -50,11 +50,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/people/person-page').then((m) => m.PersonPage),
       },
       {
-        path: 'upload',
-        canActivate: [adminGuard],
-        loadComponent: () => import('./features/upload/upload-page').then((m) => m.UploadPage),
-      },
-      {
         path: 'public-access',
         canActivate: [adminGuard],
         loadComponent: () =>

@@ -256,6 +256,55 @@
         }
       }
     },
+    "/api/uploads/limits": {
+      "get": {
+        "tags": [
+          "Uploads"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadLimitsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadLimitsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadLimitsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/uploads": {
       "post": {
         "tags": [
@@ -2774,6 +2823,18 @@
           "internal",
           null
         ]
+      },
+      "UploadLimitsResponse": {
+        "required": [
+          "maxBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "maxBytes": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "UploadResponse": {
         "required": [

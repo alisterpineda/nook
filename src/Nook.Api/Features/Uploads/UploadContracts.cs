@@ -15,3 +15,7 @@ public class UploadRequest
 
 /// <summary>The job that ingests the uploaded file, to watch through the jobs endpoints.</summary>
 public record UploadResponse(Guid JobId);
+
+/// <summary>What an upload may be, so a client can refuse a file before sending it.</summary>
+/// <param name="MaxBytes">The size in bytes of the largest file an upload may carry.</param>
+public record UploadLimitsResponse(long MaxBytes);

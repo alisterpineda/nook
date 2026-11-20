@@ -30,8 +30,11 @@ export class Session {
   /** The signed-in user, or `null` when signed out. */
   readonly user = this.currentUser.asReadonly();
 
-  /** Whether the signed-in user is an admin, who alone may add books. */
+  /** Whether the signed-in user is an admin, who alone may manage Nook. */
   readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
+
+  /** Whether the signed-in user's role may add books. False while nobody is signed in. */
+  readonly canUpload = computed(() => this.currentUser()?.canUpload === true);
 
   /** Whether someone who is not signed in may enter the library. Read only while nobody is signed in. */
   readonly publicAccess = computed(() => this.visitorAccess().publicAccess);

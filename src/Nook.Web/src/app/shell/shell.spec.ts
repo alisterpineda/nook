@@ -12,23 +12,25 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
 import { PageName } from '../core/page-name';
 import { Session } from '../core/session';
+import { UploadActivity } from '../features/activity/upload-activity';
+import { AddBooks } from '../features/upload/add-books';
 import { UploadQueue } from '../features/upload/upload-queue';
+import { FakeActivityHub, provideFakeActivityHub } from '../testing/fake-activity-hub';
 import { fieldLabelled } from '../testing/field-labelled';
 import { typeInto } from '../testing/type-into';
+import { flushUploadActivity } from '../testing/upload-fixtures';
 import { Shell } from './shell';
 
 type AccessResponse = components['schemas']['AccessResponse'];
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
 type SectionResponse = components['schemas']['SectionResponse'];
+type UploadActivityResponse = components['schemas']['UploadActivityResponse'];
 
 @Component({ template: '<h1>Works</h1>' })
 class WorksStub {}
 
 @Component({ template: '<h1>Work</h1>' })
 class WorkStub {}
-
-@Component({ template: '<h1>Add books</h1>' })
-class UploadStub {}
 
 @Component({ template: '<h1>Public access</h1>' })
 class PublicAccessStub {}
@@ -43,6 +45,16 @@ class PersonStub {}
 class SignInStub {}
 
 describe('Shell', () => {
+  const anUpload: UploadActivityResponse = {
+    jobId: '0198a1b2-0000-7000-8000-0000000000f1',
+    fileName: 'dune.epub',
+    sectionId: null,
+    sectionName: null,
+    submittedAt: '2026-11-20T10:00:00Z',
+    status: 'queued',
+    workId: null,
+    failure: null,
+  };
   const ada: CurrentUserResponse = {
     id: '0198a1b2-0000-7000-8000-000000000001',
     email: 'ada@example.com',
@@ -72,9 +84,11 @@ describe('Shell', () => {
   let httpTesting: HttpTestingController;
   let router: Router;
   let ignoreCancelled: boolean;
+  const openAddBooks = vi.fn<(files: readonly File[], sectionParam: string | null) => void>();
 
   beforeEach(async () => {
     ignoreCancelled = false;
+    openAddBooks.mockReset();
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
@@ -85,7 +99,6 @@ describe('Shell', () => {
             children: [
               { path: 'library', component: WorksStub },
               { path: 'works/:id', component: WorkStub },
-              { path: 'upload', component: UploadStub },
               { path: 'public-access', component: PublicAccessStub },
               { path: 'authors', component: AuthorsStub },
               { path: 'people/:id', component: PersonStub },
@@ -94,6 +107,8 @@ describe('Shell', () => {
         ]),
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideFakeActivityHub(),
+        { provide: AddBooks, useValue: { open: openAddBooks } },
       ],
     });
     httpTesting = TestBed.inject(HttpTestingController);
@@ -105,6 +120,8 @@ describe('Shell', () => {
   });
 
   afterEach(() => {
+    // Whoever may upload has the shell list their uploads, which no spec here is about unless it says so.
+    flushUploadActivity(httpTesting);
     httpTesting.verify({ ignoreCancelled });
     // The sidebar remembers whether it is open in a cookie, which would carry over to the next test.
     document.cookie = 'sidebar_state=; path=/; max-age=0';
@@ -153,8 +170,8 @@ describe('Shell', () => {
     return groupLinks(shell, 'Library');
   }
 
-  function addBooks(shell: HTMLElement): HTMLAnchorElement | undefined {
-    return Array.from(shell.querySelectorAll<HTMLAnchorElement>('nav a')).find(
+  function addBooks(shell: HTMLElement): HTMLButtonElement | undefined {
+    return Array.from(shell.querySelectorAll<HTMLButtonElement>('nav button')).find(
       (link) => link.textContent?.trim() === 'Add books',
     );
   }
@@ -412,15 +429,6 @@ describe('Shell', () => {
       expect(link.hasAttribute('closeMobileSidebarOnClick')).toBe(true);
     }
   });
-  it('an admin sees Add books', async () => {
-    const shell = await openShell('/library');
-
-    expect(groupLinks(shell, 'Manage').map((link) => link.textContent?.trim())).toContain(
-      'Add books',
-    );
-    expect(addBooks(shell)?.getAttribute('href')).toBe('/upload');
-  });
-
   it('lists Public access under Manage for an admin only', async () => {
     const shell = await openShell('/library');
 
@@ -429,10 +437,7 @@ describe('Shell', () => {
         link.textContent?.trim(),
         link.getAttribute('href'),
       ]),
-    ).toEqual([
-      ['Add books', '/upload'],
-      ['Public access', '/public-access'],
-    ]);
+    ).toEqual([['Public access', '/public-access']]);
 
     for (const user of [grace, viewer]) {
       await signInAs(user);
@@ -449,52 +454,47 @@ describe('Shell', () => {
       );
 
     expect(current()).toEqual(['Public access']);
-    expect(groupLinks(shell, 'Manage')[1].hasAttribute('closeMobileSidebarOnClick')).toBe(true);
+    expect(groupLinks(shell, 'Manage')[0].hasAttribute('closeMobileSidebarOnClick')).toBe(true);
   });
 
-  it('a contributor sees no Add books', async () => {
+  it('opens the Add books dialog from the sidebar for a contributor', async () => {
     await signInAs(grace);
     const shell = await openShell('/library');
 
-    expect(addBooks(shell)).toBeUndefined();
+    const button = addBooks(shell);
+    expect(button?.closest('nav')?.getAttribute('aria-label')).toBe('Browse');
+    expect(Array.from(groupLinks(shell, 'Browse'), (link) => link.textContent?.trim())).toEqual([
+      'Authors',
+    ]);
     expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+
+    button?.click();
+    expect(openAddBooks).toHaveBeenCalledExactlyOnceWith([], null);
+    expect(router.url).toBe('/library');
   });
 
-  it('a viewer sees no Add books', async () => {
+  it('opens Add books for an admin with the section being browsed preselected', async () => {
+    const shell = await openShell(`/library?section=${comics.id}&page=2`);
+
+    addBooks(shell)?.click();
+
+    expect(openAddBooks).toHaveBeenLastCalledWith([], comics.id);
+  });
+
+  it('opens Add books with the default area when it is being browsed', async () => {
+    const shell = await openShell('/library?section=default&sort=added');
+
+    addBooks(shell)?.click();
+
+    expect(openAddBooks).toHaveBeenLastCalledWith([], 'default');
+  });
+
+  it('shows no Add books to a viewer', async () => {
     await signInAs(viewer);
     const shell = await openShell('/library');
 
     expect(addBooks(shell)).toBeUndefined();
     expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
-  });
-
-  it('Add books carries the default area when it is being browsed', async () => {
-    const shell = await openShell('/library?section=default&sort=added');
-
-    expect(addBooks(shell)?.getAttribute('href')).toBe('/upload?section=default');
-  });
-
-  it('Add books carries the section being browsed', async () => {
-    const shell = await openShell(`/library?section=${comics.id}&page=2`);
-
-    expect(addBooks(shell)?.getAttribute('href')).toBe(`/upload?section=${comics.id}`);
-
-    addBooks(shell)?.click();
-    await vi.waitFor(() => expect(router.url).toBe(`/upload?section=${comics.id}`));
-  });
-
-  it('Add books is the current page on /upload and Library is not', async () => {
-    const shell = await openShell('/upload');
-
-    expect(addBooks(shell)?.getAttribute('aria-current')).toBe('page');
-    expect(selectedLinks(shell)).toEqual([]);
-    expect(shell.querySelector('h1')?.textContent?.trim()).toBe('Add books');
-
-    linkNamed(shell, 'Library').click();
-    await vi.waitFor(() => expect(router.url).toBe('/library'));
-    await harness.fixture.whenStable();
-    expect(addBooks(shell)?.getAttribute('aria-current')).toBeNull();
-    expect(selectedLinks(shell)).toEqual(['Library']);
   });
 
   it('shows Authors linking to /authors', async () => {
@@ -567,6 +567,61 @@ describe('Shell', () => {
     ignoreCancelled = true;
     expect(queue.rows()).toEqual([]);
     expect(upload.cancelled).toBe(true);
+  });
+
+  it('lists the uploads of a user who may upload, live from the hub', async () => {
+    const hub = TestBed.inject(FakeActivityHub);
+    const activity = TestBed.inject(UploadActivity);
+    await openShell('/library');
+
+    (await vi.waitFor(() => httpTesting.expectOne('/api/activity/uploads'))).flush([]);
+    expect(hub.open).toBe(true);
+    hub.uploadChanged.next(anUpload);
+    expect(activity.rows()).toEqual([anUpload]);
+  });
+
+  it('follows no uploads for a user who may not upload', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'browse' });
+    await openShell('/library');
+
+    httpTesting.expectNone('/api/activity/uploads');
+    expect(TestBed.inject(FakeActivityHub).open).toBe(false);
+  });
+
+  it('shows Activity to a user who may upload and not to a viewer', async () => {
+    const shell = await openShell('/library');
+    expect(shell.querySelector('header [data-slot="popover-trigger"]')?.textContent).toContain(
+      'Activity',
+    );
+
+    await signInAs(viewer);
+    await vi.waitFor(() => expect(shell.querySelector('[data-slot="popover-trigger"]')).toBeNull());
+  });
+
+  it('clears the waiting files and the Activity list on sign-out', async () => {
+    const hub = TestBed.inject(FakeActivityHub);
+    const activity = TestBed.inject(UploadActivity);
+    const queue = TestBed.inject(UploadQueue);
+    const shell = await openShell('/library');
+    (await vi.waitFor(() => httpTesting.expectOne('/api/activity/uploads'))).flush([anUpload]);
+    await vi.waitFor(() => expect(activity.rows()).toEqual([anUpload]));
+    // Only one file is sent at a time, so the second waits its turn.
+    queue.add([new File(['a'], 'dune.epub'), new File(['b'], 'emma.epub')], books.id);
+    await vi.waitFor(() => httpTesting.expectOne('/api/uploads'));
+    expect(queue.rows().map((row) => row.status)).toEqual(['uploading', 'waiting']);
+
+    await signOutFromTheFooterMenu(shell);
+    (await vi.waitFor(() => httpTesting.expectOne('/api/auth/logout'))).flush(null, {
+      status: 204,
+      statusText: 'No Content',
+    });
+    (await vi.waitFor(() => httpTesting.expectOne('/api/access'))).flush(publicAccessOff);
+
+    await vi.waitFor(() => expect(router.url).toBe('/sign-in'));
+    ignoreCancelled = true;
+    expect(queue.rows()).toEqual([]);
+    expect(hub.open).toBe(false);
+    expect(activity.rows()).toEqual([]);
   });
 
   it('shows a visitor a sign-in link and no user menu', async () => {

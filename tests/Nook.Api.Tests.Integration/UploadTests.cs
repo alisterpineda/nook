@@ -83,6 +83,28 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     }
 
     [Fact]
+    public async Task Limits_give_the_largest_upload_to_someone_who_may_upload()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Contributor);
+
+        var response = await client.GetAsync("/api/uploads/limits");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var limits = await response.ReadAsync<UploadLimitsResponse>();
+        Assert.Equal(MaxBytes, limits.MaxBytes);
+    }
+
+    [Fact]
+    public async Task Limits_are_forbidden_to_a_viewer()
+    {
+        using var client = await _app.CreateSignedInClientAsync(BuiltInRole.Viewer);
+
+        var response = await client.GetAsync("/api/uploads/limits");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Viewer_is_forbidden_from_uploading()
     {
         var section = await _app.AddSectionAsync();

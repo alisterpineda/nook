@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { IngestResult, JobsApi } from './jobs-api';
+import { JobsApi } from './jobs-api';
 import { components } from './schema';
 
 type JobDetailResponse = components['schemas']['JobDetailResponse'];
@@ -24,7 +24,7 @@ describe('JobsApi', () => {
   afterEach(() => httpTesting.verify());
 
   it('get asks for one job', async () => {
-    const result: IngestResult = {
+    const result = {
       outcome: 'created',
       itemId: '0198a1b2-0000-7000-8000-0000000000e1',
       workId: '0198a1b2-0000-7000-8000-000000000001',

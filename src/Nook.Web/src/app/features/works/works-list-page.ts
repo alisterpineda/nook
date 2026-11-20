@@ -12,6 +12,7 @@ import { components } from '../../api/schema';
 import { WorksApi } from '../../api/works-api';
 import { readTerm } from '../../core/search-term';
 import { LibraryArea, areaParam, readArea, sameArea } from '../../core/library-area';
+import { AddBooks } from '../upload/add-books';
 import { Sections, libraryName } from '../../core/sections';
 import { Session } from '../../core/session';
 import { LoadFailed } from '../../ui/load-failed';
@@ -111,12 +112,12 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
               <div hlmEmptyTitle>No works yet</div>
               <p hlmEmptyDescription>Books added here will show up on this page.</p>
             </div>
-            @if (isAdmin()) {
+            @if (canUpload()) {
               <div hlmEmptyContent>
-                <a hlmBtn size="sm" routerLink="/upload" [queryParams]="uploadParams()">
+                <button hlmBtn size="sm" type="button" (click)="addBooks()">
                   <ng-icon name="lucideUpload" />
                   Add books
-                </a>
+                </button>
               </div>
             }
           } @else {
@@ -181,7 +182,9 @@ export class WorksListPage {
 
   private readonly sections = inject(Sections);
 
-  protected readonly isAdmin = inject(Session).isAdmin;
+  private readonly addBooksDialog = inject(AddBooks);
+
+  protected readonly canUpload = inject(Session).canUpload;
   protected readonly workGrid = workGrid;
   protected readonly sortOptionsFor = sortOptionsFor;
 
@@ -216,11 +219,10 @@ export class WorksListPage {
     return term === null ? (this.sections.nameOf(area) ?? libraryName) : `Results for "${term}"`;
   });
 
-  /** The query that has "Add books" open on the area being browsed. */
-  protected readonly uploadParams = computed(() => {
-    const section = areaParam(this.query().area);
-    return section === null ? null : { section };
-  });
+  /** Opens "Add books" with the area being browsed preselected. */
+  protected addBooks(): void {
+    this.addBooksDialog.open([], areaParam(this.query().area));
+  }
 
   /** Shows the first page in the chosen sort order. */
   protected sortBy(value: unknown): void {

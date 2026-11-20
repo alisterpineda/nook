@@ -7,6 +7,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from './api/schema';
 import { routes } from './app.routes';
+import { provideFakeActivityHub } from './testing/fake-activity-hub';
 import { AuthorsListPage } from './features/people/authors-list-page';
 import { PersonPage } from './features/people/person-page';
 import { PublicAccessPage } from './features/public-access/public-access-page';
@@ -17,22 +18,16 @@ import {
 } from './features/reader/testing/fake-reader-engine';
 import { SetupPage } from './features/setup/setup-page';
 import { SignInPage } from './features/sign-in/sign-in-page';
-import { UploadPage } from './features/upload/upload-page';
-import { UploadQueue } from './features/upload/upload-queue';
 import { WorkDetailPage } from './features/works/work-detail-page';
 import { WorksListPage } from './features/works/works-list-page';
 import { SearchBox } from './shell/search-box';
 import { Shell } from './shell/shell';
-import { text } from './testing/element-text';
-import { openRequests } from './testing/open-requests';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
-type SectionResponse = components['schemas']['SectionResponse'];
 type PageOfPersonSummaryResponse = components['schemas']['PageOfPersonSummaryResponse'];
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type PersonDetailResponse = components['schemas']['PersonDetailResponse'];
 type PublicAccessResponse = components['schemas']['PublicAccessResponse'];
-type UploadResponse = components['schemas']['UploadResponse'];
 type BuiltInRole = components['schemas']['BuiltInRole'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 
@@ -101,6 +96,7 @@ describe('routes', () => {
         defaultAreaAccess: 'none',
         sections: [],
       } satisfies PublicAccessResponse,
+      '/api/activity/uploads': [],
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
     };
   }
@@ -122,6 +118,7 @@ describe('routes', () => {
         provideRouter(routes),
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideFakeActivityHub(),
         ...providers,
       ],
     });
@@ -248,23 +245,13 @@ describe('routes', () => {
     ).toEqual({ landedOn: '/sign-in', shown: true });
   });
 
-  it('an admin who opens /upload sees the upload page', async () => {
-    expect(
-      await open('/upload', { signedIn: true, setupRequired: false, role: 'admin' }, UploadPage),
-    ).toEqual({ landedOn: '/upload', shown: true });
-  });
-
-  it('a contributor who opens /upload lands on the works list', async () => {
-    expect(
-      await open(
-        '/upload',
-        { signedIn: true, setupRequired: false, role: 'contributor' },
-        WorksListPage,
-      ),
-    ).toEqual({ landedOn: '/library', shown: true });
-  });
-
-  it('a signed-out visitor who opens /upload lands on sign-in', async () => {
+  it('sends /upload to the library', async () => {
+    // No route is named `upload`, so the catch-all route sends it where it sends any unknown path.
+    for (const role of ['admin', 'contributor'] as const) {
+      expect(
+        await open('/upload', { signedIn: true, setupRequired: false, role }, WorksListPage),
+      ).toEqual({ landedOn: '/library', shown: true });
+    }
     expect(await open('/upload', { signedIn: false, setupRequired: false }, SignInPage)).toEqual({
       landedOn: '/sign-in',
       shown: true,
@@ -299,63 +286,5 @@ describe('routes', () => {
         WorksListPage,
       ),
     ).toEqual({ landedOn: '/library', shown: true });
-  });
-
-  it('the upload list is still there after visiting the works list and coming back', async () => {
-    const books: SectionResponse = { id: '0198a1b2-0000-7000-8000-00000000000a', name: 'Books' };
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
-    });
-    const httpTesting = TestBed.inject(HttpTestingController);
-    const harness = await RouterTestingHarness.create();
-
-    const opening = harness.navigateByUrl('/upload');
-    (await vi.waitFor(() => httpTesting.expectOne('/api/auth/me'))).flush(ada);
-    // The sidebar and the upload page each ask for the sections.
-    for (const request of await openRequests(httpTesting, '/api/sections', 2)) {
-      request.flush([books]);
-    }
-    await opening;
-    const page = () => harness.routeNativeElement as HTMLElement;
-    const input = await vi.waitFor(() => {
-      harness.detectChanges();
-      const found = page().querySelector<HTMLInputElement>('input[type="file"]');
-      expect(found).not.toBeNull();
-      return found!;
-    });
-
-    const dune = new File(['epub bytes'], 'dune.epub', { type: 'application/epub+zip' });
-    Object.defineProperty(input, 'files', { value: [dune], configurable: true });
-    input.dispatchEvent(new Event('change'));
-    const upload = httpTesting.expectOne('/api/uploads');
-
-    const leaving = harness.navigateByUrl('/library');
-    (
-      await vi.waitFor(() => httpTesting.expectOne((request) => request.url === '/api/works'))
-    ).flush(noWorks);
-    await leaving;
-    expect(TestBed.inject(Router).url).toBe('/library');
-
-    const returning = harness.navigateByUrl('/upload');
-    (await vi.waitFor(() => httpTesting.expectOne('/api/sections'))).flush([books]);
-    await returning;
-
-    /** Each row's file name and the status it shows. */
-    const rows = () => {
-      harness.detectChanges();
-      return Array.from(page().querySelectorAll('ul[aria-label="Files"] > li'), (row) => [
-        text(row.querySelector('[data-file-name]')),
-        text(row.querySelector('[data-slot="badge"]')),
-      ]);
-    };
-    await vi.waitFor(() => expect(rows()).toEqual([['dune.epub', 'Uploading']]));
-
-    upload.flush({ jobId: '7' } satisfies UploadResponse);
-    await vi.waitFor(() => expect(rows()).toEqual([['dune.epub', 'Ingesting']]));
-
-    // Stops following the job, so no poll is left running after the test.
-    TestBed.inject(UploadQueue).reset();
-    httpTesting.verify();
   });
 });

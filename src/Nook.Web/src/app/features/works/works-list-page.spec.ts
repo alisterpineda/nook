@@ -4,15 +4,17 @@ import {
   TestRequest,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
 import { Sections } from '../../core/sections';
+import { Session } from '../../core/session';
 import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
 import { linkLabelled } from '../../testing/link-labelled';
+import { AddBooks } from '../upload/add-books';
 import { WorksListPage } from './works-list-page';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
@@ -66,11 +68,16 @@ describe('WorksListPage', () => {
     addedAt: '2026-11-04T12:00:00Z',
   };
 
+  const canUpload = signal(true);
+  const openAddBooks = vi.fn<(files: readonly File[], sectionParam: string | null) => void>();
+
   let harness: RouterTestingHarness;
   let httpTesting: HttpTestingController;
   let router: Router;
 
   beforeEach(async () => {
+    canUpload.set(true);
+    openAddBooks.mockReset();
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
@@ -79,6 +86,8 @@ describe('WorksListPage', () => {
         ]),
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: Session, useValue: { canUpload } },
+        { provide: AddBooks, useValue: { open: openAddBooks } },
       ],
     });
     httpTesting = TestBed.inject(HttpTestingController);
@@ -591,6 +600,30 @@ describe('WorksListPage', () => {
 
     expect(page.querySelector('ul')).toBeNull();
     expect(page.textContent).toContain('No works yet');
+  });
+
+  it('shows Add books to a contributor and not to a viewer', async () => {
+    const { page } = await openList('/library', []);
+    expect(buttonLabelled(page, 'Add books')).not.toBeNull();
+
+    canUpload.set(false);
+    harness.detectChanges();
+    expect(page.textContent).toContain('No works yet');
+    expect(page.textContent).not.toContain('Add books');
+  });
+
+  it('opens the Add books dialog from the list', async () => {
+    const { page } = await openList('/library', []);
+    buttonLabelled(page, 'Add books').click();
+    expect(openAddBooks).toHaveBeenLastCalledWith([], null);
+
+    const { page: inComics } = await openList(`/library?section=${comicsId}`, []);
+    buttonLabelled(inComics, 'Add books').click();
+    expect(openAddBooks).toHaveBeenLastCalledWith([], comicsId);
+
+    const { page: inDefault } = await openList('/library?section=default', []);
+    buttonLabelled(inDefault, 'Add books').click();
+    expect(openAddBooks).toHaveBeenLastCalledWith([], 'default');
   });
 
   it('says something went wrong when the works cannot be loaded', async () => {
