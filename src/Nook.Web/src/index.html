@@ -7,6 +7,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <!-- The icons are square with no rounded corners or transparency: iOS rounds them itself and fills
+         anything transparent with black. -->
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <!-- The manifest's scope is the whole site. Without it, an iPhone Home Screen app treats pages outside the
+         one it was added from, such as a work or the reader, as outside the app and puts a browser bar over them. -->
+    <link rel="manifest" href="manifest.webmanifest" />
   </head>
   <body>
     <app-root></app-root>
