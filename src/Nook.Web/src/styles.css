@@ -97,4 +97,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* The reader fills the screen and scrolls the book itself, so the page under it neither scrolls nor bounces at
+     its edges, which on a phone would drag the reader's toolbar and readout out of place. */
+  html:has(app-reader-page) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 }

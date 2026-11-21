@@ -199,8 +199,10 @@ const wideScreen = '(min-width: 640px)';
       lucideListTree,
     }),
   ],
+  // Fixed to the screen's edges, not a screen tall in the page's flow: a phone drags a page in the flow, and the
+  // toolbar and the readout with it, when a swipe on the book has nothing in the book to scroll.
   host: {
-    class: 'bg-background text-foreground flex h-dvh flex-col',
+    class: 'bg-background text-foreground fixed inset-0 flex flex-col',
     '[attr.data-reader-theme]': 'theme()',
     '[style.--background]': 'colours().background',
     '[style.--foreground]': 'colours().text',
