@@ -24,6 +24,8 @@ export interface AddBooksContext {
 @Component({
   selector: 'app-add-books-dialog',
   imports: [HlmButtonImports, HlmDialogImports, HlmInputImports, HlmLabelImports],
+  // The dialog spaces its own children, but this element sits between it and the parts below, so it spaces them.
+  host: { class: 'grid gap-6' },
   template: `
     <hlm-dialog-header>
       <h2 hlmDialogTitle>Add books</h2>
