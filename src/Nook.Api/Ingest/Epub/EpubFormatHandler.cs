@@ -324,8 +324,9 @@ public sealed partial class EpubFormatHandler : IFormatHandler
 
     /// <summary>
     /// The creators with a name, each with its role and sort name from the EPUB 2 <c>opf:role</c> and
-    /// <c>opf:file-as</c> attributes, else from EPUB 3 <c>role</c> and <c>file-as</c> metas refining it. A role Nook
-    /// does not keep is null.
+    /// <c>opf:file-as</c> attributes, else from EPUB 3 <c>role</c> and <c>file-as</c> metas refining it. EPUB 3 may
+    /// give a creator several roles, and the first one Nook keeps is read. A creator whose roles are all ones Nook
+    /// does not keep has a null role.
     /// </summary>
     internal static List<BookCreator> ReadCreators(
         IEnumerable<EpubMetadataCreator> creators, IReadOnlyList<EpubMetadataMeta> metas) =>
@@ -333,24 +334,44 @@ public sealed partial class EpubFormatHandler : IFormatHandler
             .Where(creator => !string.IsNullOrWhiteSpace(creator.Creator))
             .Select(creator => new BookCreator(
                 creator.Creator.Trim(),
-                RoleOf(FirstValue([creator.Role]) ?? Refining(metas, creator.Id, "role")),
+                RoleOf(FirstValue([creator.Role]) is { } role ? [role] : AllRefining(metas, creator.Id, "role")),
                 FirstValue([creator.FileAs]) ?? Refining(metas, creator.Id, "file-as")))
             .ToList();
 
     /// <summary>
-    /// The contributor role a MARC relator code stands for, compared ignoring case and surrounding spaces. No code
-    /// means an author; a code for a role Nook does not keep gives null.
+    /// The contributor role of the first MARC relator code that stands for one Nook keeps, compared ignoring case and
+    /// surrounding spaces. No code means an author; codes only for roles Nook does not keep give null.
     /// </summary>
-    private static ContributorRole? RoleOf(string? code) =>
-        string.IsNullOrWhiteSpace(code)
-            ? ContributorRole.Author
-            : Roles.TryGetValue(code.Trim(), out var role) ? role : null;
+    private static ContributorRole? RoleOf(IReadOnlyList<string> codes)
+    {
+        if (codes.Count == 0)
+        {
+            return ContributorRole.Author;
+        }
+
+        foreach (var code in codes)
+        {
+            if (Roles.TryGetValue(code, out var role))
+            {
+                return role;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The first value of an EPUB 3 meta with the property that refines the element with the id, if it has one.</summary>
     private static string? Refining(IReadOnlyList<EpubMetadataMeta> metas, string? id, string property) =>
+        AllRefining(metas, id, property).FirstOrDefault();
+
+    /// <summary>
+    /// The values, trimmed and in file order, of every EPUB 3 meta with the property that refines the element with the
+    /// id, if it has one.
+    /// </summary>
+    private static List<string> AllRefining(IReadOnlyList<EpubMetadataMeta> metas, string? id, string property) =>
         string.IsNullOrWhiteSpace(id)
-            ? null
-            : FirstValue(metas
+            ? []
+            : Values(metas
                 .Where(meta => meta.Refines == "#" + id && meta.Property == property)
                 .Select(meta => meta.Content));
 

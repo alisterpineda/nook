@@ -1,0 +1,2 @@
+# EPUBs are zip archives: never diff them or normalise their line endings.
+*.epub binary

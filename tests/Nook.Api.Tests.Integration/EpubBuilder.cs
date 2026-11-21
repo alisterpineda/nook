@@ -61,9 +61,29 @@ internal sealed class EpubBuilder
                 $"<dc:creator{Attribute("opf:role", role)}{Attribute("opf:file-as", fileAs)}>{Escape(name)}</dc:creator>");
         }
 
+        return AddEpub3Creator(name, role is null ? [] : [role], fileAs);
+    }
+
+    /// <summary>
+    /// Adds an EPUB 3 <c>dc:creator</c> refined by a <c>role</c> meta for each code, in order. EPUB 2 has room for
+    /// only one <c>opf:role</c>.
+    /// </summary>
+    public EpubBuilder WithCreatorRoles(string name, params string[] roles)
+    {
+        if (_version != 3)
+        {
+            throw new InvalidOperationException("Only EPUB 3 gives a creator several roles.");
+        }
+
+        return AddEpub3Creator(name, roles, fileAs: null);
+    }
+
+    /// <summary>Adds an EPUB 3 <c>dc:creator</c>, refined by a <c>role</c> meta for each code, in order, and a <c>file-as</c> meta when a sort name is given.</summary>
+    private EpubBuilder AddEpub3Creator(string name, IEnumerable<string> roles, string? fileAs)
+    {
         var id = NextId("creator");
         AddMetadata($"<dc:creator id=\"{id}\">{Escape(name)}</dc:creator>");
-        if (role is not null)
+        foreach (var role in roles)
         {
             AddMetadata($"<meta refines=\"#{id}\" property=\"role\" scheme=\"marc:relators\">{Escape(role)}</meta>");
         }

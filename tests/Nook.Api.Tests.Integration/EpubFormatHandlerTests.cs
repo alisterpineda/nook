@@ -193,6 +193,23 @@ public sealed class EpubFormatHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task First_role_nook_keeps_is_read_from_a_creator_with_several()
+    {
+        var path = await WriteAsync(new EpubBuilder(version: 3)
+            .WithCreatorRoles("Edgar Rice Burroughs", "ann", "aut", "dto")
+            .WithCreatorRoles("Ed Itor", "edt", "aut")
+            .WithCreatorRoles("Some Illustrator", "ill", "art")
+            .WithCreatorRoles("Blank Roles", " ", "")
+            .Build());
+
+        var metadata = await _handler.ReadMetadataAsync(path, CancellationToken);
+
+        Assert.Equal(
+            [ContributorRole.Author, ContributorRole.Editor, null, ContributorRole.Author],
+            metadata.Creators.Select(creator => creator.Role));
+    }
+
+    [Fact]
     public async Task Calibre_title_sort_is_preferred_to_a_file_as_refining_the_title()
     {
         var path = await WriteAsync(new EpubBuilder(version: 3)

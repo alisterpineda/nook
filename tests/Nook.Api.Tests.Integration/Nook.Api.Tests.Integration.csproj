@@ -12,6 +12,8 @@
   <ItemGroup>
     <!-- The realm, client, groups and users the single sign-on tests sign in with, imported when Keycloak starts. -->
     <None Include="Keycloak\nook-realm.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Real EPUBs from real producers, kept beside the test projects so others can share them. -->
+    <None Include="..\fixtures\epubs\*.epub" LinkBase="Fixtures\Epubs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
