@@ -20,5 +20,8 @@ public record CurrentUserResponse(Guid Id, string Email, BuiltInRole Role, strin
     }
 }
 
-/// <summary>How someone may sign in besides a password: the name of the single sign-on provider, or null when there is none.</summary>
-public record SignInOptionsResponse(string? SsoName);
+/// <summary>
+/// How someone may sign in: the name of the single sign-on provider, or null when there is none, and whether a password
+/// works.
+/// </summary>
+public record SignInOptionsResponse(string? SsoName, bool PasswordSignIn);

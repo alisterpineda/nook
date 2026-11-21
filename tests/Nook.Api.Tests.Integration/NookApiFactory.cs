@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
+using Nook.Api.Features.Auth;
 
 namespace Nook.Api.Tests.Integration;
 
@@ -20,6 +21,23 @@ public sealed class NookApiFactory(PostgresFixture server) : WebApplicationFacto
     public string DataPath { get; } = Path.Combine(Path.GetTempPath(), "nook-tests", Guid.NewGuid().ToString("N"));
 
     public ValueTask InitializeAsync() => _database.InitializeAsync();
+
+    /// <summary>
+    /// The API with single sign-on configured, over this factory's database. The provider is never reached: this is
+    /// for what the API does with the settings alone.
+    /// </summary>
+    public WebApplicationFactory<Program> WithSingleSignOn(bool passwordSignIn = true, string? displayName = null) =>
+        WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting(PasswordSignInOptions.Setting, passwordSignIn ? "true" : "false");
+            builder.UseSetting("Nook:Oidc:Authority", "https://sso.test/realms/nook");
+            builder.UseSetting("Nook:Oidc:ClientId", "nook");
+            builder.UseSetting("Nook:Oidc:ClientSecret", "nook-secret");
+            if (displayName is not null)
+            {
+                builder.UseSetting("Nook:Oidc:DisplayName", displayName);
+            }
+        });
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

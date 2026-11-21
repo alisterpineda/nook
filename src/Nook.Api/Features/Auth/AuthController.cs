@@ -15,14 +15,15 @@ public class AuthController(
     UserManager<NookUser> users,
     SignInManager<NookUser> signIn,
     IOptions<OidcOptions> oidc,
+    IOptions<PasswordSignInOptions> passwordSignIn,
     ILogger<AuthController> logger) : ControllerBase
 {
-    /// <summary>How someone may sign in besides a password.</summary>
+    /// <summary>How someone may sign in: through single sign-on, and whether a password works.</summary>
     [HttpGet("sign-in-options")]
     [AllowAnonymous]
     [ProducesResponseType<SignInOptionsResponse>(StatusCodes.Status200OK)]
     public SignInOptionsResponse SignInOptions() =>
-        new(oidc.Value.Enabled ? oidc.Value.DisplayName : null);
+        new(oidc.Value.Enabled ? oidc.Value.DisplayName : null, passwordSignIn.Value.Enabled);
 
     /// <summary>
     /// Starts single sign-on: redirects to the provider's authorization endpoint, or back to the sign-in page when
@@ -55,13 +56,15 @@ public class AuthController(
         return new EmptyResult();
     }
 
-    /// <summary>Signs in with an email and password, and sets the session cookie.</summary>
+    /// <summary>Signs in with an email and password, and sets the session cookie. Not found when password sign-in is off.</summary>
     [HttpPost("login")]
     [AllowAnonymous]
+    [RequiresPasswordSignIn]
     [EnableRateLimiting(RateLimits.Auth)]
     [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> Login(LoginRequest request)
     {

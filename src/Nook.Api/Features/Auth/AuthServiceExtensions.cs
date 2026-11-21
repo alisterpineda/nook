@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Nook.Api.Data;
 using Nook.Api.Features.Publications;
@@ -15,8 +16,9 @@ public static class AuthServiceExtensions
     /// Adds sign-in with a cookie, an authorization default that requires a signed-in user on every endpoint, the
     /// catalog policy that also lets a visitor in while public access is on,
     /// the rate limits for the endpoints that take a password and for a visitor's reading and downloading, the single
-    /// sign-on settings, and, when single sign-on
-    /// is on, the OpenID Connect handler that signs in at the provider.
+    /// sign-on settings, whether password sign-in is on, and, when single sign-on
+    /// is on, the OpenID Connect handler that signs in at the provider. Nook does not start with password sign-in off
+    /// and single sign-on not set, since nobody could sign in.
     /// </summary>
     public static IServiceCollection AddNookAuth(this IServiceCollection services, IConfiguration configuration)
     {
@@ -44,6 +46,13 @@ public static class AuthServiceExtensions
             .Validate(
                 options => options.IsValid(),
                 $"{OidcOptions.Section}:ClientId and {OidcOptions.Section}:ClientSecret are required when {OidcOptions.Section}:Authority is set.")
+            .ValidateOnStart();
+
+        services.AddOptions<PasswordSignInOptions>()
+            .Configure(options => options.Enabled = configuration.GetValue(PasswordSignInOptions.Setting, true))
+            .Validate<IOptions<OidcOptions>>(
+                (options, oidc) => options.Enabled || oidc.Value.Enabled,
+                $"{OidcOptions.Section}:Authority is required when {PasswordSignInOptions.Setting} is false, or nobody could sign in.")
             .ValidateOnStart();
 
         var authentication = services.AddAuthentication(IdentityConstants.ApplicationScheme);

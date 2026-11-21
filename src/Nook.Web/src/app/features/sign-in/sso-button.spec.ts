@@ -29,7 +29,7 @@ describe('SsoButton', () => {
   }
 
   it('shows a link named after the provider', async () => {
-    await answer({ ssoName: 'Authentik' });
+    await answer({ ssoName: 'Authentik', passwordSignIn: true });
 
     const link = await vi.waitFor(() => {
       const found = button.querySelector('a');
@@ -48,7 +48,7 @@ describe('SsoButton', () => {
   });
 
   it('shows nothing when there is no single sign-on', async () => {
-    await answer({ ssoName: null });
+    await answer({ ssoName: null, passwordSignIn: true });
 
     expect(button.children.length).toBe(0);
     expect(text(button)).toBe('');

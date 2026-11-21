@@ -74,19 +74,47 @@ describe('SignInPage', () => {
 
   async function answerSignInOptions(options: SignInOptionsResponse): Promise<void> {
     signInOptions.flush(options);
+    await settle();
+  }
+
+  /** Lets the page take up an answer that reaches it through promises, and draw it. */
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve));
     await fixture.whenStable();
   }
 
   it('offers single sign-on when the API names one', async () => {
-    await answerSignInOptions({ ssoName: 'Authentik' });
+    await answerSignInOptions({ ssoName: 'Authentik', passwordSignIn: true });
 
     const link = await vi.waitFor(() => linkLabelled(page, 'Sign in with Authentik'));
     expect(link.getAttribute('href')).toBe('/api/auth/oidc/login');
     expect(fieldLabelled(page, 'Email')).toBeDefined();
   });
 
+  it('shows only single sign-on when password sign-in is off', async () => {
+    await answerSignInOptions({ ssoName: 'Authentik', passwordSignIn: false });
+
+    const link = await vi.waitFor(() => linkLabelled(page, 'Sign in with Authentik'));
+    expect(link.getAttribute('href')).toBe('/api/auth/oidc/login');
+    expect(page.querySelector('input')).toBeNull();
+    expect(page.querySelector('button')).toBeNull();
+  });
+
+  it('shows no form until it knows how to sign in', () => {
+    expect(page.querySelector('input')).toBeNull();
+    expect(page.querySelector('button')).toBeNull();
+  });
+
+  it('shows the form when the sign-in options cannot be read', async () => {
+    signInOptions.flush(null, { status: 500, statusText: 'Internal Server Error' });
+    await settle();
+
+    expect(fieldLabelled(page, 'Email')).toBeDefined();
+    expect(fieldLabelled(page, 'Password')).toBeDefined();
+  });
+
   describe('without single sign-on', () => {
-    beforeEach(() => answerSignInOptions({ ssoName: null }));
+    beforeEach(() => answerSignInOptions({ ssoName: null, passwordSignIn: true }));
 
     it('offers no single sign-on', () => {
       expect(page.querySelector('a')).toBeNull();
@@ -193,12 +221,18 @@ describe('SignInPage after single sign-on', () => {
 
   afterEach(() => httpTesting.verify());
 
-  /** The alerts on a sign-in page newly opened at `url`, once it has its sign-in options. */
-  async function alertsAt(url: string): Promise<string[]> {
+  /**
+   * The alerts on a sign-in page newly opened at `url`, once it has its sign-in options. The session keeps the
+   * options after the first request, so only the first open in a test has one to answer.
+   */
+  async function alertsAt(
+    url: string,
+    options: SignInOptionsResponse = { ssoName: 'Authentik', passwordSignIn: true },
+  ): Promise<string[]> {
     await harness.navigateByUrl('/');
     await harness.navigateByUrl(url, SignInPage);
-    const options: SignInOptionsResponse = { ssoName: 'Authentik' };
-    httpTesting.expectOne('/api/auth/sign-in-options').flush(options);
+    httpTesting.match('/api/auth/sign-in-options').forEach((request) => request.flush(options));
+    await new Promise((resolve) => setTimeout(resolve));
     await harness.fixture.whenStable();
     return alertsIn(harness.routeNativeElement as HTMLElement);
   }
@@ -215,6 +249,16 @@ describe('SignInPage after single sign-on', () => {
     ]);
     expect(await alertsAt('/sign-in?error=sso-setup-required')).toEqual([
       'Nook has no admin yet. Set up Nook first, or use a single sign-on account that is an admin.',
+    ]);
+  });
+
+  it('tells of a missing admin without naming setup when password sign-in is off', async () => {
+    const off = { ssoName: 'Authentik', passwordSignIn: false };
+    expect(await alertsAt('/sign-in?error=sso-setup-required', off)).toEqual([
+      'Nook has no admin yet. Use a single sign-on account that is an admin.',
+    ]);
+    expect(await alertsAt('/sign-in?error=sso-failed')).toEqual([
+      'Single sign-on did not work. Try again.',
     ]);
   });
 

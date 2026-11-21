@@ -1,5 +1,5 @@
 import { HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
@@ -12,6 +12,7 @@ import { Session } from '../../core/session';
 import { SsoButton } from './sso-button';
 
 type ProblemDetails = components['schemas']['ProblemDetails'];
+type SignInOptions = components['schemas']['SignInOptionsResponse'];
 
 const tooManyAttempts = 'Too many attempts. Try again in a minute.';
 
@@ -25,7 +26,15 @@ const singleSignOnFailures: Readonly<Record<string, string>> = {
     'Nook has no admin yet. Set up Nook first, or use a single sign-on account that is an admin.',
 };
 
-/** Signs in with an email and password. */
+/** The `sso-setup-required` message when setup is closed, so it must not send anyone there. */
+const setupClosedMessage = 'Nook has no admin yet. Use a single sign-on account that is an admin.';
+
+/**
+ * Signs in with an email and password, or only through single sign-on when the API says password sign-in is off.
+ * The card shows no form until the sign-in options arrive, so a single sign-on only instance never flashes one;
+ * if the options cannot be read, the form shows. It never leaves for the provider on its own: the link is
+ * followed only by a click.
+ */
 @Component({
   selector: 'app-sign-in-page',
   imports: [
@@ -41,42 +50,46 @@ const singleSignOnFailures: Readonly<Record<string, string>> = {
       <section hlmCard class="w-full max-w-sm">
         <header hlmCardHeader>
           <h1 hlmCardTitle>Sign in</h1>
-          <p hlmCardDescription>Sign in to Nook with your email and password.</p>
+          <p hlmCardDescription>{{ description() }}</p>
         </header>
-        <form hlmCardContent class="grid gap-6" [formGroup]="form" (ngSubmit)="submit()">
-          <div class="grid gap-2">
-            <label hlmLabel for="sign-in-email">Email</label>
-            <input
-              hlmInput
-              id="sign-in-email"
-              type="email"
-              autocomplete="email"
-              formControlName="email"
-              [forceInvalid]="showsInvalid('email')"
-            />
-            @if (showsInvalid('email')) {
-              <p class="text-destructive text-sm" role="alert">Enter your email address.</p>
-            }
-          </div>
-          <div class="grid gap-2">
-            <label hlmLabel for="sign-in-password">Password</label>
-            <input
-              hlmInput
-              id="sign-in-password"
-              type="password"
-              autocomplete="current-password"
-              formControlName="password"
-              [forceInvalid]="showsInvalid('password')"
-            />
-            @if (showsInvalid('password')) {
-              <p class="text-destructive text-sm" role="alert">Enter your password.</p>
-            }
-          </div>
-          @if (error(); as message) {
+        @if (alert(); as message) {
+          <div hlmCardContent>
             <p class="text-destructive text-sm" role="alert">{{ message }}</p>
-          }
-          <button hlmBtn type="submit" [disabled]="submitting()">Sign in</button>
-        </form>
+          </div>
+        }
+        @if (showsForm()) {
+          <form hlmCardContent class="grid gap-6" [formGroup]="form" (ngSubmit)="submit()">
+            <div class="grid gap-2">
+              <label hlmLabel for="sign-in-email">Email</label>
+              <input
+                hlmInput
+                id="sign-in-email"
+                type="email"
+                autocomplete="email"
+                formControlName="email"
+                [forceInvalid]="showsInvalid('email')"
+              />
+              @if (showsInvalid('email')) {
+                <p class="text-destructive text-sm" role="alert">Enter your email address.</p>
+              }
+            </div>
+            <div class="grid gap-2">
+              <label hlmLabel for="sign-in-password">Password</label>
+              <input
+                hlmInput
+                id="sign-in-password"
+                type="password"
+                autocomplete="current-password"
+                formControlName="password"
+                [forceInvalid]="showsInvalid('password')"
+              />
+              @if (showsInvalid('password')) {
+                <p class="text-destructive text-sm" role="alert">Enter your password.</p>
+              }
+            </div>
+            <button hlmBtn type="submit" [disabled]="submitting()">Sign in</button>
+          </form>
+        }
         <app-sso-button />
       </section>
     </main>
@@ -93,10 +106,39 @@ export class SignInPage {
   });
   private readonly attempted = signal(false);
   protected readonly submitting = signal(false);
+  // The options once they arrive, 'failed' when they could not be read, and null before either.
+  private readonly options = signal<SignInOptions | 'failed' | null>(null);
+  protected readonly showsForm = computed(() => {
+    const options = this.options();
+    return options === 'failed' || options?.passwordSignIn === true;
+  });
   // Single sign-on comes back here with why it failed; a password attempt replaces that message.
-  protected readonly error = signal<string | null>(
-    singleSignOnFailure(inject(ActivatedRoute).snapshot.queryParamMap.get('error')),
+  private readonly singleSignOnCode = inject(ActivatedRoute).snapshot.queryParamMap.get('error');
+  private readonly singleSignOnShown = signal(true);
+  private readonly attemptError = signal<string | null>(null);
+  protected readonly description = computed(() =>
+    this.showsForm() ? 'Sign in to Nook with your email and password.' : 'Sign in to Nook.',
   );
+  protected readonly alert = computed(() => {
+    const options = this.options();
+    if (this.attemptError() !== null) {
+      return this.attemptError();
+    }
+    if (options === null || !this.singleSignOnShown()) {
+      return null;
+    }
+    const message = singleSignOnFailure(this.singleSignOnCode);
+    return !this.showsForm() && this.singleSignOnCode === 'sso-setup-required'
+      ? setupClosedMessage
+      : message;
+  });
+
+  constructor() {
+    this.session.signInOptions().then(
+      (options) => this.options.set(options),
+      () => this.options.set('failed'),
+    );
+  }
 
   /** Whether to mark a field wrong: only once the user has tried to sign in with it. */
   protected showsInvalid(field: 'email' | 'password'): boolean {
@@ -108,7 +150,8 @@ export class SignInPage {
       return;
     }
     this.attempted.set(true);
-    this.error.set(null);
+    this.attemptError.set(null);
+    this.singleSignOnShown.set(false);
     if (this.form.invalid) {
       return;
     }
@@ -118,7 +161,7 @@ export class SignInPage {
     try {
       await this.session.signIn(email, password);
     } catch (error) {
-      this.error.set(failureMessage(error));
+      this.attemptError.set(failureMessage(error));
       return;
     } finally {
       this.submitting.set(false);

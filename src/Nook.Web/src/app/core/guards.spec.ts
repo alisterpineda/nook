@@ -83,7 +83,7 @@ describe('route guards', () => {
 
   /** Answers the sign-in or setup page's request for the ways to sign in, which it makes once it is shown. */
   async function answerSignInOptions(): Promise<void> {
-    (await nextRequest('/api/auth/sign-in-options')).flush({ ssoName: null });
+    (await nextRequest('/api/auth/sign-in-options')).flush({ ssoName: null, passwordSignIn: true });
   }
 
   /** Answers the sidebar's request, which the signed-in pages make once they are shown. */

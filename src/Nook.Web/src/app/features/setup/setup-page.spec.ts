@@ -72,7 +72,7 @@ describe('SetupPage', () => {
   }
 
   it('offers single sign-on when the API names one', async () => {
-    await answerSignInOptions({ ssoName: 'Authentik' });
+    await answerSignInOptions({ ssoName: 'Authentik', passwordSignIn: true });
 
     const link = await vi.waitFor(() => linkLabelled(page, 'Sign in with Authentik'));
     expect(link.getAttribute('href')).toBe('/api/auth/oidc/login');
@@ -80,7 +80,7 @@ describe('SetupPage', () => {
   });
 
   describe('without single sign-on', () => {
-    beforeEach(() => answerSignInOptions({ ssoName: null }));
+    beforeEach(() => answerSignInOptions({ ssoName: null, passwordSignIn: true }));
 
     it('offers no single sign-on', () => {
       expect(page.querySelector('a')).toBeNull();

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
 
@@ -13,11 +14,14 @@ public record SetupStatusResponse(bool Required);
 
 public record SetupRequest([Required, EmailAddress] string Email, [Required] string Password, string? DisplayName = null);
 
-/// <summary>First-run setup: creating the first admin. Open to anyone, and closed for good once any user exists.</summary>
+/// <summary>
+/// First-run setup: creating the first admin. Open to anyone, and closed for good once any user exists. Closed
+/// whenever password sign-in is off, since it creates a user with a password.
+/// </summary>
 [ApiController]
 [Route("api/setup")]
 [AllowAnonymous]
-public class SetupController(NookDbContext db, UserManager<NookUser> users, SignInManager<NookUser> signIn) : ControllerBase
+public class SetupController(NookDbContext db, UserManager<NookUser> users, SignInManager<NookUser> signIn, IOptions<PasswordSignInOptions> passwordSignIn) : ControllerBase
 {
     // Any fixed number works; it only has to differ from other advisory locks Nook takes.
     private const long SetupLockKey = 0x4E6F6F6B_00000001;
@@ -25,13 +29,15 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
     /// <summary>Whether Nook still needs its first admin.</summary>
     [HttpGet]
     public async Task<SetupStatusResponse> GetStatus(CancellationToken cancellationToken) =>
-        new(await FirstRunSetup.IsRequiredAsync(db, cancellationToken));
+        new(passwordSignIn.Value.Enabled && await FirstRunSetup.IsRequiredAsync(db, cancellationToken));
 
     /// <summary>Creates the first admin and signs them in.</summary>
     [HttpPost]
+    [RequiresPasswordSignIn]
     [EnableRateLimiting(RateLimits.Auth)]
     [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<CurrentUserResponse>> CreateFirstAdmin(SetupRequest request, CancellationToken cancellationToken)

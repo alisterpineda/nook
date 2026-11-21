@@ -166,8 +166,10 @@ and password. It works with one provider at a time and is off until `Nook:Oidc:A
 | `Nook:Oidc:ContributorGroup` | `Nook__Oidc__ContributorGroup` | none | The group whose members are contributors. |
 | `Nook:Oidc:GroupsClaim` | `Nook__Oidc__GroupsClaim` | `groups` | The claim that lists the groups someone is in. |
 | `Nook:Oidc:Scopes` | `Nook__Oidc__Scopes` | `openid profile email` | The scopes Nook asks the provider for, separated by spaces. |
+| `Nook:PasswordSignIn` | `Nook__PasswordSignIn` | `true` | Set to `false` to turn password sign-in off, so the provider is the only way in. See [Single sign-on only](#single-sign-on-only). |
 
-Nook refuses to start when `Authority` is set and `ClientId` or `ClientSecret` is missing.
+Nook refuses to start when `Authority` is set and `ClientId` or `ClientSecret` is missing, and when
+`Nook:PasswordSignIn` is `false` and `Authority` is not set.
 
 Single sign-on needs https: the browser must reach Nook over https, because the cookies that carry a sign-in to
 the provider and back are marked `Secure`.
@@ -207,7 +209,8 @@ two only when the provider sends `email_verified` as true. Otherwise the sign-in
 account's password still works. An account that is already linked to one provider account is never linked to a
 second: that sign-in is refused too.
 
-Password sign-in and first-run setup stay available when single sign-on is on. Signing out of Nook does not
+Password sign-in and first-run setup stay available when single sign-on is on, unless
+[Single sign-on only](#single-sign-on-only) turns them off. Signing out of Nook does not
 sign out of the provider.
 
 ### Before Nook is set up
@@ -215,7 +218,32 @@ sign out of the provider.
 While Nook has no accounts, single sign-on only lets in someone who is in `AdminGroup`, who then is the first
 admin in place of first-run setup. Anyone else is refused until an admin exists, because the first account
 closes setup, and a first account that is not an admin would leave Nook with no admin. With no `AdminGroup`
-set, create the first admin on the setup page.
+set, create the first admin on the setup page, unless [Single sign-on only](#single-sign-on-only) has closed
+the setup page: then `AdminGroup` is the only way to a first admin.
+
+### Single sign-on only
+
+Set `Nook:PasswordSignIn` to `false` and the provider is the only way to sign in. It turns password sign-in
+off entirely, not just the form: a visitor who sends an email and password to Nook is told there is nothing
+there, so passwords cannot be guessed. It also turns off first-run setup, which creates an account with a
+password. The sign-in page then shows only the "Sign in with ..." link, with no email or password field. It
+does not leave for the provider by itself: someone opening `/sign-in` still has to click the link.
+
+How an empty instance gets its first admin: as in [Before Nook is set up](#before-nook-is-set-up), the first
+person in `AdminGroup` to sign in through the provider. The setup page is closed, so `AdminGroup` is the only
+way: set it before turning password sign-in off on an instance with no accounts.
+
+If the provider is down, nobody can sign in through it, and this is the way back in, only for an account that
+has a password. Set `Nook:PasswordSignIn` back to `true` (or remove it) and restart Nook. The setting changes
+no stored password, so the passwords people had work again. An account created through the provider has no
+password and still needs the provider. Turn the setting off again when the provider is back.
+
+What happens to people already signed in:
+
+- Existing sessions carry on. Turning the setting off, or on, does not sign anyone out.
+- Someone removed at the provider keeps their Nook session for as long as they keep using it. It ends when
+  they sign out, or when the 30-day session runs out without being renewed, and using Nook renews it. Nook
+  asks the provider only when someone signs in.
 
 ### Authentik
 

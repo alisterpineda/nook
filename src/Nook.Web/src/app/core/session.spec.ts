@@ -290,16 +290,30 @@ describe('Session', () => {
     expect(await notRequired).toBe(false);
   });
 
-  it('signInOptions reports what the API says', async () => {
-    const named = session.signInOptions();
+  it('signInOptions asks the API once and keeps the answer', async () => {
+    const first = session.signInOptions();
+    const second = session.signInOptions();
+
     const request = httpTesting.expectOne('/api/auth/sign-in-options');
     expect(request.request.method).toBe('GET');
-    request.flush({ ssoName: 'Authentik' });
-    expect(await named).toEqual({ ssoName: 'Authentik' });
+    request.flush({ ssoName: 'Authentik', passwordSignIn: false });
 
-    const unnamed = session.signInOptions();
-    httpTesting.expectOne('/api/auth/sign-in-options').flush({ ssoName: null });
-    expect(await unnamed).toEqual({ ssoName: null });
+    expect(await first).toEqual({ ssoName: 'Authentik', passwordSignIn: false });
+    expect(await second).toEqual({ ssoName: 'Authentik', passwordSignIn: false });
+  });
+
+  it('signInOptions asks again after a request that failed', async () => {
+    const failing = session.signInOptions();
+    httpTesting
+      .expectOne('/api/auth/sign-in-options')
+      .flush(null, { status: 500, statusText: 'Internal Server Error' });
+    await expect(failing).rejects.toMatchObject({ status: 500 });
+
+    const retrying = session.signInOptions();
+    httpTesting
+      .expectOne('/api/auth/sign-in-options')
+      .flush({ ssoName: null, passwordSignIn: true });
+    expect(await retrying).toEqual({ ssoName: null, passwordSignIn: true });
   });
 
   it('createFirstAdmin posts the email and password and sets the user', async () => {

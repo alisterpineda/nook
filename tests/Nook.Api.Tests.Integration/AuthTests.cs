@@ -235,7 +235,7 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(
-            "{\"ssoName\":null}",
+            "{\"ssoName\":null,\"passwordSignIn\":true}",
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
@@ -254,21 +254,12 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
     [InlineData(null, "SSO")]
     public async Task Sign_in_options_name_the_configured_single_sign_on(string? displayName, string expected)
     {
-        await using var app = factory.WithWebHostBuilder(builder =>
-        {
-            builder.UseSetting("Nook:Oidc:Authority", "https://sso.test/realms/nook");
-            builder.UseSetting("Nook:Oidc:ClientId", "nook");
-            builder.UseSetting("Nook:Oidc:ClientSecret", "nook-secret");
-            if (displayName is not null)
-            {
-                builder.UseSetting("Nook:Oidc:DisplayName", displayName);
-            }
-        });
+        await using var app = factory.WithSingleSignOn(displayName: displayName);
         using var client = app.CreateClient();
 
         var options = await client.GetAsync<SignInOptionsResponse>("/api/auth/sign-in-options");
 
-        Assert.Equal(new SignInOptionsResponse(expected), options);
+        Assert.Equal(new SignInOptionsResponse(expected, true), options);
     }
 
     [Theory]
@@ -289,5 +280,16 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 
         var messages = exception.Flatten().Select(inner => inner.Message);
         Assert.Contains(messages, message => message.Contains("Nook:Oidc", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Api_refuses_to_start_with_password_sign_in_off_and_no_single_sign_on()
+    {
+        await using var app = factory.WithWebHostBuilder(builder => builder.UseSetting(PasswordSignInOptions.Setting, "false"));
+
+        var exception = Assert.ThrowsAny<Exception>(() => app.CreateClient());
+
+        var messages = exception.Flatten().Select(inner => inner.Message);
+        Assert.Contains(messages, message => message.Contains("Nook:PasswordSignIn", StringComparison.Ordinal));
     }
 }

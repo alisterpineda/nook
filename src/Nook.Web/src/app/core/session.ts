@@ -26,6 +26,7 @@ export class Session {
   private readonly currentUser = signal<CurrentUserResponse | null>(null);
   private readonly visitorAccess = signal(noVisitorAccess);
   private loaded: Promise<void> | null = null;
+  private signInOptionsAnswer: Promise<SignInOptionsResponse> | null = null;
 
   /** The signed-in user, or `null` when signed out. */
   readonly user = this.currentUser.asReadonly();
@@ -82,9 +83,20 @@ export class Session {
     return status.required;
   }
 
-  /** The ways to sign in besides a password: the name of the single sign-on provider, or `null` when there is none. */
+  /**
+   * How people may sign in: the name of the single sign-on provider (`null` when there is none) and whether
+   * password sign-in is on. These are configuration, which only a restart of Nook changes, so a successful
+   * answer is kept for the life of the page load and the sign-in page and the single sign-on button share one
+   * request. A failed request is not kept, so the next call asks again.
+   */
   signInOptions(): Promise<SignInOptionsResponse> {
-    return firstValueFrom(this.http.get<SignInOptionsResponse>('/api/auth/sign-in-options'));
+    this.signInOptionsAnswer ??= firstValueFrom(
+      this.http.get<SignInOptionsResponse>('/api/auth/sign-in-options'),
+    ).catch((error: unknown) => {
+      this.signInOptionsAnswer = null;
+      throw error;
+    });
+    return this.signInOptionsAnswer;
   }
 
   /** Creates the first admin, whom the API signs in. */

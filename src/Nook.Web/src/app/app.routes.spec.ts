@@ -85,7 +85,7 @@ describe('routes', () => {
   function answers(visitor: Visitor): Record<string, object> {
     return {
       '/api/setup': { required: visitor.setupRequired },
-      '/api/auth/sign-in-options': { ssoName: null },
+      '/api/auth/sign-in-options': { ssoName: null, passwordSignIn: true },
       '/api/access': { publicAccess: visitor.publicAccess ?? false, defaultArea: 'none' },
       '/api/sections': [],
       '/api/works': noWorks,
