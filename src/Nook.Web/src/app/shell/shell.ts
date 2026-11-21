@@ -242,7 +242,12 @@ interface Crumb {
       </hlm-sidebar>
 
       <main hlmSidebarInset>
-        <header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <!-- Sticky with an opaque background on purpose: an iPhone Home Screen app on iOS 26 or later blurs the
+             top of the page under the status bar unless a sizeable fixed or sticky, opaque element touches the
+             top edge. -->
+        <header
+          class="bg-background sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-4"
+        >
           <button
             hlmSidebarTrigger
             type="button"

@@ -13,6 +13,10 @@
     <!-- The manifest's scope is the whole site. Without it, an iPhone Home Screen app treats pages outside the
          one it was added from, such as a work or the reader, as outside the app and puts a browser bar over them. -->
     <link rel="manifest" href="manifest.webmanifest" />
+    <!-- "default" keeps the page below an opaque status bar in an iPhone Home Screen app. "black-translucent"
+         would put the page under the status bar, where iOS 26 and later blur it. iOS reads this when the app is
+         added to the Home Screen: remove the app and add it again to pick up a change. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   </head>
   <body>
     <app-root></app-root>
