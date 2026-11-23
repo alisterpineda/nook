@@ -11,6 +11,9 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
 import { Sections } from '../../core/sections';
 import { Session } from '../../core/session';
+import { fieldLabelled } from '../../testing/field-labelled';
+import { pressEnter } from '../../testing/press-enter';
+import { typeInto } from '../../testing/type-into';
 import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
 import { linkLabelled } from '../../testing/link-labelled';
@@ -189,6 +192,35 @@ describe('WorksListPage', () => {
     }
     expect(page.textContent).not.toContain('Mars');
     expect(page.textContent).not.toContain('EPUB');
+  });
+
+  it('shows a search box labelled Search the library', async () => {
+    const { page } = await openList('/library');
+
+    expect(fieldLabelled(page, 'Search the library').type).toBe('search');
+
+    const inSection = await openList(`/library?section=${comicsId}`);
+
+    expect(fieldLabelled(inSection.page, 'Search the library').type).toBe('search');
+  });
+
+  it('the search box shows the term the URL names', async () => {
+    const { page } = await openList('/library?q=dune', [dune]);
+
+    expect(fieldLabelled(page, 'Search the library').value).toBe('dune');
+  });
+
+  it('pressing Enter in the search box asks for the works that match, across the whole library', async () => {
+    const { page } = await openList(`/library?section=${comicsId}&sort=added&page=2`, [dune], 120);
+    const box = fieldLabelled(page, 'Search the library');
+
+    typeInto(box, 'hail');
+    pressEnter(box);
+    const request = await answerNext(page, [inDefault], 1);
+
+    expect(request.request.params.get('Search')).toBe('hail');
+    expect(request.request.params.has('SectionId')).toBe(false);
+    expect(request.request.params.get('Offset')).toBe('0');
   });
 
   it('the heading reads Library', async () => {
@@ -463,7 +495,9 @@ describe('WorksListPage', () => {
     const { page } = await openList('/library', [dune], 120);
 
     expect(
-      page.querySelectorAll('input, select, [role="combobox"], [role="listbox"]'),
+      page.querySelectorAll(
+        'input:not([type="search"]), select, [role="combobox"], [role="listbox"]',
+      ),
     ).toHaveLength(0);
     expect(
       Array.from(page.querySelectorAll('button')).map((button) => button.textContent?.trim()),

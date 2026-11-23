@@ -4,7 +4,6 @@ import {
   TestRequest,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { Location } from '@angular/common';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -17,9 +16,7 @@ import { UploadActivity } from '../features/activity/upload-activity';
 import { AddBooks } from '../features/upload/add-books';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { FakeActivityHub, provideFakeActivityHub } from '../testing/fake-activity-hub';
-import { fieldLabelled } from '../testing/field-labelled';
 import { signInAs } from '../testing/sign-in-as';
-import { typeInto } from '../testing/type-into';
 import { flushUploadActivity } from '../testing/upload-fixtures';
 import { Shell } from './shell';
 
@@ -792,255 +789,14 @@ describe('Shell', () => {
     expect(upload.cancelled).toBe(false);
   });
 
-  describe('search box', () => {
-    const pause = 300;
+  it('the header holds no search field', async () => {
+    const shell = await openShell('/library');
+    expect(shell.querySelector('header')?.querySelector('input')).toBeNull();
+  });
 
-    afterEach(() => vi.useRealTimers());
-
-    /** Opens the shell at `url` with the clock under the test's control from then on. */
-    async function openWithClock(url: string): Promise<HTMLElement> {
-      const shell = await openShell(url);
-      vi.useFakeTimers();
-      return shell;
-    }
-
-    function box(shell: HTMLElement): HTMLInputElement {
-      return fieldLabelled(shell, 'Search the library');
-    }
-
-    function pressEnter(input: HTMLInputElement): void {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-    }
-
-    async function wait(ms: number): Promise<void> {
-      await vi.advanceTimersByTimeAsync(ms);
-      harness.detectChanges();
-    }
-
-    it('shows a search box labelled Search the library to a signed-in user', async () => {
-      const shell = await openShell('/library');
-
-      expect(shell.querySelector('header')?.contains(box(shell))).toBe(true);
-      expect(box(shell).type).toBe('search');
-    });
-
-    it('shows the search box to a visitor', async () => {
-      await visitWith({ publicAccess: true, defaultArea: 'browse' });
-      const shell = await openShell('/library');
-
-      expect(shell.querySelector('header')?.contains(box(shell))).toBe(true);
-    });
-
-    it('typing a term and pausing goes to /library?q=<term>', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), ' hail ');
-      await wait(pause);
-
-      expect(router.url).toBe('/library?q=hail');
-    });
-
-    it('goes nowhere before the pause is over', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), 'hail');
-      await wait(pause - 1);
-
-      expect(router.url).toBe('/library');
-    });
-
-    it('Enter searches at once and the pause does nothing more', async () => {
-      const shell = await openWithClock('/library');
-      const navigated = vi.spyOn(router, 'navigate');
-
-      typeInto(box(shell), 'hail');
-      pressEnter(box(shell));
-      await wait(0);
-      expect(router.url).toBe('/library?q=hail');
-      await wait(pause);
-
-      expect(navigated).toHaveBeenCalledTimes(1);
-    });
-
-    it('goes nowhere for a box that is empty or holds only spaces', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), '   ');
-      pressEnter(box(shell));
-      await wait(pause);
-
-      expect(router.url).toBe('/library');
-    });
-
-    it('searching from a section leaves the section, sort and page out of the URL', async () => {
-      const shell = await openWithClock(`/library?section=${books.id}&sort=title&page=2`);
-
-      typeInto(box(shell), 'hail');
-      await wait(pause);
-
-      expect(router.url).toBe('/library?q=hail');
-    });
-
-    it("searching from a work's page goes to the library", async () => {
-      const shell = await openWithClock('/works/42');
-
-      typeInto(box(shell), 'hail');
-      await wait(pause);
-
-      expect(router.url).toBe('/library?q=hail');
-    });
-
-    it('refining a term leaves one step back to the library', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), 'h');
-      await wait(pause);
-      typeInto(box(shell), 'ha');
-      await wait(pause);
-      expect(router.url).toBe('/library?q=ha');
-      TestBed.inject(Location).back();
-      await wait(10);
-
-      // The router is not listening to the browser's history in this set-up, so the history itself is read.
-      expect(TestBed.inject(Location).path()).toBe('/library');
-    });
-
-    it('shows the term the URL names', async () => {
-      const shell = await openWithClock('/library?q=weir');
-
-      expect(box(shell).value).toBe('weir');
-    });
-
-    it("is empty on a work's page after a search", async () => {
-      const shell = await openWithClock('/library?q=weir');
-
-      await router.navigateByUrl('/works/42');
-      await wait(0);
-
-      expect(box(shell).value).toBe('');
-    });
-
-    it('keeps a trailing space while the user types', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), 'hail ');
-      await wait(pause);
-      expect(router.url).toBe('/library?q=hail');
-      await wait(0);
-
-      expect(box(shell).value).toBe('hail ');
-    });
-
-    it('keeps what was typed while an earlier search was still on its way', async () => {
-      const shell = await openWithClock('/works/42');
-
-      typeInto(box(shell), 'hail');
-      vi.advanceTimersByTime(pause);
-      typeInto(box(shell), 'hail mary');
-      await wait(0);
-      expect(router.url).toBe('/library?q=hail');
-      expect(box(shell).value).toBe('hail mary');
-
-      await wait(pause);
-      expect(router.url).toBe('/library?q=hail%20mary');
-    });
-
-    it('shows the term again on coming back to a search', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), 'hail');
-      await wait(pause);
-      await router.navigateByUrl('/works/42');
-      await wait(0);
-      expect(box(shell).value).toBe('');
-      await router.navigateByUrl('/library?q=hail');
-      await wait(0);
-
-      expect(box(shell).value).toBe('hail');
-    });
-
-    function clearButton(shell: HTMLElement): HTMLButtonElement | null {
-      return shell.querySelector<HTMLButtonElement>('header button[aria-label="Clear search"]');
-    }
-
-    it('the clear button empties the box and shows the whole library', async () => {
-      const shell = await openWithClock('/library?q=weir');
-      const navigated = vi.spyOn(router, 'navigate');
-
-      clearButton(shell)?.click();
-      await wait(0);
-
-      expect(box(shell).value).toBe('');
-      expect(router.url).toBe('/library');
-      expect(navigated.mock.calls[0][1]).toMatchObject({ replaceUrl: true });
-    });
-
-    it('the clear button calls off a search that was waiting for the pause', async () => {
-      const shell = await openWithClock('/library');
-
-      typeInto(box(shell), 'hail');
-      await wait(0);
-      clearButton(shell)?.click();
-      await wait(pause);
-
-      expect(box(shell).value).toBe('');
-      expect(router.url).toBe('/library');
-    });
-
-    it('emptying the box by hand shows the whole library', async () => {
-      const shell = await openWithClock('/library?q=weir');
-
-      typeInto(box(shell), '');
-      await wait(pause - 1);
-      expect(router.url).toBe('/library?q=weir');
-      await wait(1);
-      expect(router.url).toBe('/library');
-
-      await router.navigateByUrl('/library?q=weir');
-      await wait(0);
-      typeInto(box(shell), '');
-      pressEnter(box(shell));
-      await wait(0);
-      expect(router.url).toBe('/library');
-    });
-
-    it('has no clear button while the box is empty', async () => {
-      const shell = await openWithClock('/library');
-      expect(clearButton(shell)).toBeNull();
-
-      typeInto(box(shell), 'h');
-      await wait(0);
-      expect(clearButton(shell)).not.toBeNull();
-
-      typeInto(box(shell), '');
-      await wait(0);
-      expect(clearButton(shell)).toBeNull();
-    });
-
-    it('a box of only spaces shows the whole library and puts no q in the URL', async () => {
-      const shell = await openWithClock('/library?q=weir');
-
-      typeInto(box(shell), '   ');
-      await wait(pause);
-
-      expect(router.url).toBe('/library');
-    });
-
-    it('emptying the box where no search is showing goes nowhere', async () => {
-      const shell = await openWithClock('/works/42');
-
-      typeInto(box(shell), 'hail');
-      await wait(0);
-      typeInto(box(shell), '');
-      await wait(pause);
-      expect(router.url).toBe('/works/42');
-
-      typeInto(box(shell), 'hail');
-      await wait(0);
-      clearButton(shell)?.click();
-      await wait(pause);
-      expect(box(shell).value).toBe('');
-      expect(router.url).toBe('/works/42');
-    });
+  it('the header holds no search field for a visitor with public access', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'browse' });
+    const shell = await openShell('/library');
+    expect(shell.querySelector('header')?.querySelector('input')).toBeNull();
   });
 });

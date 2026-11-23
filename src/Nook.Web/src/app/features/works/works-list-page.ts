@@ -17,6 +17,7 @@ import { Sections, libraryName } from '../../core/sections';
 import { Session } from '../../core/session';
 import { LoadFailed } from '../../ui/load-failed';
 import { pageHeading } from '../../ui/page-heading';
+import { SearchBox } from './search-box';
 import { WorkCard } from './work-card';
 import { workGrid } from './work-grid';
 import { WorkGridSkeleton } from './work-grid-skeleton';
@@ -73,6 +74,7 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
     HlmEmptyImports,
     HlmToggleGroupImports,
     LoadFailed,
+    SearchBox,
     WorkCard,
     WorkGridSkeleton,
   ],
@@ -81,21 +83,24 @@ function sortOptionsFor(term: string | null): readonly { value: WorkSort; label:
     @let shownQuery = query();
     <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
       <h1 [class]="pageHeading">{{ heading() }}</h1>
-      <div
-        hlmToggleGroup
-        type="single"
-        variant="outline"
-        size="sm"
-        aria-label="Sort by"
-        [nullable]="false"
-        [value]="shownQuery.sort"
-        (valueChange)="sortBy($event)"
-      >
-        @for (option of sortOptionsFor(shownQuery.term); track option.value) {
-          <button hlmToggleGroupItem type="button" [value]="option.value">
-            {{ option.label }}
-          </button>
-        }
+      <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+        <app-search-box class="block w-full sm:w-72" />
+        <div
+          hlmToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          aria-label="Sort by"
+          [nullable]="false"
+          [value]="shownQuery.sort"
+          (valueChange)="sortBy($event)"
+        >
+          @for (option of sortOptionsFor(shownQuery.term); track option.value) {
+            <button hlmToggleGroupItem type="button" [value]="option.value">
+              {{ option.label }}
+            </button>
+          }
+        </div>
       </div>
     </div>
     @let current = listing();

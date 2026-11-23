@@ -23,7 +23,7 @@ import { SignInPage } from './features/sign-in/sign-in-page';
 import { UsersPage } from './features/users/users-page';
 import { WorkDetailPage } from './features/works/work-detail-page';
 import { WorksListPage } from './features/works/works-list-page';
-import { SearchBox } from './shell/search-box';
+import { SearchBox } from './features/works/search-box';
 import { Shell } from './shell/shell';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];

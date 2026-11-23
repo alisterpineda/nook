@@ -44,7 +44,6 @@ import { UploadActivity } from '../features/activity/upload-activity';
 import { AddBooks } from '../features/upload/add-books';
 import { DropOverlay } from '../features/upload/drop-overlay';
 import { UploadQueue } from '../features/upload/upload-queue';
-import { SearchBox } from './search-box';
 import { ThemeDialog } from './theme-dialog';
 
 /** One step of the header's trail to the page that is open. */
@@ -72,7 +71,6 @@ interface Crumb {
     HlmDropdownMenuImports,
     HlmSidebarImports,
     HlmSkeletonImports,
-    SearchBox,
     ActivityButton,
     DropOverlay,
   ],
@@ -258,7 +256,7 @@ interface Crumb {
               }
             </ol>
           </nav>
-          <app-search-box class="flex-1 md:w-72 md:flex-none" />
+          <div class="flex-1 md:hidden"></div>
           @if (session.user()) {
             <app-activity-button />
           }

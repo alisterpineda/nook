@@ -2,13 +2,13 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Params, Router, isActive } from '@angular/router';
 import { HlmInputImports } from '@spartan-ng/helm/input';
-import { readTerm, termParam } from '../core/search-term';
+import { readTerm, termParam } from '../../core/search-term';
 
 /** How long typing must stop before the box searches. */
 const pauseMs = 300;
 
 /**
- * The search box in the shell's header. It searches everything the caller can see and shows its matches in the list
+ * The search box on the library page. It searches everything the caller can see and shows its matches in the list
  * of works at `/library?q=<term>`: after a pause in typing, or at once on Enter. It shows the term the address names
  * while the list is open, and is empty on every other page. Emptying it, by hand or with its clear button, ends a
  * search and shows the whole library.
