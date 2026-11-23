@@ -38,28 +38,22 @@ public partial class WorksController(
         string? tsQuery = null;
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            var words = SearchWords.Of(query.Search);
-            if (words.Count == 0)
+            tsQuery = WorkSearch.QueryFor(query.Search);
+            if (tsQuery is null)
             {
                 return new Page<WorkSummaryResponse>([], 0, query.Offset, query.Limit);
             }
 
-            tsQuery = SearchQuery(words);
-            var matching = tsQuery;
-            works = works.Where(w => w.SearchVector!.Matches(EF.Functions.ToTsQuery("nook", matching)));
+            works = works.Matching(tsQuery);
         }
 
         var total = await works.CountAsync(cancellationToken);
 
         // The id breaks ties, so a work never shows on two pages or on none.
         var sort = query.Sort ?? (tsQuery is null ? WorkSort.Title : WorkSort.Relevance);
-        var ranking = tsQuery;
         works = sort switch
         {
-            WorkSort.Relevance => works
-                .OrderByDescending(w => w.SearchVector!.Rank(EF.Functions.ToTsQuery("nook", ranking!)))
-                .ThenBy(w => w.SortTitle)
-                .ThenBy(w => w.Id),
+            WorkSort.Relevance => works.ByRelevance(tsQuery!),
             WorkSort.Added => works.OrderByDescending(w => w.CreatedAt).ThenByDescending(w => w.Id),
             _ => works.OrderBy(w => w.SortTitle).ThenBy(w => w.Id),
         };
@@ -72,9 +66,6 @@ public partial class WorksController(
 
         return new Page<WorkSummaryResponse>(items, total, query.Offset, query.Limit);
     }
-
-    /// <summary>The words as a query where every one must match and the last matches as the start of a word.</summary>
-    private static string SearchQuery(IReadOnlyList<string> words) => string.Join(" & ", words) + ":*";
 
     /// <summary>One work, with its contributors, tags, external ids and items.</summary>
     [HttpGet("{id:guid}")]
