@@ -1,6 +1,6 @@
 import { DOCUMENT, DestroyRef, Injectable, inject } from '@angular/core';
 import { ReaderLocator, ReaderPlace } from './reader-engine';
-import { readStoredJson, writeStoredJson } from './reader-storage';
+import { readStoredJson, writeStoredJson } from '../../core/stored-json';
 
 /** The least time between two writes of one book's place while the reader keeps moving. */
 const writeInterval = 1000;

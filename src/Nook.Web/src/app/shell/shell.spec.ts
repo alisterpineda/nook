@@ -11,6 +11,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
 import { PageName } from '../core/page-name';
+import { AppTheme } from '../core/app-theme';
 import { Session } from '../core/session';
 import { UploadActivity } from '../features/activity/upload-activity';
 import { AddBooks } from '../features/upload/add-books';
@@ -212,19 +213,24 @@ describe('Shell', () => {
     return button;
   }
 
-  async function signOutFromTheFooterMenu(shell: HTMLElement): Promise<void> {
+  /** Opens the user's menu in the sidebar's footer and presses its item called `name`. */
+  async function chooseFromTheFooterMenu(shell: HTMLElement, name: string): Promise<void> {
     shell.querySelector<HTMLElement>('[data-slot="sidebar-footer"] button')!.click();
     await harness.fixture.whenStable();
-    const signOut = await vi.waitFor(() => {
-      const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-        (candidate) => candidate.textContent?.trim() === 'Sign out',
+    const item = await vi.waitFor(() => {
+      const found = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (candidate) => candidate.textContent?.trim() === name,
       );
-      if (!item) {
-        throw new Error('The menu has no "Sign out" item.');
+      if (!found) {
+        throw new Error(`The menu has no "${name}" item.`);
       }
-      return item;
+      return found;
     });
-    signOut.click();
+    item.click();
+  }
+
+  function signOutFromTheFooterMenu(shell: HTMLElement): Promise<void> {
+    return chooseFromTheFooterMenu(shell, 'Sign out');
   }
 
   it('lists Library, then Default, then the sections', async () => {
@@ -426,6 +432,39 @@ describe('Shell', () => {
     expect(shell.querySelector('[data-slot="sidebar-footer"]')?.textContent).toContain(
       'ada@example.com',
     );
+  });
+
+  it('the footer menu opens a dialog that chooses the theme, and stays open', async () => {
+    const shell = await openShell('/library');
+    const theme = TestBed.inject(AppTheme);
+
+    await chooseFromTheFooterMenu(shell, 'Theme');
+    await harness.fixture.whenStable();
+
+    const themes = (): HTMLElement[] =>
+      Array.from(document.querySelectorAll<HTMLElement>('app-theme-dialog button'));
+    await vi.waitFor(() =>
+      expect(themes().map((item) => item.textContent?.trim())).toEqual(['Auto', 'Light', 'Dark']),
+    );
+    const chosen = (): (string | null)[] => themes().map((item) => item.getAttribute('data-state'));
+    expect(chosen()).toEqual(['on', 'off', 'off']);
+
+    try {
+      themes()[2].click();
+      await harness.fixture.whenStable();
+
+      expect(theme.choice()).toBe('dark');
+      expect(document.documentElement.classList.contains('dark')).toBe(true);
+      expect(chosen()).toEqual(['off', 'off', 'on']);
+
+      // Pressing the theme already chosen leaves it chosen.
+      themes()[2].click();
+      await harness.fixture.whenStable();
+      expect(theme.choice()).toBe('dark');
+    } finally {
+      theme.choose('auto');
+      localStorage.removeItem('nook.theme');
+    }
   });
 
   it('sign out ends the session and goes to /sign-in', async () => {

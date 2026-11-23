@@ -49,7 +49,7 @@ import {
   readerThemeColours,
 } from './reader-engine';
 import { ReaderPlaceStore } from './reader-place-store';
-import { SystemTheme } from '../../core/system-theme';
+import { AppTheme } from '../../core/app-theme';
 import {
   KeptReaderSettings,
   ReaderSettingsStore,
@@ -499,7 +499,7 @@ export class ReaderPage {
   private readonly places = inject(ReaderPlaceStore);
   private readonly settingsStore = inject(ReaderSettingsStore);
   private readonly document = inject(DOCUMENT);
-  private readonly systemTheme = inject(SystemTheme);
+  private readonly appTheme = inject(AppTheme);
   private readonly book = viewChild.required<ElementRef<HTMLElement>>('book');
 
   protected readonly couldNotShow = couldNotShow;
@@ -521,7 +521,7 @@ export class ReaderPage {
   /** The theme the book is in: the one chosen, or on auto the app's light or dark. */
   protected readonly theme = computed<ReaderTheme>(() => {
     const { theme } = this.settings();
-    return theme !== 'auto' ? theme : this.systemTheme.dark() ? 'dark' : 'light';
+    return theme !== 'auto' ? theme : this.appTheme.dark() ? 'dark' : 'light';
   });
   /** How the book is shown: what the engine was last given, or is given as soon as the book has opened. */
   private readonly shown = computed<ReaderSettings>(() => ({
@@ -557,7 +557,7 @@ export class ReaderPage {
     destroyRef.onDestroy(() => this.leave());
     // A book on the auto theme changes colours with the app. A theme chosen in the settings is applied as it is chosen.
     effect(() => {
-      this.systemTheme.dark();
+      this.appTheme.dark();
       untracked(() => {
         if (this.settings().theme !== 'auto') {
           return;

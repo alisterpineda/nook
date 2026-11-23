@@ -1,5 +1,5 @@
 /**
- * What the reader keeps in the browser's storage, as JSON. Storage that fails (private mode, a full quota) is
+ * What the app keeps in the browser's storage, as JSON. Storage that fails (private mode, a full quota) is
  * ignored: nothing is read, and nothing is kept.
  */
 

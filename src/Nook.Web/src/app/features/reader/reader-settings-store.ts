@@ -8,7 +8,7 @@ import {
   readerMargins,
   readerThemes,
 } from './reader-engine';
-import { readStoredJson, writeStoredJson } from './reader-storage';
+import { readStoredJson, writeStoredJson } from '../../core/stored-json';
 
 /** Where the settings are kept: one entry for every book. */
 const key = 'nook.reader.settings';

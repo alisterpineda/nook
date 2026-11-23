@@ -19,12 +19,14 @@ import {
   lucideListChecks,
   lucideLogOut,
   lucideScrollText,
+  lucideSunMoon,
   lucideUpload,
   lucideUserCog,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { HlmBreadcrumbImports } from '@spartan-ng/helm/breadcrumb';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
+import { HlmDialogService } from '@spartan-ng/helm/dialog';
 import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
@@ -43,6 +45,7 @@ import { AddBooks } from '../features/upload/add-books';
 import { DropOverlay } from '../features/upload/drop-overlay';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { SearchBox } from './search-box';
+import { ThemeDialog } from './theme-dialog';
 
 /** One step of the header's trail to the page that is open. */
 interface Crumb {
@@ -55,7 +58,7 @@ interface Crumb {
 /**
  * The frame around every page of the library: a sidebar that collapses to its icons, with the app's name, then
  * "Library", then "Default" and the caller's sections when there are any, then "Authors" and, for whoever may upload,
- * "Add books", which opens a dialog, then "Users", "Public access", "Jobs" and "Audit log" under "Admin" for an admin, the user's menu in its footer, and the page itself beside
+ * "Add books", which opens a dialog, then "Users", "Public access", "Jobs" and "Audit log" under "Admin" for an admin, the user's menu in its footer, which opens a dialog for the app's theme, and the page itself beside
  * it under a header that says where the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
  */
 @Component({
@@ -83,6 +86,7 @@ interface Crumb {
       lucideListChecks,
       lucideLogOut,
       lucideScrollText,
+      lucideSunMoon,
       lucideUpload,
       lucideUserCog,
       lucideUsers,
@@ -276,6 +280,11 @@ interface Crumb {
           {{ session.user()?.email }}
         </div>
         <div hlmDropdownMenuSeparator></div>
+        <button hlmDropdownMenuItem type="button" (triggered)="openTheme()">
+          <ng-icon name="lucideSunMoon" />
+          Theme
+        </button>
+        <div hlmDropdownMenuSeparator></div>
         <button hlmDropdownMenuItem type="button" (triggered)="signOut()">
           <ng-icon name="lucideLogOut" />
           Sign out
@@ -299,6 +308,7 @@ export class Shell {
   private readonly hub = inject(ActivityHub);
 
   protected readonly session = inject(Session);
+  private readonly dialogs = inject(HlmDialogService);
   protected readonly appName = appName;
   protected readonly sections = this.sectionStore.list;
   protected readonly signOutFailed = signal(false);
@@ -411,6 +421,11 @@ export class Shell {
       const page = this.crumbs().at(-1)?.label;
       this.title.setTitle(tabTitle(page));
     });
+  }
+
+  /** Opens the dialog that chooses the app's theme. */
+  protected openTheme(): void {
+    this.dialogs.open(ThemeDialog, { contentClass: 'sm:max-w-sm' });
   }
 
   protected async signOut(): Promise<void> {

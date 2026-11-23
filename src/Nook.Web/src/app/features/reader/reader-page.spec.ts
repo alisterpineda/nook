@@ -13,7 +13,7 @@ import {
   ReaderSettings,
   readerThemeColours,
 } from './reader-engine';
-import { SystemTheme } from '../../core/system-theme';
+import { AppTheme } from '../../core/app-theme';
 import { ReaderPage } from './reader-page';
 import { KeptReaderSettings } from './reader-settings-store';
 import { FakeReaderEngine, provideFakeReaderEngine } from './testing/fake-reader-engine';
@@ -54,7 +54,7 @@ describe('ReaderPage', () => {
           { path: 'works/:workId/read/:itemId', component: ReaderPage },
         ]),
         provideLocationMocks(),
-        { provide: SystemTheme, useValue: { dark: appIsDark } },
+        { provide: AppTheme, useValue: { dark: appIsDark } },
         ...providers,
       ],
     });
