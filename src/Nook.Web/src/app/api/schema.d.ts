@@ -165,6 +165,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Offset?: number;
+                    Limit?: number;
+                    Sort?: components["schemas"]["UserSort"];
+                    Direction?: components["schemas"]["SortDirection"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PageOfUserSummaryResponse"];
+                        "application/json": components["schemas"]["PageOfUserSummaryResponse"];
+                        "text/json": components["schemas"]["PageOfUserSummaryResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/uploads/limits": {
         parameters: {
             query?: never;
@@ -1816,6 +1869,15 @@ export interface components {
             /** Format: int32 */
             limit: number;
         };
+        PageOfUserSummaryResponse: {
+            items: components["schemas"]["UserSummaryResponse"][];
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            offset: number;
+            /** Format: int32 */
+            limit: number;
+        };
         PageOfWorkSummaryResponse: {
             items: components["schemas"]["WorkSummaryResponse"][];
             /** Format: int32 */
@@ -1932,6 +1994,8 @@ export interface components {
             ssoName: null | string;
             passwordSignIn: boolean;
         };
+        /** @enum {unknown} */
+        SortDirection: "asc" | "desc";
         /** Format: binary */
         Stream: string;
         UploadActivityResponse: {
@@ -1959,6 +2023,20 @@ export interface components {
         UploadResponse: {
             /** Format: uuid */
             jobId: string;
+        };
+        /** @enum {unknown} */
+        UserSort: "name" | "email" | "role" | "joined";
+        UserSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            email: string;
+            role: string;
+            /** Format: date-time */
+            joinedAt: string;
+            hasPassword: boolean;
+            hasSingleSignOn: boolean;
+            hasAuditEntries: boolean;
         };
         ValidationProblemDetails: {
             type?: null | string;

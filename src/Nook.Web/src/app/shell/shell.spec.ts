@@ -41,6 +41,9 @@ class JobsStub {}
 @Component({ template: '<h1>Audit log</h1>' })
 class AuditLogStub {}
 
+@Component({ template: '<h1>Users</h1>' })
+class UsersStub {}
+
 @Component({ template: '<h1>Authors</h1>' })
 class AuthorsStub {}
 
@@ -108,6 +111,7 @@ describe('Shell', () => {
               { path: 'public-access', component: PublicAccessStub },
               { path: 'jobs', component: JobsStub },
               { path: 'audit-log', component: AuditLogStub },
+              { path: 'users', component: UsersStub },
               { path: 'authors', component: AuthorsStub },
               { path: 'people/:id', component: PersonStub },
             ],
@@ -319,6 +323,13 @@ describe('Shell', () => {
     expect(document.title).toBe('Audit log · Nook');
   });
 
+  it('names the Users page in the header', async () => {
+    const shell = await openShell('/users?sort=joined');
+
+    expect(trail(shell)).toEqual([['Users', null]]);
+    expect(document.title).toBe('Users · Nook');
+  });
+
   it('the header shows the section being browsed under Library', async () => {
     const shell = await openShell(`/library?section=${comics.id}`);
 
@@ -460,6 +471,7 @@ describe('Shell', () => {
       ['Public access', '/public-access'],
       ['Jobs', '/jobs'],
       ['Audit log', '/audit-log'],
+      ['Users', '/users'],
     ]);
 
     for (const user of [grace, viewer]) {
@@ -491,6 +503,16 @@ describe('Shell', () => {
     await router.navigateByUrl('/audit-log?person=x');
     await harness.fixture.whenStable();
     expect(current()).toEqual(['Audit log']);
+  });
+
+  it('marks Users current on its own page and nothing else', async () => {
+    const shell = await openShell('/users?page=2');
+
+    expect(
+      Array.from(shell.querySelectorAll('nav a[aria-current="page"]'), (link) =>
+        link.textContent?.trim(),
+      ),
+    ).toEqual(['Users']);
   });
 
   it('opens the Add books dialog from the sidebar for a contributor', async () => {

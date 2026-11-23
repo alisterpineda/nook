@@ -20,6 +20,7 @@ import {
 } from './features/reader/testing/fake-reader-engine';
 import { SetupPage } from './features/setup/setup-page';
 import { SignInPage } from './features/sign-in/sign-in-page';
+import { UsersPage } from './features/users/users-page';
 import { WorkDetailPage } from './features/works/work-detail-page';
 import { WorksListPage } from './features/works/works-list-page';
 import { SearchBox } from './shell/search-box';
@@ -102,6 +103,7 @@ describe('routes', () => {
       '/api/jobs': { items: [], total: 0, offset: 0, limit: 50 },
       '/api/audit-log': { items: [], total: 0, offset: 0, limit: 50 },
       '/api/audit-log/filters': { actors: [], actions: [] },
+      '/api/users': { items: [], total: 0, offset: 0, limit: 50 },
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
     };
   }
@@ -308,5 +310,23 @@ describe('routes', () => {
         ).toEqual({ landedOn: '/library', shown: true });
       }
     }
+  });
+
+  it('keeps /users to admins', async () => {
+    expect(
+      await open('/users', { signedIn: true, setupRequired: false, role: 'admin' }, UsersPage),
+    ).toEqual({ landedOn: '/users', shown: true });
+    for (const role of ['contributor', 'viewer'] as const) {
+      expect(
+        await open('/users', { signedIn: true, setupRequired: false, role }, WorksListPage),
+      ).toEqual({ landedOn: '/library', shown: true });
+    }
+    expect(
+      await open(
+        '/users',
+        { signedIn: false, setupRequired: false, publicAccess: true },
+        WorksListPage,
+      ),
+    ).toEqual({ landedOn: '/library', shown: true });
   });
 });

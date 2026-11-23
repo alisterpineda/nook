@@ -32,6 +32,7 @@
     "@readium/shared": "2.9.0",
     "@spartan-ng/brain": "^1.9.0",
     "@tailwindcss/postcss": "^4.3.5",
+    "@tanstack/angular-table": "^9.3.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "postcss": "^8.5.32",

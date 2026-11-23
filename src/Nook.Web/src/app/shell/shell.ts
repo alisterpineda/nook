@@ -20,6 +20,7 @@ import {
   lucideLogOut,
   lucideScrollText,
   lucideUpload,
+  lucideUserCog,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { HlmBreadcrumbImports } from '@spartan-ng/helm/breadcrumb';
@@ -54,7 +55,7 @@ interface Crumb {
 /**
  * The frame around every page of the library: a sidebar that collapses to its icons, with the app's name, then
  * "Library", then "Default" and the caller's sections when there are any, then "Authors" and, for whoever may upload,
- * "Add books", which opens a dialog, then "Public access", "Jobs" and "Audit log" for an admin, the user's menu in its footer, and the page itself beside
+ * "Add books", which opens a dialog, then "Public access", "Jobs", "Audit log" and "Users" for an admin, the user's menu in its footer, and the page itself beside
  * it under a header that says where the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
  */
 @Component({
@@ -83,6 +84,7 @@ interface Crumb {
       lucideLogOut,
       lucideScrollText,
       lucideUpload,
+      lucideUserCog,
       lucideUsers,
     }),
   ],
@@ -200,6 +202,19 @@ interface Crumb {
                   >
                     <ng-icon name="lucideScrollText" />
                     <span>Audit log</span>
+                  </a>
+                </li>
+                <li hlmSidebarMenuItem>
+                  <a
+                    hlmSidebarMenuButton
+                    routerLink="/users"
+                    closeMobileSidebarOnClick
+                    tooltip="Users"
+                    [isActive]="onUsers()"
+                    [attr.aria-current]="onUsers() ? 'page' : null"
+                  >
+                    <ng-icon name="lucideUserCog" />
+                    <span>Users</span>
                   </a>
                 </li>
               </ul>
@@ -332,6 +347,7 @@ export class Shell {
   });
   protected readonly onJobs = isActive('/jobs', this.router, { queryParams: 'ignored' });
   protected readonly onAuditLog = isActive('/audit-log', this.router, { queryParams: 'ignored' });
+  protected readonly onUsers = isActive('/users', this.router, { queryParams: 'ignored' });
   protected readonly onAuthors = isActive('/authors', this.router, { queryParams: 'ignored' });
   /**
    * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,
@@ -397,6 +413,8 @@ export class Shell {
         return [{ label: 'Jobs' }];
       case '/audit-log':
         return [{ label: 'Audit log' }];
+      case '/users':
+        return [{ label: 'Users' }];
     }
     const area = readArea(this.queryParams());
     const narrowedTo =
