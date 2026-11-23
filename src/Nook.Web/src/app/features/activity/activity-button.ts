@@ -1,213 +1,90 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, computed, inject } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideActivity } from '@ng-icons/lucide';
+import { lucideBell } from '@ng-icons/lucide';
 import { HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmPopoverImports } from '@spartan-ng/helm/popover';
-import { HlmProgressImports } from '@spartan-ng/helm/progress';
-import { ActivityApi } from '../../api/activity-api';
-import { components } from '../../api/schema';
-import { somethingWentWrong } from '../../core/messages';
-import { UploadQueue } from '../upload/upload-queue';
-import { UploadActivity } from './upload-activity';
-
-type UploadActivityResponse = components['schemas']['UploadActivityResponse'];
-
-/** What a failed upload says for each kind of failure; a failure with no kind reads as an internal one. */
-const failureSentences = {
-  unsupportedFormat: 'This file is not a supported book format.',
-  unreadable: 'This file could not be read. It may be damaged.',
-  internal: 'Something went wrong while adding this file.',
-} as const;
-
-const statusLabels: Record<UploadActivityResponse['status'], string> = {
-  queued: 'Queued',
-  running: 'Ingesting',
-  added: 'Added',
-  duplicate: 'Duplicate',
-  failed: 'Failed',
-};
-
-/** One line of the list, whether the file is still in this tab or the server holds its upload. */
-interface Entry {
-  key: string;
-  name: string;
-  label: string;
-  /** How much of the file has been sent, while it is being sent. */
-  percent?: number;
-  /** The work an added or duplicate upload leads to. */
-  workId: string | null;
-  failed: boolean;
-  /** Why the upload failed, in words fit for the person who made it. */
-  reason?: string;
-  retry(): void;
-  remove(): void;
-}
+import { Session } from '../../core/session';
+import { ActivitySummary } from './activity-summary';
+import { UploadsSection } from './uploads-section';
+import { UploadsSummary } from './uploads-summary';
 
 /**
- * The header's Activity button. Its popover lists the files in this tab that are waiting, being sent or refused,
- * above the uploads the server holds. Its badge counts the uploads in flight, or, when any has failed, the ones that
- * failed.
+ * The header's Notifications button, a bell whose name is read out and shown on hover. Its popover holds one
+ * section for each kind of activity the user has, and its badge adds up what the sections say: the things in
+ * flight, or, when any has failed, the ones that failed. A section with nothing in it is left out. Someone who
+ * could never have a section to see gets no button.
  */
 @Component({
   selector: 'app-activity-button',
-  imports: [
-    NgIcon,
-    RouterLink,
-    HlmBadgeImports,
-    HlmButtonImports,
-    HlmPopoverImports,
-    HlmProgressImports,
-  ],
-  providers: [provideIcons({ lucideActivity })],
+  imports: [NgIcon, HlmBadgeImports, HlmButtonImports, HlmPopoverImports, UploadsSection],
+  providers: [provideIcons({ lucideBell })],
   template: `
-    <hlm-popover align="end" sideOffset="4">
-      <button hlmPopoverTrigger hlmBtn variant="outline" size="sm" type="button">
-        <ng-icon name="lucideActivity" aria-hidden="true" />
-        <span class="max-md:sr-only">Activity</span>
-        @if (badge(); as badge) {
-          <span hlmBadge [variant]="badge.failed ? 'destructive' : 'default'">{{
-            badge.count
-          }}</span>
-        }
-      </button>
-      <ng-template hlmPopoverPortal>
-        <hlm-popover-content class="w-96 max-w-[calc(100vw-2rem)]">
-          <div hlmPopoverHeader>
-            <h2 hlmPopoverTitle>Activity</h2>
-          </div>
-          @if (entries().length === 0) {
-            <p class="text-muted-foreground">No uploads yet.</p>
-          } @else {
-            <ul class="flex max-h-96 flex-col gap-3 overflow-y-auto">
-              @for (entry of entries(); track entry.key) {
-                <li class="flex flex-col gap-1">
-                  <span class="truncate font-medium" [title]="entry.name">{{ entry.name }}</span>
-                  <span class="text-muted-foreground text-xs">
-                    @if (entry.workId) {
-                      <a
-                        class="text-foreground underline"
-                        [routerLink]="['/works', entry.workId]"
-                        >{{ entry.label }}</a
-                      >
-                    } @else {
-                      <span [class.text-destructive]="entry.failed">{{ entry.label }}</span>
-                    }
-                    @if (entry.percent !== undefined) {
-                      {{ entry.percent }}%
-                    }
-                  </span>
-                  @if (entry.percent !== undefined) {
-                    <hlm-progress [value]="entry.percent" aria-label="Upload progress">
-                      <hlm-progress-indicator />
-                    </hlm-progress>
-                  }
-                  @if (entry.failed) {
-                    <p class="text-destructive text-xs">{{ entry.reason }}</p>
-                    @if (problems()[entry.key]; as problem) {
-                      <p class="text-destructive text-xs" role="alert">{{ problem }}</p>
-                    }
-                    <div class="flex gap-2">
-                      <button
-                        hlmBtn
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        (click)="entry.retry()"
-                      >
-                        Retry
-                      </button>
-                      <button
-                        hlmBtn
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        (click)="entry.remove()"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  }
-                </li>
-              }
-            </ul>
+    @if (hasSections()) {
+      <hlm-popover align="end" sideOffset="4">
+        <button
+          hlmPopoverTrigger
+          hlmBtn
+          variant="outline"
+          size="sm"
+          type="button"
+          title="Notifications"
+        >
+          <ng-icon name="lucideBell" aria-hidden="true" />
+          <span class="sr-only">Notifications</span>
+          @if (badge(); as badge) {
+            <span hlmBadge [variant]="badge.failed ? 'destructive' : 'default'">{{
+              badge.count
+            }}</span>
           }
-        </hlm-popover-content>
-      </ng-template>
-    </hlm-popover>
+        </button>
+        <ng-template hlmPopoverPortal>
+          <hlm-popover-content class="w-96 max-w-[calc(100vw-2rem)]">
+            <div hlmPopoverHeader>
+              <h2 hlmPopoverTitle>Notifications</h2>
+            </div>
+            @if (showsUploads()) {
+              <app-uploads-section />
+            } @else {
+              <p class="text-muted-foreground">No notifications yet.</p>
+            }
+          </hlm-popover-content>
+        </ng-template>
+      </hlm-popover>
+    }
   `,
 })
 export class ActivityButton {
-  private readonly queue = inject(UploadQueue);
-  private readonly activity = inject(UploadActivity);
-  private readonly api = inject(ActivityApi);
+  private readonly session = inject(Session);
+  private readonly uploads = inject(UploadsSummary);
 
-  /** What went wrong with a retry or removal, by the key of the row it was for. */
-  protected readonly problems = signal<Record<string, string>>({});
+  /** Whether the user could have uploads to see: only someone who may add books could. */
+  private readonly mayUpload = this.session.canUpload;
 
-  /** The files of this tab, then the server's uploads. */
-  protected readonly entries = computed<Entry[]>(() => [
-    ...this.queue.rows().map((row): Entry => {
-      const failed = row.status === 'failed';
-      return {
-        key: `tab-${row.id}`,
-        name: row.name,
-        label: failed ? 'Failed' : row.status === 'waiting' ? 'Waiting' : 'Uploading',
-        percent: row.status === 'uploading' ? (row.percent ?? 0) : undefined,
-        workId: null,
-        failed,
-        reason: row.error,
-        retry: () => this.queue.retry(row.id),
-        remove: () => this.queue.remove(row.id),
-      };
-    }),
-    ...this.activity.rows().map((row): Entry => {
-      const key = `server-${row.jobId}`;
-      return {
-        key,
-        name: row.fileName,
-        label: statusLabels[row.status],
-        workId: row.status === 'added' || row.status === 'duplicate' ? row.workId : null,
-        failed: row.status === 'failed',
-        reason: failureSentences[row.failure ?? 'internal'],
-        retry: () => void this.change(key, () => this.api.retry(row.jobId)),
-        remove: () => void this.change(key, () => this.api.remove(row.jobId)),
-      };
-    }),
-  ]);
+  /** Whether the popover could ever hold a section for this user. */
+  protected readonly hasSections = computed(() => this.mayUpload());
 
-  /** The number on the badge, or `null` for no badge: the failed uploads when there are any, else those in flight. */
+  /** What each section the user could see has the badge say. */
+  private readonly summaries = computed<ActivitySummary[]>(() =>
+    this.mayUpload() ? [this.uploads.summary()] : [],
+  );
+
+  /** Whether the Uploads section is in the popover: it is while there is an upload to list. */
+  protected readonly showsUploads = computed(
+    () => this.mayUpload() && this.uploads.summary().items > 0,
+  );
+
+  /** The number on the badge, or `null` for no badge: the failed things when there are any, else those in flight. */
   protected readonly badge = computed(() => {
     let failed = 0;
     let inFlight = 0;
-    for (const row of this.queue.rows()) {
-      if (row.status === 'failed') {
-        failed++;
-      } else {
-        inFlight++;
-      }
-    }
-    for (const row of this.activity.rows()) {
-      if (row.status === 'failed') {
-        failed++;
-      } else if (row.status === 'queued' || row.status === 'running') {
-        inFlight++;
-      }
+    for (const summary of this.summaries()) {
+      failed += summary.failed;
+      inFlight += summary.inFlight;
     }
     if (failed > 0) {
       return { count: failed, failed: true };
     }
     return inFlight > 0 ? { count: inFlight, failed: false } : null;
   });
-
-  /** Runs `call` for a server row. The row itself changes through the hub, so only a failure is shown here. */
-  private async change(key: string, call: () => Promise<void>): Promise<void> {
-    this.problems.update((problems) => ({ ...problems, [key]: '' }));
-    try {
-      await call();
-    } catch {
-      this.problems.update((problems) => ({ ...problems, [key]: somethingWentWrong }));
-    }
-  }
 }

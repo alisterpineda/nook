@@ -14,7 +14,10 @@ public class ActivityController(UploadActivity uploads, UserManager<NookUser> us
 {
     private const int UploadLimit = 20;
 
-    /// <summary>The caller's 20 most recent uploads, newest first.</summary>
+    /// <summary>
+    /// The caller's 20 most recent uploads, newest first. One that went through is listed for a day after it was
+    /// submitted, and one still waiting, running or failed for as long as it is.
+    /// </summary>
     [HttpGet("uploads")]
     [ProducesResponseType<IReadOnlyList<UploadActivityResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

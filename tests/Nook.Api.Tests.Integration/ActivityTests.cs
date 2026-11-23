@@ -103,6 +103,30 @@ public class ActivityTests(NookApiFactory factory) : IClassFixture<NookApiFactor
     }
 
     [Fact]
+    public async Task An_upload_that_went_through_is_listed_for_a_day_and_an_unfinished_one_for_as_long_as_it_is()
+    {
+        var (user, client) = await factory.CreateSignedInUserAsync(BuiltInRole.Contributor);
+        using var clientSession = client;
+        var workId = Guid.CreateVersion7();
+        var result = JobJson.Serialize(new IngestResult(IngestOutcome.Created, Guid.CreateVersion7(), workId));
+        var recent = await SubmitAsync(user, "recent.epub", null, JobStatus.Succeeded, result: result);
+        var old = await SubmitAsync(user, "old.epub", null, JobStatus.Succeeded, result: result);
+        var oldJobDeleted = await SubmitAsync(user, "old-deleted.epub", null, JobStatus.Succeeded);
+        await factory.AddRowsAsync(Outcome(oldJobDeleted, "upload.added", "work", workId, "{}"));
+        await DeleteJobAsync(oldJobDeleted.Id);
+        var oldFailed = await SubmitAsync(user, "old-failed.epub", null, JobStatus.Failed, error: "boom");
+        var oldQueued = await SubmitAsync(user, "old-queued.epub", null, JobStatus.Pending);
+        await SubmittedAgoAsync(TimeSpan.FromHours(23), recent);
+        await SubmittedAgoAsync(TimeSpan.FromHours(25), old, oldJobDeleted, oldFailed, oldQueued);
+
+        var list = await client.GetAsync<List<UploadActivityResponse>>(Url);
+
+        Assert.Equal(
+            new[] { recent.Id, oldFailed.Id, oldQueued.Id }.Order(),
+            list.Select(r => r.JobId).Order());
+    }
+
+    [Fact]
     public async Task A_failed_upload_whose_job_is_deleted_is_no_longer_listed()
     {
         var (user, client) = await factory.CreateSignedInUserAsync(BuiltInRole.Contributor);
@@ -307,7 +331,7 @@ public class ActivityTests(NookApiFactory factory) : IClassFixture<NookApiFactor
     /// <summary>Adds an upload's submitted entry and a job in the status, as an accepted upload leaves them.</summary>
     private async Task<Submitted> SubmitAsync(
         NookUser user, string fileName, LibrarySection? section, JobStatus status, string? error = null,
-        byte[]? staged = null)
+        byte[]? staged = null, string? result = null)
     {
         var job = new Job
         {
@@ -315,6 +339,7 @@ public class ActivityTests(NookApiFactory factory) : IClassFixture<NookApiFactor
             Status = status,
             Payload = "{}",
             Error = error,
+            Result = result,
             // Held back or leased so no worker picks it up.
             NotBefore = status == JobStatus.Pending ? DateTimeOffset.UtcNow.AddDays(1) : null,
             LeaseExpiresAt = status == JobStatus.Running ? DateTimeOffset.UtcNow.AddDays(1) : null,
@@ -342,6 +367,17 @@ public class ActivityTests(NookApiFactory factory) : IClassFixture<NookApiFactor
 
         await factory.AddRowsAsync(job, entry);
         return new Submitted(job, entry, stagedName);
+    }
+
+    /// <summary>Moves the uploads' submitted entries back, as if they were sent in that long ago.</summary>
+    private async Task SubmittedAgoAsync(TimeSpan ago, params Submitted[] uploads)
+    {
+        var ids = uploads.Select(u => u.Entry.Id).ToList();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+        await db.AuditEntries.Where(e => ids.Contains(e.Id)).ExecuteUpdateAsync(
+            s => s.SetProperty(e => e.CreatedAt, DateTimeOffset.UtcNow - ago),
+            TestContext.Current.CancellationToken);
     }
 
     private static AuditEntry Outcome(Submitted upload, string action, string subjectType, Guid subjectId, string details) =>

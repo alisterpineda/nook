@@ -29,6 +29,8 @@ export const HUB_CONNECTION_BUILDER = new InjectionToken<() => HubConnectionBuil
 export class ActivityHub {
   private readonly builder = inject(HUB_CONNECTION_BUILDER);
   private connection: HubConnection | null = null;
+  /** How the wanted connection's opening went or is going, which every `start()` for it answers with. */
+  private opening: Promise<void> = Promise.resolve();
   /** The wait before the next try at opening a connection that has never opened. */
   private retry: ReturnType<typeof setTimeout> | null = null;
   private readonly uploadChangedMessages = new Subject<UploadActivityResponse>();
@@ -54,13 +56,18 @@ export class ActivityHub {
   readonly reconnected: Observable<void> = this.reconnectedMessages.asObservable();
 
   /**
-   * Opens the connection. Does nothing while one is open or being tried. When it cannot be opened this rejects, and
-   * the connection is tried again in the background, with `reconnected` sent once it opens.
+   * Opens the connection. While one is open or being tried this opens nothing and answers as the call that began
+   * it did, so whoever asks can wait for the connection to be open. When it cannot be opened this rejects, and the
+   * connection is tried again in the background, with `reconnected` sent once it opens.
    */
-  async start(): Promise<void> {
-    if (this.connection) {
-      return;
+  start(): Promise<void> {
+    if (!this.connection) {
+      this.opening = this.open();
     }
+    return this.opening;
+  }
+
+  private async open(): Promise<void> {
     const connection = this.builder()
       .withUrl('/api/hubs/activity')
       // Never gives up: an API that is away for a while must not leave the tab deaf until it is reloaded.
@@ -105,6 +112,7 @@ export class ActivityHub {
       connection.start().then(
         () => {
           if (this.connection === connection) {
+            this.opening = Promise.resolve();
             this.reconnectedMessages.next();
           }
         },

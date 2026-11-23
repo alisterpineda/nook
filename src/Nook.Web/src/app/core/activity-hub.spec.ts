@@ -107,6 +107,17 @@ describe('ActivityHub', () => {
     expect(signalr.connections).toHaveLength(1);
   });
 
+  it('answers a later start as the connection stands: refused while it is being tried, open once it is', async () => {
+    signalr.refusals = 1;
+    await expect(hub.start()).rejects.toThrow('refused');
+
+    await expect(hub.start()).rejects.toThrow('refused');
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(hub.start()).resolves.toBeUndefined();
+    expect(signalr.connections).toHaveLength(1);
+  });
+
   it('stops trying once stopped', async () => {
     signalr.refusals = 5;
     await expect(hub.start()).rejects.toThrow('refused');

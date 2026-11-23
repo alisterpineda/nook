@@ -1,5 +1,8 @@
+import { HttpEventType } from '@angular/common/http';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
 import { components } from '../api/schema';
+import { UploadQueue } from '../features/upload/upload-queue';
 
 type UploadActivityResponse = components['schemas']['UploadActivityResponse'];
 
@@ -32,4 +35,14 @@ export function flushUploadActivity(httpTesting: HttpTestingController): void {
   for (const request of httpTesting.match('/api/activity/uploads')) {
     request.flush([]);
   }
+}
+
+/** Adds two files to the tab's queue, the first of which is being sent at `percent`, for specs. */
+export function sendTwoFiles(percent: number): void {
+  TestBed.inject(UploadQueue).add([epub('dune.epub'), epub('emma.epub')], null);
+  TestBed.inject(HttpTestingController).expectOne('/api/uploads').event({
+    type: HttpEventType.UploadProgress,
+    loaded: percent,
+    total: 100,
+  });
 }

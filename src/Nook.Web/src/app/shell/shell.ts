@@ -259,7 +259,7 @@ interface Crumb {
             </ol>
           </nav>
           <app-search-box class="flex-1 md:w-72 md:flex-none" />
-          @if (session.canUpload()) {
+          @if (session.user()) {
             <app-activity-button />
           }
           @if (!session.user()) {
@@ -399,20 +399,22 @@ export class Shell {
 
   constructor() {
     void this.sectionStore.load();
-    // Someone who may upload follows their uploads from the server for as long as they are signed in, and an admin
-    // hears of every job. Both listen on the one connection, which is open for as long as either applies.
+    // The hub's connection is open for as long as someone is signed in, for whatever follows it: someone who may
+    // upload follows their uploads from the server, and an admin's Jobs page hears of every job.
     effect(() => {
+      const signedIn = this.session.user() !== null;
       const canUpload = this.session.canUpload();
-      const isAdmin = this.isAdmin();
       untracked(() => {
+        if (signedIn) {
+          // A connection that cannot open is tried again by the hub.
+          this.hub.start().catch(() => undefined);
+        } else {
+          void this.closeHub();
+        }
         if (canUpload) {
           this.uploadActivity.start();
         } else {
-          void this.uploadActivity.stop();
-        }
-        if (isAdmin) {
-          // Does nothing when the uploads have opened it. A connection that cannot open is tried again by the hub.
-          this.hub.start().catch(() => undefined);
+          this.uploadActivity.stop();
         }
       });
     });
@@ -440,9 +442,18 @@ export class Shell {
     // The next person signed in on this tab must not see, or keep sending, this user's files, nor see the names of
     // what this user opened.
     this.uploadQueue.reset();
-    await this.uploadActivity.stop();
+    this.uploadActivity.stop();
+    await this.closeHub();
     this.pageName.clear();
     await this.router.navigateByUrl('/sign-in');
+  }
+
+  private async closeHub(): Promise<void> {
+    try {
+      await this.hub.stop();
+    } catch {
+      // A connection that will not close cleanly is gone all the same.
+    }
   }
 }
 

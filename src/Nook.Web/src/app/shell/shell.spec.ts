@@ -18,6 +18,7 @@ import { AddBooks } from '../features/upload/add-books';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { FakeActivityHub, provideFakeActivityHub } from '../testing/fake-activity-hub';
 import { fieldLabelled } from '../testing/field-labelled';
+import { signInAs } from '../testing/sign-in-as';
 import { typeInto } from '../testing/type-into';
 import { flushUploadActivity } from '../testing/upload-fixtures';
 import { Shell } from './shell';
@@ -139,13 +140,6 @@ describe('Shell', () => {
     // The sidebar remembers whether it is open in a cookie, which would carry over to the next test.
     document.cookie = 'sidebar_state=; path=/; max-age=0';
   });
-
-  /** Loads the session with `user` signed in. */
-  async function signInAs(user: CurrentUserResponse): Promise<void> {
-    const loading = TestBed.inject(Session).load();
-    httpTesting.expectOne('/api/auth/me').flush(user);
-    await loading;
-  }
 
   /** Loads the session with nobody signed in, the API saying a visitor may do what `access` says. */
   async function visitWith(access: AccessResponse): Promise<void> {
@@ -694,25 +688,25 @@ describe('Shell', () => {
     expect(TestBed.inject(FakeActivityHub).open).toBe(false);
   });
 
-  it('opens the hub for an admin whose role may not upload, without following uploads', async () => {
-    await signInAs({ ...ada, canUpload: false });
+  it('opens the hub for a signed-in user who may not upload, without following uploads', async () => {
+    await signInAs(viewer);
     await openShell('/library');
 
     httpTesting.expectNone('/api/activity/uploads');
     expect(TestBed.inject(FakeActivityHub).open).toBe(true);
   });
 
-  it('shows Activity to a user who may upload and not to a viewer', async () => {
+  it('shows Notifications to a user who may upload and not to a viewer', async () => {
     const shell = await openShell('/library');
     expect(shell.querySelector('header [data-slot="popover-trigger"]')?.textContent).toContain(
-      'Activity',
+      'Notifications',
     );
 
     await signInAs(viewer);
     await vi.waitFor(() => expect(shell.querySelector('[data-slot="popover-trigger"]')).toBeNull());
   });
 
-  it('clears the waiting files and the Activity list on sign-out', async () => {
+  it('clears the waiting files and the Notifications list on sign-out', async () => {
     const hub = TestBed.inject(FakeActivityHub);
     const activity = TestBed.inject(UploadActivity);
     const queue = TestBed.inject(UploadQueue);

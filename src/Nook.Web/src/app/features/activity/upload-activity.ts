@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 import { ActivityApi } from '../../api/activity-api';
 import { components } from '../../api/schema';
 import { ActivityHub } from '../../core/activity-hub';
+import { somethingWentWrong } from '../../core/messages';
 
 type UploadActivityResponse = components['schemas']['UploadActivityResponse'];
 
@@ -11,8 +12,9 @@ const maxRows = 20;
 
 /**
  * The signed-in user's recent uploads as the server holds them, newest first, kept current from the activity hub.
- * It is provided in the root so the list is there whichever page is open. `start()` loads the list and opens the
- * hub, and `stop()` closes the hub and empties the list, so nothing carries over to the next user.
+ * It is provided in the root so the list is there whichever page is open. `start()` loads the list and follows the
+ * hub, and `stop()` lets go of the hub and empties the list, so nothing carries over to the next user. The hub's
+ * connection is the shell's to open and close.
  */
 @Injectable({ providedIn: 'root' })
 export class UploadActivity {
@@ -22,6 +24,8 @@ export class UploadActivity {
   private following: Subscription | null = null;
   /** Counts loads, and changes on `stop()`, so an answer to an older load or to one from before a stop is let go. */
   private generation = 0;
+  /** Counts stops, so the answer to a retry or removal from before a stop is let go. */
+  private generationOfStops = 0;
   /** How many lists are on their way. */
   private loading = 0;
   /**
@@ -34,35 +38,65 @@ export class UploadActivity {
   /** The uploads, newest first. */
   readonly rows = this.allRows.asReadonly();
 
+  private readonly allProblems = signal<Readonly<Record<string, string>>>({});
+
+  /**
+   * What went wrong with the last retry or removal of an upload, by the id of its job. It is kept here, not where
+   * the uploads are shown, so it is still there for whoever looks after the answer has come.
+   */
+  readonly problems = this.allProblems.asReadonly();
+
   /** Loads the list and starts following the hub. Does nothing while already started. */
   start(): void {
     if (this.following) {
       return;
     }
     const following = new Subscription();
-    following.add(this.hub.uploadChanged.subscribe((upload) => this.change(upload)));
-    following.add(this.hub.uploadRemoved.subscribe((jobId) => this.remove(jobId)));
+    following.add(this.hub.uploadChanged.subscribe((upload) => this.changed(upload)));
+    following.add(this.hub.uploadRemoved.subscribe((jobId) => this.removed(jobId)));
     following.add(this.hub.reconnected.subscribe(() => void this.load()));
     this.following = following;
 
     const generation = this.generation;
-    // The hub opens first, so a change made while the list is on its way is heard, and kept over the list's answer.
-    // The hub being down is no reason to show nothing: what the server holds can still be listed.
+    // The list waits for the hub to be open, so a change made while the list is on its way is heard, and kept over
+    // the list's answer. Starting the hub opens nothing new when the shell has opened it already. The hub being
+    // down is no reason to show nothing: what the server holds can still be listed.
     const loadUnlessStopped = () => (this.generation === generation ? this.load() : undefined);
     void this.hub.start().then(loadUnlessStopped, loadUnlessStopped);
   }
 
-  /** Stops following the hub, closes it and empties the list. */
-  async stop(): Promise<void> {
+  /** Stops following the hub and empties the list. */
+  stop(): void {
     this.generation++;
+    this.generationOfStops++;
     this.following?.unsubscribe();
     this.following = null;
     this.said = [];
     this.allRows.set([]);
+    this.allProblems.set({});
+  }
+
+  /** Runs a failed upload again. */
+  retry(jobId: string): Promise<void> {
+    return this.act(jobId, () => this.api.retry(jobId));
+  }
+
+  /** Removes a failed upload, along with the file it staged. */
+  remove(jobId: string): Promise<void> {
+    return this.act(jobId, () => this.api.remove(jobId));
+  }
+
+  /** Runs `call` for an upload. The row itself changes through the hub, so only a failure is kept here. */
+  private async act(jobId: string, call: () => Promise<void>): Promise<void> {
+    const generation = this.generationOfStops;
+    this.allProblems.update((problems) => ({ ...problems, [jobId]: '' }));
     try {
-      await this.hub.stop();
+      await call();
     } catch {
-      // A connection that will not close cleanly is gone all the same.
+      // A failure that answers after a stop is the last user's, and is not kept for the next.
+      if (generation === this.generationOfStops) {
+        this.allProblems.update((problems) => ({ ...problems, [jobId]: somethingWentWrong }));
+      }
     }
   }
 
@@ -91,7 +125,7 @@ export class UploadActivity {
     }
   }
 
-  private change(upload: UploadActivityResponse): void {
+  private changed(upload: UploadActivityResponse): void {
     this.apply((rows) =>
       rows.some((row) => row.jobId === upload.jobId)
         ? rows.map((row) => (row.jobId === upload.jobId ? upload : row))
@@ -99,7 +133,7 @@ export class UploadActivity {
     );
   }
 
-  private remove(jobId: string): void {
+  private removed(jobId: string): void {
     this.apply((rows) => rows.filter((row) => row.jobId !== jobId));
   }
 

@@ -17,25 +17,35 @@ public record JobUpload(Guid? UserId, UploadActivityResponse? Row);
 /// the outcome entries are what remains once the job is deleted. Entries are found by their submission id, never
 /// through their details.
 /// </summary>
-public sealed class UploadActivity(NookDbContext db)
+public sealed class UploadActivity(NookDbContext db, TimeProvider timeProvider)
 {
+    /// <summary>How long after it was submitted an upload that went through is still listed.</summary>
+    public static readonly TimeSpan FinishedListedFor = TimeSpan.FromDays(1);
+
     private static readonly string[] OutcomeActions =
         [AuditActions.UploadAdded, AuditActions.UploadDuplicate, AuditActions.UploadFailed];
 
     /// <summary>
-    /// The user's most recent uploads, newest first. A submission with no job and no outcome is left out, and the
-    /// limit counts the rows that remain, so the query reads on until it has that many or runs out.
+    /// The user's most recent uploads, newest first. An upload that went through is listed for
+    /// <see cref="FinishedListedFor"/> after it was submitted, and one still waiting, running or failed for as long
+    /// as it is. A submission with no job and no outcome is left out, and the limit counts the rows that remain, so
+    /// the query reads on until it has that many or runs out.
     /// </summary>
     public async Task<IReadOnlyList<UploadActivityResponse>> ForUserAsync(
         Guid userId, int limit, CancellationToken cancellationToken = default)
     {
         var rows = new List<UploadActivityResponse>();
+        var listedSince = timeProvider.GetUtcNow() - FinishedListedFor;
         AuditEntry? last = null;
         while (rows.Count < limit)
         {
+            // An older upload is read only while its job has yet to succeed: one that went through, whether its job
+            // is there or deleted, has been listed long enough.
             var submissions = db.AuditEntries
                 .AsNoTracking()
-                .Where(e => e.Action == AuditActions.UploadSubmitted && e.ActorId == userId);
+                .Where(e => e.Action == AuditActions.UploadSubmitted && e.ActorId == userId)
+                .Where(e => e.CreatedAt >= listedSince
+                    || db.Jobs.Any(j => j.Id == e.SubjectId && j.Status != JobStatus.Succeeded));
             if (last is not null)
             {
                 // Each batch starts after the last entry read, not at a count of entries, so an upload sent in

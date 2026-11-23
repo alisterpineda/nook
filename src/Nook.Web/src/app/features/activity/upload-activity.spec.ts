@@ -100,22 +100,33 @@ describe('UploadActivity', () => {
     expect(store.rows().map((row) => row.status)).toEqual(['queued', 'added']);
   });
 
-  it('empties the list and closes the hub when stopped', async () => {
+  it('empties the list and hears the hub no more when stopped', async () => {
     await startWith([upload(1)]);
 
-    await store.stop();
+    store.stop();
 
     expect(store.rows()).toEqual([]);
-    expect(hub.open).toBe(false);
     hub.uploadChanged.next(upload(2));
     expect(store.rows()).toEqual([]);
+  });
+
+  it('keeps no failed retry for the next user when it answers after the store was stopped', async () => {
+    await startWith([upload(1, 'failed')]);
+    const retried = store.retry(upload(1).jobId);
+    const request = httpTesting.expectOne(`/api/activity/uploads/${upload(1).jobId}/retry`);
+
+    store.stop();
+    request.flush(null, { status: 500, statusText: 'Server Error' });
+    await retried;
+
+    expect(store.problems()).toEqual({});
   });
 
   it('puts no rows back when the list answers after the store was stopped', async () => {
     store.start();
     const request = await vi.waitFor(() => httpTesting.expectOne('/api/activity/uploads'));
 
-    await store.stop();
+    store.stop();
     request.flush([upload(1)]);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -124,7 +135,7 @@ describe('UploadActivity', () => {
 
   it('asks for no list when stopped before the hub has opened', async () => {
     store.start();
-    await store.stop();
+    store.stop();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     httpTesting.expectNone('/api/activity/uploads');

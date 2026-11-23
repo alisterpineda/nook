@@ -10,7 +10,7 @@ type ProblemDetails = components['schemas']['ProblemDetails'];
 /**
  * Where a file in this tab stands: `waiting` for its turn, `uploading` while its request is open, or `failed` when
  * the server refused it. Once the server takes a file it leaves the queue, and its upload is followed in the
- * Activity list.
+ * Notifications list.
  */
 export type UploadStatus = 'waiting' | 'uploading' | 'failed';
 
@@ -124,7 +124,7 @@ export class UploadQueue {
           if (event.kind === 'progress') {
             this.change(row.id, { percent: event.percent });
           } else {
-            // The server has the file: its upload shows in the Activity list from here.
+            // The server has the file: its upload shows in the Notifications list from here.
             this.allRows.update((rows) => rows.filter((candidate) => candidate.id !== row.id));
           }
         },
