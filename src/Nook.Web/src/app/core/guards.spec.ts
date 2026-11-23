@@ -138,7 +138,7 @@ describe('route guards', () => {
   });
 
   it('sends a visitor who asks for the public access page to the library', async () => {
-    const navigating = harness.navigateByUrl('/public-access');
+    const navigating = harness.navigateByUrl('/admin/public-access');
     await answerSignedOut(true);
     await answerSections();
     await answerWorks();
@@ -278,8 +278,8 @@ describe('route guards', () => {
     expect(router.url).toBe('/library');
   });
 
-  it('adminGuard lets an admin through to /public-access', async () => {
-    const navigating = harness.navigateByUrl('/public-access');
+  it('adminGuard lets an admin through to /admin/public-access', async () => {
+    const navigating = harness.navigateByUrl('/admin/public-access');
     await answerSignedIn(ada);
     await answerSections();
     (await nextRequest('/api/public-access')).flush({
@@ -290,12 +290,12 @@ describe('route guards', () => {
     });
     await navigating;
 
-    expect(router.url).toBe('/public-access');
+    expect(router.url).toBe('/admin/public-access');
     await vi.waitFor(() => expect(heading()).toBe('Public access'));
   });
 
   it('adminGuard sends a contributor to the works list', async () => {
-    const navigating = harness.navigateByUrl('/public-access');
+    const navigating = harness.navigateByUrl('/admin/public-access');
     await answerSignedIn(mel);
     await answerSections();
     await answerWorks();
@@ -305,7 +305,7 @@ describe('route guards', () => {
   });
 
   it('adminGuard sends a viewer to the works list', async () => {
-    const navigating = harness.navigateByUrl('/public-access');
+    const navigating = harness.navigateByUrl('/admin/public-access');
     await answerSignedIn(gus);
     await answerSections();
     await answerWorks();

@@ -48,14 +48,14 @@ import { SearchBox } from './search-box';
 interface Crumb {
   /** What the step is called, or `null` while the page has not said. */
   label: string | null;
-  /** Where the step leads. The last step, the page that is open, leads nowhere. */
+  /** Where the step leads. The last step, the page that is open, leads nowhere, and neither does "Admin". */
   link?: string;
 }
 
 /**
  * The frame around every page of the library: a sidebar that collapses to its icons, with the app's name, then
  * "Library", then "Default" and the caller's sections when there are any, then "Authors" and, for whoever may upload,
- * "Add books", which opens a dialog, then "Public access", "Jobs", "Audit log" and "Users" for an admin, the user's menu in its footer, and the page itself beside
+ * "Add books", which opens a dialog, then "Users", "Public access", "Jobs" and "Audit log" under "Admin" for an admin, the user's menu in its footer, and the page itself beside
  * it under a header that says where the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
  */
 @Component({
@@ -162,61 +162,24 @@ interface Crumb {
             </ul>
           </nav>
           @if (isAdmin()) {
-            <nav hlmSidebarGroup aria-label="Manage">
-              <div hlmSidebarGroupLabel>Manage</div>
+            <nav hlmSidebarGroup aria-label="Admin">
+              <div hlmSidebarGroupLabel>Admin</div>
               <ul hlmSidebarMenu>
-                <li hlmSidebarMenuItem>
-                  <a
-                    hlmSidebarMenuButton
-                    routerLink="/public-access"
-                    closeMobileSidebarOnClick
-                    tooltip="Public access"
-                    [isActive]="onPublicAccess()"
-                    [attr.aria-current]="onPublicAccess() ? 'page' : null"
-                  >
-                    <ng-icon name="lucideGlobe" />
-                    <span>Public access</span>
-                  </a>
-                </li>
-                <li hlmSidebarMenuItem>
-                  <a
-                    hlmSidebarMenuButton
-                    routerLink="/jobs"
-                    closeMobileSidebarOnClick
-                    tooltip="Jobs"
-                    [isActive]="onJobs()"
-                    [attr.aria-current]="onJobs() ? 'page' : null"
-                  >
-                    <ng-icon name="lucideListChecks" />
-                    <span>Jobs</span>
-                  </a>
-                </li>
-                <li hlmSidebarMenuItem>
-                  <a
-                    hlmSidebarMenuButton
-                    routerLink="/audit-log"
-                    closeMobileSidebarOnClick
-                    tooltip="Audit log"
-                    [isActive]="onAuditLog()"
-                    [attr.aria-current]="onAuditLog() ? 'page' : null"
-                  >
-                    <ng-icon name="lucideScrollText" />
-                    <span>Audit log</span>
-                  </a>
-                </li>
-                <li hlmSidebarMenuItem>
-                  <a
-                    hlmSidebarMenuButton
-                    routerLink="/users"
-                    closeMobileSidebarOnClick
-                    tooltip="Users"
-                    [isActive]="onUsers()"
-                    [attr.aria-current]="onUsers() ? 'page' : null"
-                  >
-                    <ng-icon name="lucideUserCog" />
-                    <span>Users</span>
-                  </a>
-                </li>
+                @for (link of adminLinks; track link.path) {
+                  <li hlmSidebarMenuItem>
+                    <a
+                      hlmSidebarMenuButton
+                      [routerLink]="link.path"
+                      closeMobileSidebarOnClick
+                      [tooltip]="link.label"
+                      [isActive]="link.current()"
+                      [attr.aria-current]="link.current() ? 'page' : null"
+                    >
+                      <ng-icon [name]="link.icon" />
+                      <span>{{ link.label }}</span>
+                    </a>
+                  </li>
+                }
               </ul>
             </nav>
           }
@@ -279,8 +242,10 @@ interface Crumb {
                     <span hlmSkeleton class="h-4 w-32"></span>
                   } @else if (crumb.link) {
                     <a hlmBreadcrumbLink [link]="crumb.link">{{ crumb.label }}</a>
-                  } @else {
+                  } @else if ($last) {
                     <span hlmBreadcrumbPage class="truncate">{{ crumb.label }}</span>
+                  } @else {
+                    <span>{{ crumb.label }}</span>
                   }
                 </li>
                 @if (!$last) {
@@ -342,12 +307,11 @@ export class Shell {
   protected readonly isAdmin = this.session.isAdmin;
   /** Whether the list of works is open, the only page "Library", "Default" and the sections stand for. */
   protected readonly onLibrary = isActive('/library', this.router, { queryParams: 'ignored' });
-  protected readonly onPublicAccess = isActive('/public-access', this.router, {
-    queryParams: 'ignored',
-  });
-  protected readonly onJobs = isActive('/jobs', this.router, { queryParams: 'ignored' });
-  protected readonly onAuditLog = isActive('/audit-log', this.router, { queryParams: 'ignored' });
-  protected readonly onUsers = isActive('/users', this.router, { queryParams: 'ignored' });
+  /** The admin's pages, in the sidebar's order: who gets in, then what has happened. */
+  protected readonly adminLinks = adminPages.map((page) => ({
+    ...page,
+    current: isActive(page.path, this.router, { queryParams: 'ignored' }),
+  }));
   protected readonly onAuthors = isActive('/authors', this.router, { queryParams: 'ignored' });
   /**
    * The sidebar's links to the list of works: "Library", then "Default" and each section when there is at least one,
@@ -404,17 +368,12 @@ export class Shell {
           : { label: 'Authors', link: '/authors' };
       return [list, { label: this.pageName.of(id) }];
     }
-    switch (path) {
-      case '/authors':
-        return [{ label: 'Authors' }];
-      case '/public-access':
-        return [{ label: 'Public access' }];
-      case '/jobs':
-        return [{ label: 'Jobs' }];
-      case '/audit-log':
-        return [{ label: 'Audit log' }];
-      case '/users':
-        return [{ label: 'Users' }];
+    if (path === '/authors') {
+      return [{ label: 'Authors' }];
+    }
+    const adminPage = adminPages.find((page) => page.path === path);
+    if (adminPage) {
+      return [{ label: 'Admin' }, { label: adminPage.label }];
     }
     const area = readArea(this.queryParams());
     const narrowedTo =
@@ -471,6 +430,14 @@ export class Shell {
     await this.router.navigateByUrl('/sign-in');
   }
 }
+
+/** The pages only an admin may open. */
+const adminPages = [
+  { label: 'Users', path: '/admin/users', icon: 'lucideUserCog' },
+  { label: 'Public access', path: '/admin/public-access', icon: 'lucideGlobe' },
+  { label: 'Jobs', path: '/admin/jobs', icon: 'lucideListChecks' },
+  { label: 'Audit log', path: '/admin/audit-log', icon: 'lucideScrollText' },
+] as const;
 
 /** The path of `url`, without its query or fragment. */
 function pathOf(url: string): string {

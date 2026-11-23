@@ -108,10 +108,10 @@ describe('Shell', () => {
             children: [
               { path: 'library', component: WorksStub },
               { path: 'works/:id', component: WorkStub },
-              { path: 'public-access', component: PublicAccessStub },
-              { path: 'jobs', component: JobsStub },
-              { path: 'audit-log', component: AuditLogStub },
-              { path: 'users', component: UsersStub },
+              { path: 'admin/public-access', component: PublicAccessStub },
+              { path: 'admin/jobs', component: JobsStub },
+              { path: 'admin/audit-log', component: AuditLogStub },
+              { path: 'admin/users', component: UsersStub },
               { path: 'authors', component: AuthorsStub },
               { path: 'people/:id', component: PersonStub },
             ],
@@ -312,21 +312,30 @@ describe('Shell', () => {
     expect(document.title).toBe('Authors · Nook');
   });
 
-  it('names the Jobs page and the Audit log page in the header', async () => {
-    const shell = await openShell('/jobs?show=all');
-    expect(trail(shell)).toEqual([['Jobs', null]]);
+  it('names the Jobs page and the Audit log page under Admin in the header', async () => {
+    const shell = await openShell('/admin/jobs?show=all');
+    expect(trail(shell)).toEqual([
+      ['Admin', null],
+      ['Jobs', null],
+    ]);
     expect(document.title).toBe('Jobs · Nook');
 
-    await router.navigateByUrl('/audit-log');
+    await router.navigateByUrl('/admin/audit-log');
     await harness.fixture.whenStable();
-    expect(trail(shell)).toEqual([['Audit log', null]]);
+    expect(trail(shell)).toEqual([
+      ['Admin', null],
+      ['Audit log', null],
+    ]);
     expect(document.title).toBe('Audit log · Nook');
   });
 
-  it('names the Users page in the header', async () => {
-    const shell = await openShell('/users?sort=joined');
+  it('names the Users page under Admin in the header', async () => {
+    const shell = await openShell('/admin/users?sort=joined');
 
-    expect(trail(shell)).toEqual([['Users', null]]);
+    expect(trail(shell)).toEqual([
+      ['Admin', null],
+      ['Users', null],
+    ]);
     expect(document.title).toBe('Users · Nook');
   });
 
@@ -459,54 +468,54 @@ describe('Shell', () => {
       expect(link.hasAttribute('closeMobileSidebarOnClick')).toBe(true);
     }
   });
-  it('shows Jobs and Audit log to an admin and to no one else', async () => {
+  it('shows the Admin group to an admin and to no one else', async () => {
     const shell = await openShell('/library');
 
     expect(
-      groupLinks(shell, 'Manage').map((link) => [
+      groupLinks(shell, 'Admin').map((link) => [
         link.textContent?.trim(),
         link.getAttribute('href'),
       ]),
     ).toEqual([
-      ['Public access', '/public-access'],
-      ['Jobs', '/jobs'],
-      ['Audit log', '/audit-log'],
-      ['Users', '/users'],
+      ['Users', '/admin/users'],
+      ['Public access', '/admin/public-access'],
+      ['Jobs', '/admin/jobs'],
+      ['Audit log', '/admin/audit-log'],
     ]);
 
     for (const user of [grace, viewer]) {
       await signInAs(user);
       await harness.fixture.whenStable();
-      expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+      expect(shell.querySelector('nav[aria-label="Admin"]')).toBeNull();
     }
   });
 
-  it('Public access is the current page on /public-access and nothing else is', async () => {
-    const shell = await openShell('/public-access');
+  it('Public access is the current page on /admin/public-access and nothing else is', async () => {
+    const shell = await openShell('/admin/public-access');
     const current = () =>
       Array.from(shell.querySelectorAll('nav a[aria-current="page"]'), (link) =>
         link.textContent?.trim(),
       );
 
     expect(current()).toEqual(['Public access']);
-    expect(groupLinks(shell, 'Manage')[0].hasAttribute('closeMobileSidebarOnClick')).toBe(true);
+    expect(groupLinks(shell, 'Admin')[1].hasAttribute('closeMobileSidebarOnClick')).toBe(true);
   });
 
   it('marks Jobs or Audit log current on its own page and nothing else', async () => {
-    const shell = await openShell('/jobs?page=2');
+    const shell = await openShell('/admin/jobs?page=2');
     const current = () =>
       Array.from(shell.querySelectorAll('nav a[aria-current="page"]'), (link) =>
         link.textContent?.trim(),
       );
     expect(current()).toEqual(['Jobs']);
 
-    await router.navigateByUrl('/audit-log?person=x');
+    await router.navigateByUrl('/admin/audit-log?person=x');
     await harness.fixture.whenStable();
     expect(current()).toEqual(['Audit log']);
   });
 
   it('marks Users current on its own page and nothing else', async () => {
-    const shell = await openShell('/users?page=2');
+    const shell = await openShell('/admin/users?page=2');
 
     expect(
       Array.from(shell.querySelectorAll('nav a[aria-current="page"]'), (link) =>
@@ -524,7 +533,7 @@ describe('Shell', () => {
     expect(Array.from(groupLinks(shell, 'Browse'), (link) => link.textContent?.trim())).toEqual([
       'Authors',
     ]);
-    expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+    expect(shell.querySelector('nav[aria-label="Admin"]')).toBeNull();
 
     button?.click();
     expect(openAddBooks).toHaveBeenCalledExactlyOnceWith([], null);
@@ -552,7 +561,7 @@ describe('Shell', () => {
     const shell = await openShell('/library');
 
     expect(addBooks(shell)).toBeUndefined();
-    expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+    expect(shell.querySelector('nav[aria-label="Admin"]')).toBeNull();
   });
 
   it('shows Authors linking to /authors', async () => {
@@ -725,11 +734,11 @@ describe('Shell', () => {
     ]);
   });
 
-  it('shows a visitor no Manage group', async () => {
+  it('shows a visitor no Admin group', async () => {
     await visitWith({ publicAccess: true, defaultArea: 'download' });
     const shell = await openShell('/library');
 
-    expect(shell.querySelector('nav[aria-label="Manage"]')).toBeNull();
+    expect(shell.querySelector('nav[aria-label="Admin"]')).toBeNull();
     expect(addBooks(shell)).toBeUndefined();
   });
 

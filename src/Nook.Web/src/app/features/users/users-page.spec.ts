@@ -178,8 +178,8 @@ describe('UsersPage', () => {
 
     const hrefOf = (name: string) =>
       rowOf(page, name).querySelector<HTMLAnchorElement>('a')?.getAttribute('href');
-    expect(hrefOf('Ada')).toBe(`/audit-log?person=${adaId}`);
-    expect(hrefOf('Linus')).toBe(`/audit-log?person=${linusId}`);
+    expect(hrefOf('Ada')).toBe(`/admin/audit-log?person=${adaId}`);
+    expect(hrefOf('Linus')).toBe(`/admin/audit-log?person=${linusId}`);
     expect(hrefOf('Grace')).toBeUndefined();
     expect(rowOf(page, 'Ada').querySelector('a')?.getAttribute('aria-label')).toBe(
       'Audit log for Ada',

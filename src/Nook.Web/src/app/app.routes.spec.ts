@@ -265,20 +265,20 @@ describe('routes', () => {
     });
   });
 
-  it('an admin who opens /public-access sees the public access page', async () => {
+  it('an admin who opens /admin/public-access sees the public access page', async () => {
     expect(
       await open(
-        '/public-access',
+        '/admin/public-access',
         { signedIn: true, setupRequired: false, role: 'admin' },
         PublicAccessPage,
       ),
-    ).toEqual({ landedOn: '/public-access', shown: true });
+    ).toEqual({ landedOn: '/admin/public-access', shown: true });
   });
 
   it('sends a viewer who asks for the public access page to the library', async () => {
     expect(
       await open(
-        '/public-access',
+        '/admin/public-access',
         { signedIn: true, setupRequired: false, role: 'viewer' },
         WorksListPage,
       ),
@@ -288,17 +288,17 @@ describe('routes', () => {
   it('sends a visitor who asks for the public access page to the library', async () => {
     expect(
       await open(
-        '/public-access',
+        '/admin/public-access',
         { signedIn: false, setupRequired: false, publicAccess: true },
         WorksListPage,
       ),
     ).toEqual({ landedOn: '/library', shown: true });
   });
 
-  it('keeps /jobs and /audit-log to admins', async () => {
+  it('keeps /admin/jobs and /admin/audit-log to admins', async () => {
     const pages: [string, Type<unknown>][] = [
-      ['/jobs', JobsPage],
-      ['/audit-log', AuditLogPage],
+      ['/admin/jobs', JobsPage],
+      ['/admin/audit-log', AuditLogPage],
     ];
     for (const [url, page] of pages) {
       expect(
@@ -312,18 +312,28 @@ describe('routes', () => {
     }
   });
 
-  it('keeps /users to admins', async () => {
+  it('opens the Users page for an admin who asks for /admin', async () => {
     expect(
-      await open('/users', { signedIn: true, setupRequired: false, role: 'admin' }, UsersPage),
-    ).toEqual({ landedOn: '/users', shown: true });
+      await open('/admin', { signedIn: true, setupRequired: false, role: 'admin' }, UsersPage),
+    ).toEqual({ landedOn: '/admin/users', shown: true });
+  });
+
+  it('keeps /admin/users to admins', async () => {
+    expect(
+      await open(
+        '/admin/users',
+        { signedIn: true, setupRequired: false, role: 'admin' },
+        UsersPage,
+      ),
+    ).toEqual({ landedOn: '/admin/users', shown: true });
     for (const role of ['contributor', 'viewer'] as const) {
       expect(
-        await open('/users', { signedIn: true, setupRequired: false, role }, WorksListPage),
+        await open('/admin/users', { signedIn: true, setupRequired: false, role }, WorksListPage),
       ).toEqual({ landedOn: '/library', shown: true });
     }
     expect(
       await open(
-        '/users',
+        '/admin/users',
         { signedIn: false, setupRequired: false, publicAccess: true },
         WorksListPage,
       ),

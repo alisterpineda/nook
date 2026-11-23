@@ -50,26 +50,30 @@ export const routes: Routes = [
         loadComponent: () => import('./features/people/person-page').then((m) => m.PersonPage),
       },
       {
-        path: 'public-access',
+        // One guard keeps every page under it to admins.
+        path: 'admin',
         canActivate: [adminGuard],
-        loadComponent: () =>
-          import('./features/public-access/public-access-page').then((m) => m.PublicAccessPage),
-      },
-      {
-        path: 'jobs',
-        canActivate: [adminGuard],
-        loadComponent: () => import('./features/jobs/jobs-page').then((m) => m.JobsPage),
-      },
-      {
-        path: 'audit-log',
-        canActivate: [adminGuard],
-        loadComponent: () =>
-          import('./features/audit-log/audit-log-page').then((m) => m.AuditLogPage),
-      },
-      {
-        path: 'users',
-        canActivate: [adminGuard],
-        loadComponent: () => import('./features/users/users-page').then((m) => m.UsersPage),
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'users' },
+          {
+            path: 'users',
+            loadComponent: () => import('./features/users/users-page').then((m) => m.UsersPage),
+          },
+          {
+            path: 'public-access',
+            loadComponent: () =>
+              import('./features/public-access/public-access-page').then((m) => m.PublicAccessPage),
+          },
+          {
+            path: 'jobs',
+            loadComponent: () => import('./features/jobs/jobs-page').then((m) => m.JobsPage),
+          },
+          {
+            path: 'audit-log',
+            loadComponent: () =>
+              import('./features/audit-log/audit-log-page').then((m) => m.AuditLogPage),
+          },
+        ],
       },
     ],
   },

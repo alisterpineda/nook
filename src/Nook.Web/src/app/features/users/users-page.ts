@@ -161,7 +161,7 @@ const noUsers: UserSummaryResponse[] = [];
                         @if (cell.row.original.hasAuditEntries) {
                           <a
                             class="font-medium hover:underline"
-                            routerLink="/audit-log"
+                            routerLink="/admin/audit-log"
                             [queryParams]="{ person: cell.row.original.id }"
                             [attr.aria-label]="'Audit log for ' + cell.row.original.name"
                             >Audit log</a
