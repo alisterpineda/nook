@@ -146,6 +146,37 @@ public partial class WorksController(
     }
 
     /// <summary>
+    /// Replaces a work's editable values with the request's. An admin may edit any work, and anyone else only a work
+    /// they own while their role may upload.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Edit(Guid id, WorkEditRequest request, CancellationToken cancellationToken)
+    {
+        var outcome = await editor.EditAsync(User, id, request, cancellationToken);
+        switch (outcome.Status)
+        {
+            case WorkEditStatus.NotFound:
+                return NotFound();
+            case WorkEditStatus.Forbidden:
+                return Problem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Forbidden",
+                    detail: outcome.Message);
+            case WorkEditStatus.Invalid:
+                ModelState.AddModelError(outcome.Field!, outcome.Message!);
+                return ValidationProblem(ModelState);
+            default:
+                return NoContent();
+        }
+    }
+
+    /// <summary>
     /// The work's cover, as the file it was saved as, or as a JPEG at a size: <c>small</c> fits inside 400 × 600 pixels
     /// and <c>large</c> inside 1000 × 1500. A cover is never enlarged, and one that cannot be resized is served as the
     /// file it was saved as at any size. The response is served so a browser runs nothing in it, since a cover can be

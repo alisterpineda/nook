@@ -107,3 +107,62 @@ public record WorkDetailResponse(
     ContentAccess Access,
     bool CanEdit,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AddedBy);
+
+/// <summary>A work's series and its place in it, as an edit sends them.</summary>
+/// <param name="Name">The series' name. A name that matches a stored series by name key joins that series.</param>
+/// <param name="Position">The work's place in the series, from 0 to 99,999, or null for none.</param>
+public record WorkEditSeriesRequest(string Name, decimal? Position);
+
+/// <summary>
+/// The whole editable state of a work: an edit replaces all of it. <c>Authors</c> are in the order they are shown.
+/// <c>Series</c> null means no series, and <c>SectionId</c> null means the Default area. A person, series or tag that
+/// matches a stored one by name key is that one, and a name with no match makes a new one.
+/// </summary>
+public record WorkEditRequest(
+    string Title,
+    string SortTitle,
+    List<string> Authors,
+    WorkEditSeriesRequest? Series,
+    List<string> Tags,
+    string? Description,
+    Guid? SectionId) : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (string.IsNullOrWhiteSpace(Title))
+        {
+            yield return new ValidationResult("The title is required.", [nameof(Title)]);
+        }
+
+        if (string.IsNullOrWhiteSpace(SortTitle))
+        {
+            yield return new ValidationResult("The sort title is required.", [nameof(SortTitle)]);
+        }
+
+        if (Authors.Any(string.IsNullOrWhiteSpace))
+        {
+            yield return new ValidationResult("An author's name cannot be empty.", [nameof(Authors)]);
+        }
+        else if (HasRepeatedName(Authors))
+        {
+            yield return new ValidationResult("An author is named more than once.", [nameof(Authors)]);
+        }
+
+        if (Tags.Any(string.IsNullOrWhiteSpace))
+        {
+            yield return new ValidationResult("A tag's name cannot be empty.", [nameof(Tags)]);
+        }
+        else if (HasRepeatedName(Tags))
+        {
+            yield return new ValidationResult("A tag is named more than once.", [nameof(Tags)]);
+        }
+
+        if (Series is not null && string.IsNullOrWhiteSpace(Series.Name))
+        {
+            yield return new ValidationResult("The series' name cannot be empty.", [nameof(Series)]);
+        }
+    }
+
+    private static bool HasRepeatedName(List<string> names) =>
+        names.Select(NameKey.Of).Distinct().Count() < names.Count;
+}

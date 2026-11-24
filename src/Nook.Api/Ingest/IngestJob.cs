@@ -20,9 +20,6 @@ public sealed class IngestJob : JobType
 {
     public const string TypeName = "ingest";
 
-    /// <summary>How long a run that failed its save waits for the ingest lock before it leaves its copy in place.</summary>
-    private static readonly TimeSpan UndoLockWait = TimeSpan.FromSeconds(30);
-
     public override string Name => TypeName;
 
     public override JobRun CreateRun(string payloadJson, IServiceProvider services)
@@ -283,38 +280,24 @@ public sealed class IngestJob : JobType
         {
             try
             {
-                try
-                {
-                    await transaction.RollbackAsync(CancellationToken.None);
-                }
-                catch (Exception exception)
-                {
-                    // A transaction that has ended, by a commit that landed or a lost connection, holds no lock.
-                    logger.LogDebug(exception, "The failed ingest transaction had already ended.");
-                }
-
-                await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
-                var fresh = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-                await fresh.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-                {
-                    await using var check = await fresh.Database.BeginTransactionAsync(CancellationToken.None);
-
-                    // The run is already failing, so it does not wait for the lock without end as a run that is
-                    // filing does: when the wait runs out, the copy stays as when nothing says.
-                    using var waited = new CancellationTokenSource(UndoLockWait);
-                    await IngestLock.TakeAsync(fresh, waited.Token);
-                    if (await IsItemSavedAsync(fresh, itemId, CancellationToken.None))
+                await IngestLock.RetakeAfterFailedSaveAsync(
+                    transaction,
+                    services.GetRequiredService<IServiceScopeFactory>(),
+                    logger,
+                    async fresh =>
                     {
-                        return;
-                    }
+                        if (await IsItemSavedAsync(fresh, itemId, CancellationToken.None))
+                        {
+                            return;
+                        }
 
-                    var claimedPaths = await new WorkMatcher(fresh).ClaimedPathsAsync(
-                        Filing.FolderOf(filed.RelativePath), CancellationToken.None);
-                    if (!Filing.IsClaimed(claimedPaths, filed.RelativePath))
-                    {
-                        Undo(filed, coverFile, logger);
-                    }
-                });
+                        var claimedPaths = await new WorkMatcher(fresh).ClaimedPathsAsync(
+                            Filing.FolderOf(filed.RelativePath), CancellationToken.None);
+                        if (!Filing.IsClaimed(claimedPaths, filed.RelativePath))
+                        {
+                            Undo(filed, coverFile, logger);
+                        }
+                    });
             }
             catch (Exception exception)
             {

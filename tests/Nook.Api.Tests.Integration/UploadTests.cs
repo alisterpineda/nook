@@ -123,8 +123,8 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task A_role_made_to_upload_may_and_one_that_is_not_may_not()
     {
-        var uploaders = NewRole("Uploaders", canUpload: true);
-        var readers = NewRole("Readers", canUpload: false);
+        var uploaders = ApiTestExtensions.NewRole("Uploaders", canUpload: true);
+        var readers = ApiTestExtensions.NewRole("Readers", canUpload: false);
         await _app.AddRowsAsync(uploaders, readers);
         using var uploader = await _app.CreateSignedInClientAsync(uploaders.Id);
         using var reader = await _app.CreateSignedInClientAsync(readers.Id);
@@ -140,7 +140,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Upload_into_a_section_the_role_cannot_see_is_forbidden_and_stages_nothing()
     {
         var section = await _app.AddSectionAsync("Hidden");
-        var role = NewRole("Shut out of one section", canUpload: true, allSections: false, defaultArea: ContentAccess.Download);
+        var role = ApiTestExtensions.NewRole("Shut out of one section", canUpload: true, allSections: false, defaultArea: ContentAccess.Download);
         await _app.AddRowsAsync(role);
         using var client = await _app.CreateSignedInClientAsync(role.Id);
         var stagedBefore = _factory.CountStagedFiles();
@@ -155,7 +155,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     public async Task Upload_into_a_section_the_role_can_see_is_accepted()
     {
         var section = await _app.AddSectionAsync("Visible");
-        var role = NewRole("Sees one section", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
+        var role = ApiTestExtensions.NewRole("Sees one section", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
         await _app.AddRowsAsync(role, new RoleSection { RoleId = role.Id, SectionId = section.Id, Access = ContentAccess.Browse });
         using var client = await _app.CreateSignedInClientAsync(role.Id);
 
@@ -167,7 +167,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Upload_into_the_Default_area_is_forbidden_to_a_role_shut_out_of_it()
     {
-        var role = NewRole("Shut out of Default", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
+        var role = ApiTestExtensions.NewRole("Shut out of Default", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
         await _app.AddRowsAsync(role);
         using var client = await _app.CreateSignedInClientAsync(role.Id);
         var stagedBefore = _factory.CountStagedFiles();
@@ -181,7 +181,7 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
     [Fact]
     public async Task Upload_into_an_unknown_section_stays_a_validation_error_for_a_role_that_sees_no_section()
     {
-        var role = NewRole("Sees nothing", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
+        var role = ApiTestExtensions.NewRole("Sees nothing", canUpload: true, allSections: false, defaultArea: ContentAccess.None);
         await _app.AddRowsAsync(role);
         using var client = await _app.CreateSignedInClientAsync(role.Id);
 
@@ -189,16 +189,6 @@ public sealed class UploadTests : IClassFixture<NookApiFactory>, IDisposable
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
-
-    private static Role NewRole(
-        string name, bool canUpload, bool allSections = true, ContentAccess defaultArea = ContentAccess.Download) => new()
-    {
-        Name = $"{name} {Guid.NewGuid():N}",
-        ContentAccess = ContentAccess.Download,
-        DefaultAreaAccess = defaultArea,
-        AllSections = allSections,
-        CanUpload = canUpload,
-    };
 
     [Fact]
     public void Upload_limit_defaults_to_200_megabytes()

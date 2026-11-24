@@ -131,8 +131,7 @@ public static class Filing
             var candidate = Numbered(folder, number);
             var folderPath = storage.LibraryFile(candidate);
 
-            // A plain file where the folder would go is not ingest's to replace.
-            if (File.Exists(folderPath) || HoldsClaimedPath(claimedPaths, candidate))
+            if (IsFolderTaken(candidate, claimedPaths, storage))
             {
                 return null;
             }
@@ -195,11 +194,19 @@ public static class Filing
     }
 
     /// <summary>Whether a part points at the path, compared as a file system that folds names may: ignoring case and Unicode form.</summary>
-    public static bool IsClaimed(IReadOnlyCollection<string> claimedPaths, string relativePath)
-    {
-        var path = FormC(relativePath);
-        return claimedPaths.Any(claimed => string.Equals(FormC(claimed), path, StringComparison.OrdinalIgnoreCase));
-    }
+    public static bool IsClaimed(IReadOnlyCollection<string> claimedPaths, string relativePath) =>
+        claimedPaths.Any(claimed => IsSamePath(claimed, relativePath));
+
+    /// <summary>Whether two paths are one to a file system that folds names: equal ignoring case and Unicode form.</summary>
+    public static bool IsSamePath(string relativePath, string other) =>
+        string.Equals(FormC(relativePath), FormC(other), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a work cannot take the folder as its own: a part points at a path inside it, or a plain file is where
+    /// the folder would go, which is not filing's to replace.
+    /// </summary>
+    internal static bool IsFolderTaken(string relativeFolder, IReadOnlyCollection<string> claimedPaths, NookStorage storage) =>
+        File.Exists(storage.LibraryFile(relativeFolder)) || HoldsClaimedPath(claimedPaths, relativeFolder);
 
     /// <summary>
     /// Whether the path lies inside the <c>/</c>-separated folder, at any depth, compared as <see cref="IsClaimed"/>
@@ -244,7 +251,7 @@ public static class Filing
     }
 
     /// <summary>The name itself for number 1, and after that the name with <c> (2)</c>, <c> (3)</c> and so on.</summary>
-    private static string Numbered(string name, int number) => number == 1 ? name : $"{name} ({number})";
+    internal static string Numbered(string name, int number) => number == 1 ? name : $"{name} ({number})";
 
     /// <summary>
     /// Copies the staged file to the path unless a part claims it or a folder is there. A file no part points at is

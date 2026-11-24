@@ -59,15 +59,17 @@ internal static class ApiTestExtensions
     }
 
     /// <summary>A client that holds the session cookie of a new user in any role, built in or not.</summary>
-    public static async Task<HttpClient> CreateSignedInClientAsync(this WebApplicationFactory<Program> factory, Guid roleId)
+    public static async Task<HttpClient> CreateSignedInClientAsync(this WebApplicationFactory<Program> factory, Guid roleId) =>
+        (await factory.CreateSignedInUserAsync(roleId)).Client;
+
+    /// <summary>A new user in any role, built in or not, with a client that holds their session cookie.</summary>
+    public static async Task<(NookUser User, HttpClient Client)> CreateSignedInUserAsync(
+        this WebApplicationFactory<Program> factory, Guid roleId)
     {
         var user = await factory.CreateUserAsync(roleId);
         var client = factory.CreateClient();
-
-        var response = await client.LoginAsync(user.Email!, Password);
-        response.EnsureSuccessStatusCode();
-
-        return client;
+        (await client.LoginAsync(user.Email!, Password)).EnsureSuccessStatusCode();
+        return (user, client);
     }
 
     public static Task<HttpResponseMessage> LoginAsync(this HttpClient client, string email, string password) =>
@@ -130,6 +132,17 @@ internal static class ApiTestExtensions
         db.AddRange(rows);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
+
+    /// <summary>A role that is not saved yet, with a name of its own, that sees every section unless told otherwise.</summary>
+    public static Role NewRole(
+        string name, bool canUpload, bool allSections = true, ContentAccess defaultArea = ContentAccess.Download) => new()
+    {
+        Name = $"{name} {Guid.NewGuid():N}",
+        ContentAccess = ContentAccess.Download,
+        DefaultAreaAccess = defaultArea,
+        AllSections = allSections,
+        CanUpload = canUpload,
+    };
 
     /// <summary>The messages the API has logged at a level so far, oldest first.</summary>
     public static IReadOnlyList<string> ReadLogs(this WebApplicationFactory<Program> factory, LogLevel level) =>
