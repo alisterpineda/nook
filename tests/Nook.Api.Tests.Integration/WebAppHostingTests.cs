@@ -61,6 +61,31 @@ public sealed class WebAppHostingTests : IClassFixture<NookApiFactory>, IDisposa
         Assert.Equal(MainJs, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData("/index.html")]
+    [InlineData("/")]
+    [InlineData("/works/123")]
+    public async Task The_web_app_page_is_never_served_from_a_stale_cache(string path)
+    {
+        using var client = _app.CreateClient();
+
+        var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl?.NoCache);
+    }
+
+    [Fact]
+    public async Task A_built_file_does_not_ask_to_be_revalidated()
+    {
+        using var client = _app.CreateClient();
+
+        var response = await client.GetAsync("/main.js", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotEqual(true, response.Headers.CacheControl?.NoCache);
+    }
+
     [Fact]
     public async Task Unknown_api_path_does_not_return_the_web_app()
     {

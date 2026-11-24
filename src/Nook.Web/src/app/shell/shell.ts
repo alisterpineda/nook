@@ -18,6 +18,7 @@ import {
   lucideLibraryBig,
   lucideListChecks,
   lucideLogOut,
+  lucideRefreshCw,
   lucideScrollText,
   lucideSearch,
   lucideSunMoon,
@@ -35,6 +36,7 @@ import { filter, map } from 'rxjs';
 import { LibraryArea, areaParam, readArea, sameArea } from '../core/library-area';
 import { allows } from '../core/content-access';
 import { appName, tabTitle } from '../core/app-name';
+import { AppUpdate } from '../core/app-update';
 import { PageName } from '../core/page-name';
 import { readTerm } from '../core/search-term';
 import { Sections, defaultAreaName, libraryName } from '../core/sections';
@@ -61,8 +63,9 @@ interface Crumb {
  * "Library", then "Default" and the caller's sections when there are any, then "Authors", then "Users", "Public access",
  * "Jobs" and "Audit log" under "Admin" for an admin, and in its footer "Upload", which opens the "Add books" dialog,
  * for whoever may upload, above the user's menu, which opens a dialog for the app's theme, and the page itself beside
- * it under a header that says where the page is. A visitor nobody has signed in as gets no footer, and a "Sign in"
- * link in the header.
+ * it under a header that says where the page is. While a newer build of the app is being served, "Update available"
+ * heads the footer, and reloads the page. A visitor nobody has signed in as gets no footer unless an update is
+ * available, and then a footer of that button alone, and a "Sign in" link in the header.
  */
 @Component({
   selector: 'app-shell',
@@ -88,6 +91,7 @@ interface Crumb {
       lucideLibraryBig,
       lucideListChecks,
       lucideLogOut,
+      lucideRefreshCw,
       lucideScrollText,
       lucideSearch,
       lucideSunMoon,
@@ -177,53 +181,70 @@ interface Crumb {
             </nav>
           }
         </div>
-        @if (session.user(); as user) {
+        @if (session.user() || appUpdate.available()) {
           <div hlmSidebarFooter>
-            @if (session.canUpload()) {
+            @if (appUpdate.available()) {
               <ul hlmSidebarMenu>
                 <li hlmSidebarMenuItem>
-                  <!-- Preselects the section being browsed, Default included. -->
                   <button
                     hlmSidebarMenuButton
                     type="button"
-                    closeMobileSidebarOnClick
-                    tooltip="Upload"
-                    (click)="addBooks.open([], browsedSection())"
+                    tooltip="Update available"
+                    (click)="appUpdate.reload()"
                   >
-                    <ng-icon name="lucideUpload" />
-                    <span>Upload</span>
+                    <ng-icon name="lucideRefreshCw" />
+                    <span>Update available</span>
                   </button>
                 </li>
               </ul>
             }
-            @if (signOutFailed()) {
-              <p
-                class="text-destructive px-2 text-sm group-data-[collapsible=icon]:hidden"
-                role="alert"
-              >
-                Could not sign out. Try again.
-              </p>
-            }
-            <ul hlmSidebarMenu>
-              <li hlmSidebarMenuItem>
-                <button
-                  hlmSidebarMenuButton
-                  type="button"
-                  size="lg"
-                  side="top"
-                  align="start"
-                  [hlmDropdownMenuTrigger]="userMenu"
+            @if (session.user(); as user) {
+              @if (session.canUpload()) {
+                <ul hlmSidebarMenu>
+                  <li hlmSidebarMenuItem>
+                    <!-- Preselects the section being browsed, Default included. -->
+                    <button
+                      hlmSidebarMenuButton
+                      type="button"
+                      closeMobileSidebarOnClick
+                      tooltip="Upload"
+                      (click)="addBooks.open([], browsedSection())"
+                    >
+                      <ng-icon name="lucideUpload" />
+                      <span>Upload</span>
+                    </button>
+                  </li>
+                </ul>
+              }
+              @if (signOutFailed()) {
+                <p
+                  class="text-destructive px-2 text-sm group-data-[collapsible=icon]:hidden"
+                  role="alert"
                 >
-                  <span
-                    class="bg-sidebar-accent text-sidebar-accent-foreground flex aspect-square size-8 items-center justify-center rounded-lg border text-sm font-medium uppercase"
-                    aria-hidden="true"
-                    >{{ user.email.charAt(0) }}</span
+                  Could not sign out. Try again.
+                </p>
+              }
+              <ul hlmSidebarMenu>
+                <li hlmSidebarMenuItem>
+                  <button
+                    hlmSidebarMenuButton
+                    type="button"
+                    size="lg"
+                    side="top"
+                    align="start"
+                    [hlmDropdownMenuTrigger]="userMenu"
                   >
-                  <span class="min-w-0 flex-1 truncate" data-user-email>{{ user.email }}</span>
-                  <ng-icon name="lucideChevronsUpDown" class="text-muted-foreground ms-auto" />
-                </button>
-              </li>
-            </ul>
+                    <span
+                      class="bg-sidebar-accent text-sidebar-accent-foreground flex aspect-square size-8 items-center justify-center rounded-lg border text-sm font-medium uppercase"
+                      aria-hidden="true"
+                      >{{ user.email.charAt(0) }}</span
+                    >
+                    <span class="min-w-0 flex-1 truncate" data-user-email>{{ user.email }}</span>
+                    <ng-icon name="lucideChevronsUpDown" class="text-muted-foreground ms-auto" />
+                  </button>
+                </li>
+              </ul>
+            }
           </div>
         }
         <button hlmSidebarRail type="button" aria-label="Toggle sidebar"></button>
@@ -338,6 +359,7 @@ export class Shell {
   private readonly uploadQueue = inject(UploadQueue);
   private readonly uploadActivity = inject(UploadActivity);
   private readonly hub = inject(ActivityHub);
+  protected readonly appUpdate = inject(AppUpdate);
 
   protected readonly session = inject(Session);
   private readonly dialogs = inject(HlmDialogService);

@@ -9,6 +9,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
+import { AppUpdate } from '../core/app-update';
 import { PageName } from '../core/page-name';
 import { AppTheme } from '../core/app-theme';
 import { Session } from '../core/session';
@@ -177,9 +178,29 @@ describe('Shell', () => {
 
   /** The footer's "Upload" button, which opens the "Add books" dialog, when the sidebar has one. */
   function uploadButton(shell: HTMLElement): HTMLButtonElement | undefined {
+    return footerButtonElements(shell).find((link) => link.textContent?.trim() === 'Upload');
+  }
+
+  /** The footer's buttons, in order. */
+  function footerButtonElements(shell: HTMLElement): HTMLButtonElement[] {
     return Array.from(
       shell.querySelectorAll<HTMLButtonElement>('[data-slot="sidebar-footer"] button'),
-    ).find((link) => link.textContent?.trim() === 'Upload');
+    );
+  }
+
+  /** The footer's buttons, in order, by the text they show. */
+  function footerButtons(shell: HTMLElement): string[] {
+    return footerButtonElements(shell).map((button) => (button.textContent ?? '').trim());
+  }
+
+  /** Makes the app find that a newer build is being served, and lets the shell show it. */
+  async function findUpdate(): Promise<void> {
+    const checking = TestBed.inject(AppUpdate).check();
+    httpTesting
+      .expectOne('/index.html')
+      .flush('<html><head><script src="main-BBBB.js" type="module"></script></head></html>');
+    await checking;
+    await harness.fixture.whenStable();
   }
 
   function linkNamed(shell: HTMLElement, name: string): HTMLAnchorElement {
@@ -742,6 +763,47 @@ describe('Shell', () => {
 
     expect(signInLink(shell)?.getAttribute('href')).toBe('/sign-in');
     expect(shell.querySelectorAll('[data-slot="sidebar-footer"] button')).toHaveLength(0);
+  });
+
+  it('shows Update available above Upload once a newer build is served', async () => {
+    await signInAs(grace);
+    const shell = await openShell('/library');
+    expect(footerButtons(shell)).not.toContain('Update available');
+
+    await findUpdate();
+
+    expect(footerButtons(shell).slice(0, 2)).toEqual(['Update available', 'Upload']);
+  });
+
+  it('shows Update available to a viewer, who has no Upload button', async () => {
+    await signInAs(viewer);
+    const shell = await openShell('/library');
+
+    await findUpdate();
+
+    expect(footerButtons(shell)).toContain('Update available');
+    expect(uploadButton(shell)).toBeUndefined();
+  });
+
+  it('shows a visitor a footer with only Update available', async () => {
+    await visitWith({ publicAccess: true, defaultArea: 'browse' });
+    const shell = await openShell('/library');
+
+    await findUpdate();
+
+    expect(footerButtons(shell)).toEqual(['Update available']);
+  });
+
+  it('reloads the page when Update available is pressed', async () => {
+    const reload = vi
+      .spyOn(TestBed.inject(AppUpdate), 'reload')
+      .mockImplementation(() => undefined);
+    const shell = await openShell('/library');
+    await findUpdate();
+
+    buttonNamed(shell, 'Update available').click();
+
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it('shows a signed-in user no sign-in link', async () => {

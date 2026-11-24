@@ -50,6 +50,16 @@ if (!buildingOpenApiDocument)
 }
 builder.Services.AddSingleton<NookStorage>();
 
+// The page names the hashed scripts and stylesheets of one build, so a browser has to ask again before it reuses it.
+// The fallback endpoints read these options too, so this reaches the page however it is asked for.
+builder.Services.Configure<StaticFileOptions>(options => options.OnPrepareResponse = context =>
+{
+    if (string.Equals(context.File.Name, "index.html", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Context.Response.Headers.CacheControl = "no-cache";
+    }
+});
+
 // The keys that protect sign-in cookies live in the data folder, so a sign-in outlasts a restart or an upgrade.
 // The build has no data folder, so it keeps the default keys.
 if (!buildingOpenApiDocument)
