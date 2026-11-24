@@ -35,7 +35,8 @@
       "@spartan-ng/helm/progress": ["./libs/spartan/progress/src/index.ts"],
       "@spartan-ng/helm/command": ["./libs/spartan/command/src/index.ts"],
       "@spartan-ng/helm/input-group": ["./libs/spartan/input-group/src/index.ts"],
-      "@spartan-ng/helm/textarea": ["./libs/spartan/textarea/src/index.ts"]
+      "@spartan-ng/helm/textarea": ["./libs/spartan/textarea/src/index.ts"],
+      "@spartan-ng/helm/alert": ["./libs/spartan/alert/src/index.ts"]
     }
   },
   "angularCompilerOptions": {

@@ -193,6 +193,11 @@ describe('Shell', () => {
     return footerButtonElements(shell).map((button) => (button.textContent ?? '').trim());
   }
 
+  /** The footer's card that says a newer build is being served, when there is one. */
+  function updateNotice(shell: HTMLElement): HTMLElement | null {
+    return shell.querySelector<HTMLElement>('[data-slot="sidebar-footer"] [data-slot="alert"]');
+  }
+
   /** Makes the app find that a newer build is being served, and lets the shell show it. */
   async function findUpdate(): Promise<void> {
     const checking = TestBed.inject(AppUpdate).check();
@@ -765,46 +770,65 @@ describe('Shell', () => {
     expect(shell.querySelectorAll('[data-slot="sidebar-footer"] button')).toHaveLength(0);
   });
 
-  it('shows Update available above Upload once a newer build is served', async () => {
+  it('shows the update notice above Upload once a newer build is served', async () => {
     await signInAs(grace);
     const shell = await openShell('/library');
+    expect(updateNotice(shell)).toBeNull();
     expect(footerButtons(shell)).not.toContain('Update available');
 
     await findUpdate();
 
-    expect(footerButtons(shell).slice(0, 2)).toEqual(['Update available', 'Upload']);
+    expect(updateNotice(shell)?.textContent).toContain('Update available');
+    expect(updateNotice(shell)?.textContent).toContain('Reload to get the latest version of Nook.');
+    // The card's button, then the button that stands in for the card while the sidebar is collapsed to icons.
+    expect(footerButtons(shell).slice(0, 3)).toEqual(['Reload', 'Update available', 'Upload']);
   });
 
-  it('shows Update available to a viewer, who has no Upload button', async () => {
+  it('shows the card with the sidebar open and the button with it collapsed to icons', async () => {
+    const shell = await openShell('/library');
+
+    await findUpdate();
+
+    expect(updateNotice(shell)!.classList).toContain('group-data-[collapsible=icon]:hidden');
+    const collapsed = buttonNamed(shell, 'Update available').closest('ul')!;
+    expect(collapsed.classList).toContain('hidden');
+    expect(collapsed.classList).toContain('group-data-[collapsible=icon]:flex');
+  });
+
+  it('shows the update notice to a viewer, who has no Upload button', async () => {
     await signInAs(viewer);
     const shell = await openShell('/library');
 
     await findUpdate();
 
-    expect(footerButtons(shell)).toContain('Update available');
+    expect(updateNotice(shell)).not.toBeNull();
     expect(uploadButton(shell)).toBeUndefined();
   });
 
-  it('shows a visitor a footer with only Update available', async () => {
+  it('shows a visitor a footer with only the update notice', async () => {
     await visitWith({ publicAccess: true, defaultArea: 'browse' });
     const shell = await openShell('/library');
 
     await findUpdate();
 
-    expect(footerButtons(shell)).toEqual(['Update available']);
+    expect(updateNotice(shell)).not.toBeNull();
+    expect(footerButtons(shell)).toEqual(['Reload', 'Update available']);
   });
 
-  it('reloads the page when Update available is pressed', async () => {
-    const reload = vi
-      .spyOn(TestBed.inject(AppUpdate), 'reload')
-      .mockImplementation(() => undefined);
-    const shell = await openShell('/library');
-    await findUpdate();
+  it.each(['Reload', 'Update available'])(
+    'reloads the page when %s is pressed in the update notice',
+    async (name) => {
+      const reload = vi
+        .spyOn(TestBed.inject(AppUpdate), 'reload')
+        .mockImplementation(() => undefined);
+      const shell = await openShell('/library');
+      await findUpdate();
 
-    buttonNamed(shell, 'Update available').click();
+      buttonNamed(shell, name).click();
 
-    expect(reload).toHaveBeenCalledOnce();
-  });
+      expect(reload).toHaveBeenCalledOnce();
+    },
+  );
 
   it('shows a signed-in user no sign-in link', async () => {
     const shell = await openShell('/library');

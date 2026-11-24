@@ -26,6 +26,7 @@ import {
   lucideUserCog,
   lucideUsers,
 } from '@ng-icons/lucide';
+import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmBreadcrumbImports } from '@spartan-ng/helm/breadcrumb';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmDialogService } from '@spartan-ng/helm/dialog';
@@ -63,9 +64,10 @@ interface Crumb {
  * "Library", then "Default" and the caller's sections when there are any, then "Authors", then "Users", "Public access",
  * "Jobs" and "Audit log" under "Admin" for an admin, and in its footer "Upload", which opens the "Add books" dialog,
  * for whoever may upload, above the user's menu, which opens a dialog for the app's theme, and the page itself beside
- * it under a header that says where the page is. While a newer build of the app is being served, "Update available"
- * heads the footer, and reloads the page. A visitor nobody has signed in as gets no footer unless an update is
- * available, and then a footer of that button alone, and a "Sign in" link in the header.
+ * it under a header that says where the page is. While a newer build of the app is being served, an "Update available"
+ * card heads the footer, with a "Reload" button that reloads the page; with the sidebar collapsed to its icons, an
+ * "Update available" button stands in for the card. A visitor nobody has signed in as gets no footer unless an update
+ * is available, and then a footer of that notice alone, and a "Sign in" link in the header.
  */
 @Component({
   selector: 'app-shell',
@@ -73,6 +75,7 @@ interface Crumb {
     NgIcon,
     RouterLink,
     RouterOutlet,
+    HlmAlertImports,
     HlmBreadcrumbImports,
     HlmButtonImports,
     HlmDropdownMenuImports,
@@ -184,12 +187,30 @@ interface Crumb {
         @if (session.user() || appUpdate.available()) {
           <div hlmSidebarFooter>
             @if (appUpdate.available()) {
-              <ul hlmSidebarMenu>
+              <!-- The card when the sidebar is open, and the button when it is collapsed to icons. -->
+              <div hlmAlert class="group-data-[collapsible=icon]:hidden">
+                <ng-icon name="lucideRefreshCw" />
+                <h4 hlmAlertTitle>Update available</h4>
+                <p hlmAlertDescription>Reload to get the latest version of Nook.</p>
+                <button
+                  hlmBtn
+                  size="sm"
+                  type="button"
+                  class="col-start-2 mt-2 w-fit"
+                  (click)="appUpdate.reload()"
+                >
+                  Reload
+                </button>
+              </div>
+              <!-- Coloured like the card's "Reload", the button component's default look, which the sidebar's
+                   menu button has no variant for. -->
+              <ul hlmSidebarMenu class="hidden group-data-[collapsible=icon]:flex">
                 <li hlmSidebarMenuItem>
                   <button
                     hlmSidebarMenuButton
                     type="button"
                     tooltip="Update available"
+                    class="bg-primary text-primary-foreground hover:bg-primary/80 hover:text-primary-foreground active:bg-primary/80 active:text-primary-foreground"
                     (click)="appUpdate.reload()"
                   >
                     <ng-icon name="lucideRefreshCw" />
