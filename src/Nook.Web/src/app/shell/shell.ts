@@ -58,9 +58,11 @@ interface Crumb {
 
 /**
  * The frame around every page of the library: a sidebar that collapses to its icons, with the app's name, then
- * "Library", then "Default" and the caller's sections when there are any, then "Authors" and, for whoever may upload,
- * "Add books", which opens a dialog, then "Users", "Public access", "Jobs" and "Audit log" under "Admin" for an admin, the user's menu in its footer, which opens a dialog for the app's theme, and the page itself beside
- * it under a header that says where the page is. A visitor nobody has signed in as gets no user menu, and a "Sign in" link in the header.
+ * "Library", then "Default" and the caller's sections when there are any, then "Authors", then "Users", "Public access",
+ * "Jobs" and "Audit log" under "Admin" for an admin, and in its footer "Upload", which opens the "Add books" dialog,
+ * for whoever may upload, above the user's menu, which opens a dialog for the app's theme, and the page itself beside
+ * it under a header that says where the page is. A visitor nobody has signed in as gets no footer, and a "Sign in"
+ * link in the header.
  */
 @Component({
   selector: 'app-shell',
@@ -150,21 +152,6 @@ interface Crumb {
                   <span>Authors</span>
                 </a>
               </li>
-              @if (session.canUpload()) {
-                <li hlmSidebarMenuItem>
-                  <!-- Preselects the section being browsed, Default included. -->
-                  <button
-                    hlmSidebarMenuButton
-                    type="button"
-                    closeMobileSidebarOnClick
-                    tooltip="Add books"
-                    (click)="addBooks.open([], browsedSection())"
-                  >
-                    <ng-icon name="lucideUpload" />
-                    <span>Add books</span>
-                  </button>
-                </li>
-              }
             </ul>
           </nav>
           @if (isAdmin()) {
@@ -192,6 +179,23 @@ interface Crumb {
         </div>
         @if (session.user(); as user) {
           <div hlmSidebarFooter>
+            @if (session.canUpload()) {
+              <ul hlmSidebarMenu>
+                <li hlmSidebarMenuItem>
+                  <!-- Preselects the section being browsed, Default included. -->
+                  <button
+                    hlmSidebarMenuButton
+                    type="button"
+                    closeMobileSidebarOnClick
+                    tooltip="Upload"
+                    (click)="addBooks.open([], browsedSection())"
+                  >
+                    <ng-icon name="lucideUpload" />
+                    <span>Upload</span>
+                  </button>
+                </li>
+              </ul>
+            }
             @if (signOutFailed()) {
               <p
                 class="text-destructive px-2 text-sm group-data-[collapsible=icon]:hidden"
@@ -340,7 +344,7 @@ export class Shell {
   protected readonly appName = appName;
   protected readonly sections = this.sectionStore.list;
   protected readonly signOutFailed = signal(false);
-  /** The `section` the URL carries, which "Add books" preselects. */
+  /** The `section` the URL carries, which the "Add books" dialog preselects. */
   protected readonly browsedSection = computed(() => areaParam(readArea(this.queryParams())));
   protected readonly isAdmin = this.session.isAdmin;
   /** Whether the list of works is open, the only page "Library", "Default" and the sections stand for. */

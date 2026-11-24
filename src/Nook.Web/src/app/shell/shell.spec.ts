@@ -175,10 +175,11 @@ describe('Shell', () => {
     return groupLinks(shell, 'Library');
   }
 
-  function addBooks(shell: HTMLElement): HTMLButtonElement | undefined {
-    return Array.from(shell.querySelectorAll<HTMLButtonElement>('nav button')).find(
-      (link) => link.textContent?.trim() === 'Add books',
-    );
+  /** The footer's "Upload" button, which opens the "Add books" dialog, when the sidebar has one. */
+  function uploadButton(shell: HTMLElement): HTMLButtonElement | undefined {
+    return Array.from(
+      shell.querySelectorAll<HTMLButtonElement>('[data-slot="sidebar-footer"] button'),
+    ).find((link) => link.textContent?.trim() === 'Upload');
   }
 
   function linkNamed(shell: HTMLElement, name: string): HTMLAnchorElement {
@@ -207,7 +208,9 @@ describe('Shell', () => {
 
   /** Opens the user's menu in the sidebar's footer and presses its item called `name`. */
   async function chooseFromTheFooterMenu(shell: HTMLElement, name: string): Promise<void> {
-    shell.querySelector<HTMLElement>('[data-slot="sidebar-footer"] button')!.click();
+    shell
+      .querySelector<HTMLElement>('[data-slot="sidebar-footer"] button:has([data-user-email])')!
+      .click();
     await harness.fixture.whenStable();
     const item = await vi.waitFor(() => {
       const found = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
@@ -555,12 +558,15 @@ describe('Shell', () => {
     ).toEqual(['Users']);
   });
 
-  it('opens the Add books dialog from the sidebar for a contributor', async () => {
+  it("opens the Add books dialog from the sidebar's footer for a contributor", async () => {
     await signInAs(grace);
     const shell = await openShell('/library');
 
-    const button = addBooks(shell);
-    expect(button?.closest('nav')?.getAttribute('aria-label')).toBe('Browse');
+    const button = uploadButton(shell);
+    // It stands above the user's menu, the footer's only other button.
+    expect(
+      Array.from(shell.querySelectorAll('[data-slot="sidebar-footer"] button')).indexOf(button!),
+    ).toBe(0);
     expect(Array.from(groupLinks(shell, 'Browse'), (link) => link.textContent?.trim())).toEqual([
       'Authors',
     ]);
@@ -574,7 +580,7 @@ describe('Shell', () => {
   it('opens Add books for an admin with the section being browsed preselected', async () => {
     const shell = await openShell(`/library?section=${comics.id}&page=2`);
 
-    addBooks(shell)?.click();
+    uploadButton(shell)?.click();
 
     expect(openAddBooks).toHaveBeenLastCalledWith([], comics.id);
   });
@@ -582,16 +588,16 @@ describe('Shell', () => {
   it('opens Add books with the default area when it is being browsed', async () => {
     const shell = await openShell('/library?section=default&sort=added');
 
-    addBooks(shell)?.click();
+    uploadButton(shell)?.click();
 
     expect(openAddBooks).toHaveBeenLastCalledWith([], 'default');
   });
 
-  it('shows no Add books to a viewer', async () => {
+  it('shows no Upload button to a viewer', async () => {
     await signInAs(viewer);
     const shell = await openShell('/library');
 
-    expect(addBooks(shell)).toBeUndefined();
+    expect(uploadButton(shell)).toBeUndefined();
     expect(shell.querySelector('nav[aria-label="Admin"]')).toBeNull();
   });
 
@@ -770,7 +776,7 @@ describe('Shell', () => {
     const shell = await openShell('/library');
 
     expect(shell.querySelector('nav[aria-label="Admin"]')).toBeNull();
-    expect(addBooks(shell)).toBeUndefined();
+    expect(uploadButton(shell)).toBeUndefined();
   });
 
   it('a failed sign-out keeps the upload list', async () => {
