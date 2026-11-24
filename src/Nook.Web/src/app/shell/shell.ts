@@ -19,6 +19,7 @@ import {
   lucideListChecks,
   lucideLogOut,
   lucideScrollText,
+  lucideSearch,
   lucideSunMoon,
   lucideUpload,
   lucideUserCog,
@@ -44,6 +45,7 @@ import { UploadActivity } from '../features/activity/upload-activity';
 import { AddBooks } from '../features/upload/add-books';
 import { DropOverlay } from '../features/upload/drop-overlay';
 import { UploadQueue } from '../features/upload/upload-queue';
+import { CommandPalette } from './command-palette';
 import { ThemeDialog } from './theme-dialog';
 
 /** One step of the header's trail to the page that is open. */
@@ -72,6 +74,7 @@ interface Crumb {
     HlmSidebarImports,
     HlmSkeletonImports,
     ActivityButton,
+    CommandPalette,
     DropOverlay,
   ],
   providers: [
@@ -84,6 +87,7 @@ interface Crumb {
       lucideListChecks,
       lucideLogOut,
       lucideScrollText,
+      lucideSearch,
       lucideSunMoon,
       lucideUpload,
       lucideUserCog,
@@ -257,6 +261,31 @@ interface Crumb {
             </ol>
           </nav>
           <div class="flex-1 md:hidden"></div>
+          <button
+            type="button"
+            aria-label="Search"
+            class="border-input text-muted-foreground hover:bg-accent hidden h-9 w-64 items-center gap-2 rounded-md border px-3 text-sm md:flex"
+            (click)="palette.open()"
+          >
+            <ng-icon name="lucideSearch" class="shrink-0" />
+            <span class="flex-1 text-start">Search…</span>
+            <kbd
+              class="bg-muted text-muted-foreground rounded border px-1.5 font-mono text-xs"
+              aria-hidden="true"
+              >⌘K</kbd
+            >
+          </button>
+          <button
+            hlmBtn
+            variant="ghost"
+            size="icon"
+            type="button"
+            aria-label="Search"
+            class="md:hidden"
+            (click)="palette.open()"
+          >
+            <ng-icon name="lucideSearch" />
+          </button>
           @if (session.user()) {
             <app-activity-button />
           }
@@ -271,6 +300,7 @@ interface Crumb {
     </div>
 
     <app-drop-overlay [section]="browsedSection()" />
+    <app-command-palette #palette />
 
     <ng-template #userMenu>
       <hlm-dropdown-menu class="min-w-56">

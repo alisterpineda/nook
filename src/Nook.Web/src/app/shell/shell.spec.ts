@@ -17,6 +17,7 @@ import { AddBooks } from '../features/upload/add-books';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { FakeActivityHub, provideFakeActivityHub } from '../testing/fake-activity-hub';
 import { signInAs } from '../testing/sign-in-as';
+import { typeInto } from '../testing/type-into';
 import { flushUploadActivity } from '../testing/upload-fixtures';
 import { Shell } from './shell';
 
@@ -798,5 +799,126 @@ describe('Shell', () => {
     await visitWith({ publicAccess: true, defaultArea: 'browse' });
     const shell = await openShell('/library');
     expect(shell.querySelector('header')?.querySelector('input')).toBeNull();
+  });
+
+  describe('search', () => {
+    afterEach(() => vi.useRealTimers());
+
+    function searchButtons(shell: HTMLElement): HTMLButtonElement[] {
+      return Array.from(
+        shell.querySelectorAll<HTMLButtonElement>('header button[aria-label="Search"]'),
+      );
+    }
+
+    const palette = (): HTMLElement | null => document.querySelector('[role="dialog"]');
+    const paletteInput = (): HTMLInputElement | null =>
+      document.querySelector<HTMLInputElement>('[role="dialog"] input');
+
+    function pressShortcut(init: KeyboardEventInit): KeyboardEvent {
+      const event = new KeyboardEvent('keydown', {
+        key: 'k',
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      document.dispatchEvent(event);
+      return event;
+    }
+
+    async function settle(): Promise<void> {
+      await harness.fixture.whenStable();
+    }
+
+    function pressEscape(): void {
+      paletteInput()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    }
+
+    async function expectClosed(): Promise<void> {
+      await vi.waitFor(() => expect(palette()).toBeNull());
+    }
+
+    it('the header offers Search as a field-like button and as an icon button', async () => {
+      const shell = await openShell('/library');
+
+      const [field, icon] = searchButtons(shell);
+      expect(searchButtons(shell)).toHaveLength(2);
+      expect(field.textContent).toContain('Search…');
+      expect(field.textContent).toContain('⌘K');
+      expect(field.classList.contains('hidden')).toBe(true);
+      expect(field.classList.contains('md:flex')).toBe(true);
+      expect(icon.textContent?.trim()).toBe('');
+      expect(icon.classList.contains('md:hidden')).toBe(true);
+    });
+
+    it('shows the Search buttons to a visitor', async () => {
+      await visitWith({ publicAccess: true, defaultArea: 'browse' });
+      const shell = await openShell('/library');
+
+      expect(searchButtons(shell)).toHaveLength(2);
+    });
+
+    it('each Search button opens the palette with its hint', async () => {
+      const shell = await openShell('/library');
+
+      for (const index of [0, 1]) {
+        searchButtons(shell)[index].click();
+        await vi.waitFor(() => expect(paletteInput()).not.toBeNull());
+        expect(paletteInput()!.placeholder).toBe('Search…');
+        expect(palette()!.textContent).toContain('Type to search the library');
+
+        pressEscape();
+        await expectClosed();
+      }
+    });
+
+    it.each([{ metaKey: true }, { ctrlKey: true }])(
+      '%o opens the palette, and again closes it',
+      async (init) => {
+        await openShell('/library');
+
+        const opening = pressShortcut(init);
+        expect(opening.defaultPrevented).toBe(true);
+        await vi.waitFor(() => expect(palette()).not.toBeNull());
+
+        pressShortcut(init);
+        await expectClosed();
+      },
+    );
+
+    it('a plain k opens nothing', async () => {
+      await openShell('/library');
+
+      pressShortcut({});
+      await settle();
+
+      expect(palette()).toBeNull();
+    });
+
+    it('the palette opens from a page other than the library', async () => {
+      await openShell('/works/0198a1b2-0000-7000-8000-000000000001');
+
+      pressShortcut({ metaKey: true });
+
+      await vi.waitFor(() => expect(palette()).not.toBeNull());
+    });
+
+    it('opens empty after being closed with a term typed', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      await openShell('/library');
+
+      pressShortcut({ metaKey: true });
+      await vi.waitFor(() => expect(paletteInput()).not.toBeNull());
+      typeInto(paletteInput()!, 'du');
+      await settle();
+      expect(paletteInput()!.value).toBe('du');
+
+      pressShortcut({ metaKey: true });
+      await expectClosed();
+      pressShortcut({ metaKey: true });
+      await vi.waitFor(() => expect(paletteInput()).not.toBeNull());
+
+      await vi.waitFor(() => expect(paletteInput()!.value).toBe(''));
+      expect(palette()!.textContent).toContain('Type to search the library');
+    });
   });
 });

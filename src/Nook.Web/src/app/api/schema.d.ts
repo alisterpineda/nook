@@ -489,6 +489,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Q?: string;
+                    Limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SearchResponse"];
+                        "application/json": components["schemas"]["SearchResponse"];
+                        "text/json": components["schemas"]["SearchResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{itemId}/publication/manifest.json": {
         parameters: {
             query?: never;
@@ -1977,6 +2028,23 @@ export interface components {
             total: number;
             positions: components["schemas"]["PublicationPosition"][];
         };
+        SearchGroup: {
+            source: components["schemas"]["SearchSource"];
+            /** Format: int32 */
+            total: number;
+            results: components["schemas"]["SearchHit"][];
+        };
+        SearchHit: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            subtitle: null | string;
+        };
+        SearchResponse: {
+            groups: components["schemas"]["SearchGroup"][];
+        };
+        /** @enum {unknown} */
+        SearchSource: "works";
         SectionResponse: {
             /** Format: uuid */
             id: string;

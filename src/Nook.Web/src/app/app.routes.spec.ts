@@ -24,6 +24,7 @@ import { UsersPage } from './features/users/users-page';
 import { WorkDetailPage } from './features/works/work-detail-page';
 import { WorksListPage } from './features/works/works-list-page';
 import { SearchBox } from './features/works/search-box';
+import { CommandPalette } from './shell/command-palette';
 import { Shell } from './shell/shell';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
@@ -224,6 +225,25 @@ describe('routes', () => {
         ReaderPage,
         [provideFakeReaderEngine(new FakeReaderEngine())],
         SearchBox,
+      ),
+    ).toEqual({ landedOn: reader, shown: false });
+  });
+
+  it('shows the reader with no palette', async () => {
+    const signedIn = { signedIn: true, setupRequired: false };
+    const reader = '/works/42/read/0198a1b2-0000-7000-8000-0000000000f1';
+
+    expect(await open('/library', signedIn, WorksListPage, [], CommandPalette)).toEqual({
+      landedOn: '/library',
+      shown: true,
+    });
+    expect(
+      await open(
+        reader,
+        signedIn,
+        ReaderPage,
+        [provideFakeReaderEngine(new FakeReaderEngine())],
+        CommandPalette,
       ),
     ).toEqual({ landedOn: reader, shown: false });
   });
