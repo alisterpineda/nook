@@ -109,6 +109,7 @@ describe('Shell', () => {
             children: [
               { path: 'library', component: WorksStub },
               { path: 'works/:id', component: WorkStub },
+              { path: 'works/:id/edit', component: WorkStub },
               { path: 'admin/public-access', component: PublicAccessStub },
               { path: 'admin/jobs', component: JobsStub },
               { path: 'admin/audit-log', component: AuditLogStub },
@@ -402,6 +403,19 @@ describe('Shell', () => {
       ['Dune', null],
     ]);
     expect(document.title).toBe('Dune · Nook');
+  });
+
+  it("shows Library, the work and Edit on a work's edit page", async () => {
+    const id = '0198a1b2-0000-7000-8000-000000000001';
+    TestBed.inject(PageName).set(id, 'Dune');
+    const shell = await openShell(`/works/${id}/edit`);
+
+    expect(trail(shell)).toEqual([
+      ['Library', '/library'],
+      ['Dune', `/works/${id}`],
+      ['Edit', null],
+    ]);
+    expect(document.title).toBe('Edit · Nook');
   });
 
   it('the header finds the name of a page whose id the URL encodes or follows with parameters', async () => {

@@ -437,7 +437,8 @@ export class Shell {
 
   /**
    * The header's trail: the list the page belongs to, then what the page narrows it to or the work or person it
-   * shows. A search covers every section, so it stands under "Library" alone.
+   * shows. A work's edit page stands under the work. A search covers every section, so it stands under "Library"
+   * alone.
    */
   protected readonly crumbs = computed<Crumb[]>(() => {
     const path = this.path();
@@ -452,6 +453,15 @@ export class Shell {
           ? { label: libraryName, link: '/library' }
           : { label: 'Authors', link: '/authors' };
       return [list, { label: this.pageName.of(id) }];
+    }
+    const edit = /^\/works\/([^/;]+)(?:;[^/]*)?\/edit(?:;[^/]*)?$/.exec(path);
+    if (edit) {
+      const [, encodedId] = edit;
+      return [
+        { label: libraryName, link: '/library' },
+        { label: this.pageName.of(decoded(encodedId)), link: `/works/${encodedId}` },
+        { label: 'Edit' },
+      ];
     }
     if (path === '/authors') {
       return [{ label: 'Authors' }];

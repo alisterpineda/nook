@@ -9,6 +9,7 @@ type ListParameters = NonNullable<paths['/api/works']['get']['parameters']['quer
 type WorkListQuery = Omit<ListParameters, 'Sort'> & { Sort?: NonNullable<ListParameters['Sort']> };
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
+type WorkEditRequest = components['schemas']['WorkEditRequest'];
 
 /** The sizes the API resizes a cover to. The API's `CoverSize` holds the box each one fits inside. */
 export type CoverSize = 'small' | 'large';
@@ -42,5 +43,15 @@ export class WorksApi {
     return firstValueFrom(
       this.http.get<WorkDetailResponse>(`/api/works/${encodeURIComponent(id)}`),
     );
+  }
+
+  /** Replaces everything about a work that can be edited. Its files move to match a new title or first author. */
+  async update(id: string, request: WorkEditRequest): Promise<void> {
+    await firstValueFrom(this.http.put(`/api/works/${encodeURIComponent(id)}`, request));
+  }
+
+  /** Deletes a work for good, along with its files. */
+  async delete(id: string): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`/api/works/${encodeURIComponent(id)}`));
   }
 }

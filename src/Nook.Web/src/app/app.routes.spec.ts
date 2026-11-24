@@ -22,6 +22,7 @@ import { SetupPage } from './features/setup/setup-page';
 import { SignInPage } from './features/sign-in/sign-in-page';
 import { UsersPage } from './features/users/users-page';
 import { WorkDetailPage } from './features/works/work-detail-page';
+import { WorkEditPage } from './features/works/work-edit-page';
 import { WorksListPage } from './features/works/works-list-page';
 import { SearchBox } from './features/works/search-box';
 import { CommandPalette } from './shell/command-palette';
@@ -80,7 +81,7 @@ describe('routes', () => {
     addedAt: '2026-11-01T12:00:00Z',
     updatedAt: '2026-11-01T12:00:00Z',
     access: 'download',
-    canEdit: false,
+    canEdit: true,
     addedBy: null,
   };
 
@@ -176,6 +177,15 @@ describe('routes', () => {
     });
     expect(await open('/works/42', signedIn, WorkDetailPage)).toEqual({
       landedOn: '/works/42',
+      shown: true,
+    });
+  });
+
+  it("a work's edit page is at /works/:id/edit", async () => {
+    expect(
+      await open('/works/42/edit', { signedIn: true, setupRequired: false }, WorkEditPage),
+    ).toEqual({
+      landedOn: '/works/42/edit',
       shown: true,
     });
   });

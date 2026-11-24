@@ -7,6 +7,8 @@ const labels: Record<string, string> = {
   'job.retried': 'Retried a job',
   'job.deleted': 'Deleted a job',
   'public-access.changed': 'Changed public access',
+  'work.edited': 'Edited a book',
+  'work.deleted': 'Deleted a book',
 };
 
 /** The words for an audit action, or its own name when nothing words it. */

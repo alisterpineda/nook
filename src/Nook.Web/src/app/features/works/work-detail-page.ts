@@ -2,8 +2,12 @@ import { DatePipe } from '@angular/common';
 import { Component, ElementRef, inject, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideEllipsis } from '@ng-icons/lucide';
 import { HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
+import { HlmDialogService } from '@spartan-ng/helm/dialog';
+import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
 import { distinctUntilChanged, map } from 'rxjs';
 import { failureOf, reloadable } from '../../core/reloadable';
@@ -17,8 +21,15 @@ import { LoadingRegion } from '../../ui/loading';
 import { pageHeading } from '../../ui/page-heading';
 import { NotFound } from '../../ui/not-found';
 import { WorkCover } from './work-cover';
+import { DeleteWorkDialog, DeleteWorkContext } from './delete-work-dialog';
 import { WorkDescription } from './work-description';
-import { formatLabel, roleLabel, seriesText } from './work-labels';
+import {
+  formatLabel,
+  roleLabel,
+  seriesText,
+  unshownWorkName,
+  workNotFoundHeading,
+} from './work-labels';
 
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
 type WorkItemResponse = components['schemas']['WorkItemResponse'];
@@ -30,9 +41,6 @@ type Showing =
   | { status: 'not-found' }
   | { status: 'failed' };
 
-/** What the page says, and the header with it, when there is no such work. */
-const notFoundHeading = 'Work not found';
-
 /** One work with everything the API knows about it, leaving out what the work does not have. */
 @Component({
   selector: 'app-work-detail-page',
@@ -42,12 +50,15 @@ const notFoundHeading = 'Work not found';
     RouterLink,
     HlmBadgeImports,
     HlmButtonImports,
+    HlmDropdownMenuImports,
+    NgIcon,
     HlmSkeletonImports,
     LoadFailed,
     NotFound,
     WorkCover,
     WorkDescription,
   ],
+  providers: [provideIcons({ lucideEllipsis })],
   template: `
     @let current = showing();
     @if (current.status === 'loading') {
@@ -99,7 +110,7 @@ const notFoundHeading = 'Work not found';
             }
             @let toRead = firstReadable(work);
             @let canDownload = allows(work.access, 'download') && hasFiles(work);
-            @if (toRead || canDownload) {
+            @if (toRead || canDownload || work.canEdit) {
               <div class="mt-2 flex flex-wrap gap-2" role="group" aria-label="Actions">
                 @if (toRead) {
                   <a hlmBtn [routerLink]="['/works', work.id, 'read', toRead.id]">Read</a>
@@ -121,6 +132,26 @@ const notFoundHeading = 'Work not found';
                       Download
                     </button>
                   }
+                }
+                @if (work.canEdit) {
+                  <a hlmBtn variant="outline" [routerLink]="['/works', work.id, 'edit']">Edit</a>
+                  <button
+                    hlmBtn
+                    variant="outline"
+                    size="icon"
+                    type="button"
+                    aria-label="More actions"
+                    [hlmDropdownMenuTrigger]="workMenu"
+                  >
+                    <ng-icon name="lucideEllipsis" />
+                  </button>
+                  <ng-template #workMenu>
+                    <hlm-dropdown-menu class="min-w-40">
+                      <button hlmDropdownMenuItem type="button" (triggered)="confirmDelete(work)">
+                        Delete
+                      </button>
+                    </hlm-dropdown-menu>
+                  </ng-template>
                 }
               </div>
             }
@@ -239,12 +270,13 @@ const notFoundHeading = 'Work not found';
   `,
 })
 export class WorkDetailPage {
-  protected readonly notFoundHeading = notFoundHeading;
+  protected readonly notFoundHeading = workNotFoundHeading;
   protected readonly pageHeading = pageHeading;
   private readonly worksApi = inject(WorksApi);
   private readonly route = inject(ActivatedRoute);
 
   private readonly pageName = inject(PageName);
+  private readonly dialogs = inject(HlmDialogService);
 
   protected readonly allows = allows;
   protected readonly formatBytes = formatBytes;
@@ -321,6 +353,12 @@ export class WorkDetailPage {
     return work.items.length > 0 && this.oneFilePerFormat(work);
   }
 
+  /** Opens the dialog that asks whether to delete the work. */
+  protected confirmDelete(work: WorkDetailResponse): void {
+    const context: DeleteWorkContext = { id: work.id, title: work.title };
+    this.dialogs.open(DeleteWorkDialog, { context, contentClass: 'sm:max-w-md' });
+  }
+
   protected showFiles(): void {
     this.files()?.nativeElement.scrollIntoView({ behavior: 'smooth' });
   }
@@ -332,8 +370,7 @@ export class WorkDetailPage {
       return { status: 'loaded', work };
     } catch (error) {
       const status = failureOf(error);
-      // The header waits for a name, so it is told what the page shows in place of one.
-      this.pageName.set(id, status === 'not-found' ? notFoundHeading : 'Work');
+      this.pageName.set(id, unshownWorkName(status));
       return { status };
     }
   }

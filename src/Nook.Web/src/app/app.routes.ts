@@ -41,6 +41,10 @@ export const routes: Routes = [
           import('./features/works/work-detail-page').then((m) => m.WorkDetailPage),
       },
       {
+        path: 'works/:id/edit',
+        loadComponent: () => import('./features/works/work-edit-page').then((m) => m.WorkEditPage),
+      },
+      {
         path: 'authors',
         loadComponent: () =>
           import('./features/people/authors-list-page').then((m) => m.AuthorsListPage),

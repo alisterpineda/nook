@@ -13,6 +13,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
 import { PageName } from '../../core/page-name';
 import { text } from '../../testing/element-text';
+import { menuItemLabelled } from '../../testing/menu-item-labelled';
 import { WorkDetailPage } from './work-detail-page';
 
 type ContributorRole = components['schemas']['ContributorRole'];
@@ -599,5 +600,34 @@ describe('WorkDetailPage', () => {
 
     await vi.waitFor(() => expect(router.url).toBe(listUrl));
     expect(text((harness.routeNativeElement as HTMLElement).querySelector('h1'))).toBe('Works');
+  });
+
+  /** The links and buttons of the page's Actions group, by their text. */
+  function actionLabels(page: HTMLElement): string[] {
+    return Array.from(
+      page.querySelectorAll('[aria-label="Actions"] a, [aria-label="Actions"] button'),
+    ).map((action) => text(action) || (action.getAttribute('aria-label') ?? ''));
+  }
+
+  it('offers Edit and Delete for a work that can be edited', async () => {
+    const page = await openWork({ ...dune, canEdit: true });
+
+    const edit = Array.from(page.querySelectorAll('a')).find((link) => text(link) === 'Edit');
+    expect(edit?.getAttribute('href')).toBe(`/works/${dune.id}/edit`);
+    page.querySelector<HTMLElement>('button[aria-label="More actions"]')!.click();
+    await vi.waitFor(() => menuItemLabelled('Delete'));
+  });
+
+  it('offers neither for a work that cannot be edited', async () => {
+    const page = await openWork({ ...dune, canEdit: false });
+
+    expect(actionLabels(page)).not.toContain('Edit');
+    expect(actionLabels(page)).not.toContain('More actions');
+  });
+
+  it('offers Edit for a work that can be edited and not read', async () => {
+    const page = await openWork({ ...bare, access: 'browse', canEdit: true });
+
+    expect(actionLabels(page)).toEqual(['Edit', 'More actions']);
   });
 });

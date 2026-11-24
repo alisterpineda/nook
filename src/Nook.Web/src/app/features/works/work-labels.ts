@@ -13,6 +13,17 @@ const roleLabels: Partial<Record<ContributorRole, string>> = {
   editor: 'Editor',
 };
 
+/** The heading of a page whose work is not there. */
+export const workNotFoundHeading = 'Work not found';
+
+/**
+ * What the header calls a page that could not show its work. The header waits for a name, so it is told what the page
+ * shows in place of one.
+ */
+export function unshownWorkName(failure: 'not-found' | 'failed'): string {
+  return failure === 'not-found' ? workNotFoundHeading : 'Work';
+}
+
 /** The label for a format, or the API's own value for one the app has no label for. */
 export function formatLabel(format: ItemFormat): string {
   return formatLabels[format] ?? format;

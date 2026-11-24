@@ -188,6 +188,26 @@ describe('AuditLogPage', () => {
     expect(rowTexts(page)[0][2]).toBe('library.merged');
   });
 
+  it('words an edit and a delete of a book', async () => {
+    const edited = anEntry(4, {
+      action: 'work.edited',
+      subjectType: 'work',
+      subjectId: workId,
+      subjectName: 'Dune',
+    });
+    const deleted = anEntry(5, {
+      action: 'work.deleted',
+      subjectType: 'work',
+      subjectId: workId,
+      subjectName: 'Dune',
+    });
+    const { page } = await openLog('/audit-log', [edited, deleted]);
+
+    expect(rowTexts(page).map((row) => row[2])).toEqual(['Edited a book', 'Deleted a book']);
+    expect(text(page)).not.toContain('work.edited');
+    expect(text(page)).not.toContain('work.deleted');
+  });
+
   it('links an entry about a work to that work', async () => {
     const { page } = await openLog('/audit-log', [retried, added]);
 

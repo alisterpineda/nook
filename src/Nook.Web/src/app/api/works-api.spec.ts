@@ -6,6 +6,7 @@ import { WorksApi, coverUrl, partFileUrl } from './works-api';
 
 type PageOfWorkSummaryResponse = components['schemas']['PageOfWorkSummaryResponse'];
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
+type WorkEditRequest = components['schemas']['WorkEditRequest'];
 
 describe('WorksApi', () => {
   let api: WorksApi;
@@ -108,6 +109,36 @@ describe('WorksApi', () => {
     request.flush(work);
 
     expect(await fetching).toEqual(work);
+  });
+
+  it("sends an edit as a PUT to the work's address", async () => {
+    const edit: WorkEditRequest = {
+      title: 'Dune Messiah',
+      sortTitle: 'Dune Messiah',
+      authors: ['Frank Herbert'],
+      series: { name: 'Dune', position: 2 },
+      tags: ['Science fiction'],
+      description: null,
+      sectionId: '0198a1b2-0000-7000-8000-00000000000a',
+    };
+
+    const saving = api.update('a/b', edit);
+    const request = httpTesting.expectOne('/api/works/a%2Fb');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual(edit);
+    request.flush(null, { status: 204, statusText: 'No Content' });
+
+    await expect(saving).resolves.toBeUndefined();
+  });
+
+  it("sends a delete to the work's address", async () => {
+    const deleting = api.delete('a/b');
+    const request = httpTesting.expectOne('/api/works/a%2Fb');
+    expect(request.request.method).toBe('DELETE');
+    expect(request.request.body).toBeNull();
+    request.flush(null, { status: 204, statusText: 'No Content' });
+
+    await expect(deleting).resolves.toBeUndefined();
   });
 });
 
