@@ -177,9 +177,16 @@ public static class WorkRefiling
     /// Removes each folder a file left when it is empty, then that folder's parent when it is empty too. The library
     /// folder and <c>Books</c> stay.
     /// </summary>
-    public static void RemoveEmptied(IReadOnlyList<FileMove> moves, NookStorage storage)
+    public static void RemoveEmptied(IReadOnlyList<FileMove> moves, NookStorage storage) =>
+        RemoveEmptied(moves.Select(move => move.FromRelative), storage);
+
+    /// <summary>
+    /// Removes the folder of each path a file left when it is empty, then that folder's parent when it is empty too.
+    /// The library folder and <c>Books</c> stay.
+    /// </summary>
+    public static void RemoveEmptied(IEnumerable<string> vacatedPaths, NookStorage storage)
     {
-        var folders = moves.Select(move => Filing.FolderOf(move.FromRelative)).Distinct(StringComparer.Ordinal);
+        var folders = vacatedPaths.Select(Filing.FolderOf).Distinct(StringComparer.Ordinal);
         foreach (var folder in folders)
         {
             RemoveIfEmptyBelowBooks(folder, storage);

@@ -21,6 +21,14 @@ internal static class IngestTestExtensions
     /// </summary>
     public static string UniqueSuffix() => Guid.NewGuid().ToString("N")[..12];
 
+    /// <summary>A valid ISBN-13 no other test shares: 978 and nine random digits, then the check digit.</summary>
+    public static string UniqueIsbn()
+    {
+        var digits = $"978{Random.Shared.Next(0, 1_000_000_000):D9}";
+        var sum = digits.Select((c, i) => (c - '0') * (i % 2 == 0 ? 1 : 3)).Sum();
+        return digits + (10 - sum % 10) % 10;
+    }
+
     /// <summary>How many works, items and parts the section holds.</summary>
     public static async Task<(int Works, int Items, int Parts)> CountRowsAsync(
         this WebApplicationFactory<Program> app, LibrarySection section)

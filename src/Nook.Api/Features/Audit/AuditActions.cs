@@ -12,6 +12,7 @@ public static class AuditActions
     public const string JobRetried = "job.retried";
     public const string JobDeleted = "job.deleted";
     public const string WorkEdited = "work.edited";
+    public const string WorkDeleted = "work.deleted";
     public const string PublicAccessChanged = "public-access.changed";
 }
 

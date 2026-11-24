@@ -177,6 +177,30 @@ public partial class WorksController(
     }
 
     /// <summary>
+    /// Deletes a work for good: its items, parts, links and files go, and so does each person, series and tag nothing
+    /// else names. An admin may delete any work, and anyone else only a work they own while their role may upload.
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var outcome = await editor.DeleteAsync(User, id, cancellationToken);
+        return outcome.Status switch
+        {
+            WorkDeleteStatus.NotFound => NotFound(),
+            WorkDeleteStatus.Forbidden => Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Forbidden",
+                detail: outcome.Message),
+            _ => NoContent(),
+        };
+    }
+
+    /// <summary>
     /// The work's cover, as the file it was saved as, or as a JPEG at a size: <c>small</c> fits inside 400 × 600 pixels
     /// and <c>large</c> inside 1000 × 1500. A cover is never enlarged, and one that cannot be resized is served as the
     /// file it was saved as at any size. The response is served so a browser runs nothing in it, since a cover can be

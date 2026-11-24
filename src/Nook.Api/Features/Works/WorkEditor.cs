@@ -83,20 +83,10 @@ public class WorkEditor(
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             await IngestLock.TakeAsync(db, cancellationToken);
 
-            // A work the caller cannot see is reported the same way as one that does not exist.
-            var work = await db.Works
-                .VisibleTo(grants)
-                .Include(w => w.Contributors)
-                .Include(w => w.Tags)
-                .SingleOrDefaultAsync(w => w.Id == id, cancellationToken);
+            var (work, refusal) = await LoadToChangeAsync(user, grants, id, cancellationToken);
             if (work is null)
             {
-                return WorkEditOutcome.NotFound;
-            }
-
-            if (!MayChange(user, work.OwnerId))
-            {
-                return WorkEditOutcome.Forbidden(NotYoursMessage);
+                return refusal == Refusal.NotFound ? WorkEditOutcome.NotFound : WorkEditOutcome.Forbidden(NotYoursMessage);
             }
 
             if (title != work.Title && title.Length > MaxTitleLength)
@@ -119,11 +109,7 @@ public class WorkEditor(
             var people = await db.People
                 .Where(p => work.Contributors.Select(c => c.PersonId).Contains(p.Id))
                 .ToDictionaryAsync(p => p.Id, cancellationToken);
-            var authorLinks = work.Contributors
-                .Where(c => c.Role == ContributorRole.Author)
-                .OrderBy(c => c.Order)
-                .ThenBy(c => c.Id)
-                .ToList();
+            var authorLinks = AuthorLinks(work);
             var currentAuthors = authorLinks.Select(c => people[c.PersonId].Name).ToList();
             var currentTags = work.Tags.Select(t => t.Name).ToList();
             var currentSeries = work.SeriesId is { } currentSeriesId
@@ -337,6 +323,181 @@ public class WorkEditor(
     }
 
     /// <summary>
+    /// Deletes a work, when the user may change it: its items, parts and links go with it, and so does each person,
+    /// series and tag nothing else names. The rows go in one transaction, under the ingest lock, and the work's files
+    /// go after it commits, under the lock again. A file that cannot be deleted is logged and left, since ingest
+    /// treats a book file no part points at as free.
+    /// </summary>
+    public async Task<WorkDeleteOutcome> DeleteAsync(ClaimsPrincipal user, Guid id, CancellationToken cancellationToken)
+    {
+        var grants = await access.ForAsync(user, cancellationToken);
+
+        // Kept across the strategy's passes: a commit that landed and then reported a failure is run again, and that
+        // pass finds no work to read the paths from.
+        List<string>? paths = null;
+        var outcome = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            await IngestLock.TakeAsync(db, cancellationToken);
+
+            var (work, refusal) = await LoadToChangeAsync(user, grants, id, cancellationToken);
+            if (work is null)
+            {
+                // A work that is gone after an earlier pass reached its commit was deleted by that pass.
+                if (refusal == Refusal.Forbidden)
+                {
+                    return WorkDeleteOutcome.Forbidden(NotYoursMessage);
+                }
+
+                return paths is null ? WorkDeleteOutcome.NotFound : WorkDeleteOutcome.Deleted;
+            }
+
+            var linkedPeople = work.Contributors.Select(c => c.PersonId).Distinct().ToList();
+            var linkedTags = work.Tags.Select(t => t.Id).ToList();
+            var people = await db.People
+                .Where(p => linkedPeople.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.Name, cancellationToken);
+            var authors = AuthorLinks(work).Select(c => people[c.PersonId]).ToList();
+            var found = await PartsOf(work.Id).Select(part => part.Path).ToListAsync(cancellationToken);
+            if (work.CoverPath is { } cover)
+            {
+                found.Add(cover);
+            }
+
+            found = [.. found.Distinct(StringComparer.Ordinal)];
+
+            await audit.AddAsync(
+                user,
+                AuditActions.WorkDeleted,
+                new AuditSubject(AuditSubjectTypes.Work, work.Id, work.Title),
+                new { title = work.Title, authors, files = found },
+                cancellationToken: cancellationToken);
+            var seriesId = work.SeriesId;
+            db.Works.Remove(work);
+            await db.SaveChangesAsync(cancellationToken);
+
+            // The people, series and tags are removed once the work's links to them are gone.
+            await RemoveUnusedAsync(linkedPeople, seriesId, linkedTags, cancellationToken);
+            paths = found;
+            await transaction.CommitAsync(cancellationToken);
+            return WorkDeleteOutcome.Deleted;
+        });
+
+        if (outcome.Status == WorkDeleteStatus.Deleted)
+        {
+            await DeleteFilesAsync(id, paths!);
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Deletes the files a deleted work had, and the folders that empties. The commit that removed the rows let go of
+    /// the ingest lock, so an ingest may since have filed a book over one of the paths: the lock is taken again, on a
+    /// connection of its own, and a path a part or a cover points at by then is another work's and stays. The request
+    /// being cancelled does not stop it, since the rows are already gone. A failure is logged and the files are left.
+    /// </summary>
+    private async Task DeleteFilesAsync(Guid workId, IReadOnlyList<string> paths)
+    {
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var fresh = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+            await fresh.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                await using var held = await fresh.Database.BeginTransactionAsync(CancellationToken.None);
+                await IngestLock.TakeAsync(fresh, CancellationToken.None);
+
+                var claimed = new List<string>();
+                var matcher = new WorkMatcher(fresh);
+                foreach (var folder in paths.Select(Filing.FolderOf).Distinct(StringComparer.Ordinal))
+                {
+                    claimed.AddRange(await matcher.ClaimedPathsAsync(folder, CancellationToken.None));
+                }
+
+                var lowered = paths.Select(path => path.ToLowerInvariant()).ToList();
+                claimed.AddRange(await fresh.Works
+                    .Where(w => w.CoverPath != null && lowered.Contains(w.CoverPath.ToLower()))
+                    .Select(w => w.CoverPath!)
+                    .ToListAsync(CancellationToken.None));
+
+                var free = paths.Where(path => !Filing.IsClaimed(claimed, path)).ToList();
+                foreach (var path in free)
+                {
+                    try
+                    {
+                        File.Delete(storage.LibraryFile(path));
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        // The file is gone already, with its folder.
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    {
+                        logger.LogWarning(
+                            exception, "The file {Path} of the deleted work {WorkId} could not be deleted.", path, workId);
+                    }
+                }
+
+                try
+                {
+                    WorkRefiling.RemoveEmptied(free, storage);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    logger.LogWarning(exception, "A folder the deleted work {WorkId} emptied could not be removed.", workId);
+                }
+            });
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception, "The files of the deleted work {WorkId} could not be deleted, so they are left in place.", workId);
+        }
+    }
+
+    /// <summary>Why a work is not handed over to be changed.</summary>
+    private enum Refusal
+    {
+        None,
+        NotFound,
+        Forbidden,
+    }
+
+    /// <summary>
+    /// The work with its contributor and tag links, for a user who may change it. A work the user cannot see is
+    /// reported the same way as one that does not exist.
+    /// </summary>
+    private async Task<(Work? Work, Refusal Refusal)> LoadToChangeAsync(
+        ClaimsPrincipal user, SectionGrants grants, Guid id, CancellationToken cancellationToken)
+    {
+        var work = await db.Works
+            .VisibleTo(grants)
+            .Include(w => w.Contributors)
+            .Include(w => w.Tags)
+            .SingleOrDefaultAsync(w => w.Id == id, cancellationToken);
+        if (work is null)
+        {
+            return (null, Refusal.NotFound);
+        }
+
+        return MayChange(user, work.OwnerId) ? (work, Refusal.None) : (null, Refusal.Forbidden);
+    }
+
+    /// <summary>The work's author links, in the order the authors are shown.</summary>
+    private static List<WorkContributor> AuthorLinks(Work work) =>
+        [.. work.Contributors.Where(c => c.Role == ContributorRole.Author).OrderBy(c => c.Order).ThenBy(c => c.Id)];
+
+    /// <summary>The parts of every item of the work, oldest first.</summary>
+    private IQueryable<Part> PartsOf(Guid workId) =>
+        from part in db.Parts
+        join item in db.Items on part.ItemId equals item.Id
+        where item.WorkId == workId
+        orderby part.CreatedAt, part.Id
+        select part;
+
+    /// <summary>
     /// When the folder the new first author and title make is not the one the old ones made, moves the work's parts and
     /// cover into the new one and points the rows at the new paths, leaving the rows to be saved. Another work's
     /// folder is never taken: a name a part of another work is in gets a number. When a file cannot be moved, the ones
@@ -350,12 +511,7 @@ public class WorkEditor(
             return MovedFiles.None;
         }
 
-        var parts = await (
-            from part in db.Parts
-            join item in db.Items on part.ItemId equals item.Id
-            where item.WorkId == work.Id
-            orderby part.CreatedAt, part.Id
-            select part).ToListAsync(cancellationToken);
+        var parts = await PartsOf(work.Id).ToListAsync(cancellationToken);
         var ownPaths = parts.Select(p => p.Path).ToList();
         var claimed = (await _matcher.ClaimedPathsAsync(Filing.FolderOf(folder), cancellationToken))
             .Where(path => !Filing.IsClaimed(ownPaths, path))
@@ -525,4 +681,22 @@ public record WorkEditOutcome(WorkEditStatus Status, string? Field = null, strin
     public static WorkEditOutcome Forbidden(string message) => new(WorkEditStatus.Forbidden, Message: message);
 
     public static WorkEditOutcome Invalid(string field, string message) => new(WorkEditStatus.Invalid, field, message);
+}
+
+/// <summary>What a delete came to.</summary>
+public enum WorkDeleteStatus
+{
+    Deleted,
+    NotFound,
+    Forbidden,
+}
+
+/// <summary>What a delete came to: its status and, for a refused one, why.</summary>
+public record WorkDeleteOutcome(WorkDeleteStatus Status, string? Message = null)
+{
+    public static readonly WorkDeleteOutcome Deleted = new(WorkDeleteStatus.Deleted);
+
+    public static readonly WorkDeleteOutcome NotFound = new(WorkDeleteStatus.NotFound);
+
+    public static WorkDeleteOutcome Forbidden(string message) => new(WorkDeleteStatus.Forbidden, message);
 }
