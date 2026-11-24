@@ -17,6 +17,7 @@ import { LoadingRegion } from '../../ui/loading';
 import { pageHeading } from '../../ui/page-heading';
 import { NotFound } from '../../ui/not-found';
 import { WorkCover } from './work-cover';
+import { WorkDescription } from './work-description';
 import { formatLabel, roleLabel, seriesText } from './work-labels';
 
 type WorkDetailResponse = components['schemas']['WorkDetailResponse'];
@@ -45,6 +46,7 @@ const notFoundHeading = 'Work not found';
     LoadFailed,
     NotFound,
     WorkCover,
+    WorkDescription,
   ],
   template: `
     @let current = showing();
@@ -127,7 +129,7 @@ const notFoundHeading = 'Work not found';
 
         @if (work.description) {
           <section aria-label="Description">
-            <p class="text-sm whitespace-pre-line">{{ work.description }}</p>
+            <app-work-description [text]="work.description" />
           </section>
         }
 
