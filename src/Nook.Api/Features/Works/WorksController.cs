@@ -18,6 +18,7 @@ public partial class WorksController(
     CoverResizer resizer,
     CoverCache coverCache,
     SectionAccess access,
+    WorkEditor editor,
     ILogger<WorksController> logger) : ControllerBase
 {
     /// <summary>One page of the works the caller can see.</summary>
@@ -75,10 +76,13 @@ public partial class WorksController(
     {
         // A work the caller cannot see is reported the same way as one that does not exist.
         var grants = await access.ForAsync(User, cancellationToken);
-        var work = await db.Works
+        var found = await db.Works
             .VisibleTo(grants)
             .Where(w => w.Id == id)
-            .Select(w => new WorkDetailResponse(
+            .Select(w => new
+            {
+                w.OwnerId,
+                Detail = new WorkDetailResponse(
                 w.Id,
                 w.SectionId,
                 w.Title,
@@ -119,29 +123,26 @@ public partial class WorksController(
                 w.UpdatedAt,
                 // Set from the grants once the work is found, since they are not in the database.
                 ContentAccess.None,
-                null))
+                false,
+                null),
+            })
             .AsSplitQuery()
             .SingleOrDefaultAsync(cancellationToken);
-        if (work is null)
+        if (found is null)
         {
             return NotFound();
         }
 
-        // Who added the work goes to signed-in users only: the name of whoever's upload was recorded first.
+        var work = found.Detail;
+
+        // Who added the work goes to signed-in users only: the shown name of its owner.
         string? addedBy = null;
-        if (User.Identity?.IsAuthenticated == true)
+        if (User.Identity?.IsAuthenticated == true && found.OwnerId is { } ownerId)
         {
-            addedBy = await db.AuditEntries
-                .Where(e => e.Action == AuditActions.UploadAdded
-                    && e.SubjectType == AuditSubjectTypes.Work
-                    && e.SubjectId == id)
-                .OrderBy(e => e.CreatedAt)
-                .ThenBy(e => e.Id)
-                .Select(e => e.ActorName)
-                .FirstOrDefaultAsync(cancellationToken);
+            addedBy = (await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == ownerId, cancellationToken))?.ShownName;
         }
 
-        return work with { Access = grants.In(work.SectionId), AddedBy = addedBy };
+        return work with { Access = grants.In(work.SectionId), CanEdit = editor.MayChange(User, found.OwnerId), AddedBy = addedBy };
     }
 
     /// <summary>

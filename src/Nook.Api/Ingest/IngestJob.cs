@@ -149,6 +149,21 @@ public sealed class IngestJob : JobType
             return added is not null;
         }
 
+        // The user who submitted the upload, when the submission is there and that user still exists.
+        async Task<Guid?> FindUploaderAsync(CancellationToken cancellationToken)
+        {
+            if (payload.SubmissionId is not { } submissionId)
+            {
+                return null;
+            }
+
+            var actorId = await db.AuditEntries
+                .Where(e => e.Id == submissionId)
+                .Select(e => e.ActorId)
+                .SingleOrDefaultAsync(cancellationToken);
+            return actorId is { } id && await db.Users.AnyAsync(u => u.Id == id, cancellationToken) ? id : null;
+        }
+
         // Records that the upload matched an item already held, and saves the entry, since nothing else is saved on
         // the way to ending as a duplicate.
         async Task LogDuplicateAsync(Guid workId, Guid itemId, CancellationToken cancellationToken)
@@ -179,6 +194,7 @@ public sealed class IngestJob : JobType
             if (work is null)
             {
                 (work, filingAuthor) = await matcher.BuildAsync(payload.SectionId, draft!, cancellationToken);
+                work.OwnerId = await FindUploaderAsync(cancellationToken);
             }
 
             // A copy of a work already here goes beside its other files, under the work's own title, and takes a

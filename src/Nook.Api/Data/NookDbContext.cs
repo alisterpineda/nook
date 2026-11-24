@@ -90,6 +90,9 @@ public class NookDbContext(DbContextOptions<NookDbContext> options)
             work.HasOne<Series>().WithMany().HasForeignKey(w => w.SeriesId).OnDelete(DeleteBehavior.Restrict);
             work.HasIndex(w => w.SearchVector).HasMethod("GIN");
 
+            // Removing a user leaves their works behind with no owner.
+            work.HasOne<NookUser>().WithMany().HasForeignKey(w => w.OwnerId).OnDelete(DeleteBehavior.SetNull);
+
             // Contributor links go with their work.
             work.HasMany(w => w.Contributors).WithOne().HasForeignKey(c => c.WorkId).OnDelete(DeleteBehavior.Cascade);
 

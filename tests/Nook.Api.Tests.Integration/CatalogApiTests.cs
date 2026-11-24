@@ -247,18 +247,11 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     [Fact]
     public async Task Work_detail_names_who_added_it_to_a_signed_in_user()
     {
+        var owner = await factory.CreateUserAsync(displayName: "Ada Adder");
         var work = TestData.NewWork("Added by someone");
-        await factory.AddRowsAsync(work);
-        var oldest = UploadAdded(work, "Ada Adder");
-        await factory.AddRowsAsync(oldest, UploadAdded(work, "Later Joiner"));
-        // The save stamps both rows alike, so the first is moved back to make it the oldest.
-        await using (var scope = factory.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
-            await db.AuditEntries.Where(e => e.Id == oldest.Id).ExecuteUpdateAsync(
-                s => s.SetProperty(e => e.CreatedAt, DateTimeOffset.UtcNow.AddHours(-2)),
-                TestContext.Current.CancellationToken);
-        }
+        work.OwnerId = owner.Id;
+        // An older entry under another name shows the log is not what names the owner.
+        await factory.AddRowsAsync(work, UploadAdded(work, "Someone In The Log"));
         using var client = await factory.CreateSignedInClientAsync();
 
         var detail = await client.GetAsync<WorkDetailResponse>($"/api/works/{work.Id}");
@@ -267,10 +260,10 @@ public class CatalogApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     }
 
     [Fact]
-    public async Task Work_detail_has_no_one_to_name_for_a_work_with_no_upload_entry()
+    public async Task Work_detail_has_no_one_to_name_for_a_work_with_no_owner()
     {
         var work = TestData.NewWork("Added long ago");
-        await factory.AddRowsAsync(work);
+        await factory.AddRowsAsync(work, UploadAdded(work, "Someone In The Log"));
         using var client = await factory.CreateSignedInClientAsync();
 
         var detail = await client.GetAsync<WorkDetailResponse>($"/api/works/{work.Id}");

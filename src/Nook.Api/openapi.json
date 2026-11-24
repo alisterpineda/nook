@@ -3566,6 +3566,7 @@
           "addedAt",
           "updatedAt",
           "access",
+          "canEdit",
           "addedBy"
         ],
         "type": "object",
@@ -3662,6 +3663,9 @@
           },
           "access": {
             "$ref": "#/components/schemas/ContentAccess"
+          },
+          "canEdit": {
+            "type": "boolean"
           },
           "addedBy": {
             "type": [

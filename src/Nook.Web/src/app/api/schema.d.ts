@@ -2146,6 +2146,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             access: components["schemas"]["ContentAccess"];
+            canEdit: boolean;
             addedBy: null | string;
         };
         WorkExternalIdResponse: {

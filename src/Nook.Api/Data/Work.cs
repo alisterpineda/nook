@@ -8,6 +8,12 @@ public class Work : Entity
     /// <summary>The section the work belongs to, if any.</summary>
     public Guid? SectionId { get; set; }
 
+    /// <summary>
+    /// The user who added the work, or null when none did or the user has been removed. A work with no owner can be
+    /// changed by admins only.
+    /// </summary>
+    public Guid? OwnerId { get; set; }
+
     /// <summary>The title people see.</summary>
     public required string Title { get; set; }
 

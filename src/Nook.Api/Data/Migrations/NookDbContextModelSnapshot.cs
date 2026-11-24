@@ -816,6 +816,10 @@ namespace Nook.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("language");
 
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<DateOnly?>("PublicationDate")
                         .HasColumnType("date")
                         .HasColumnName("publication_date");
@@ -856,6 +860,9 @@ namespace Nook.Api.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_works");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_works_owner_id");
 
                     b.HasIndex("SearchVector")
                         .HasDatabaseName("ix_works_search_vector");
@@ -1072,6 +1079,12 @@ namespace Nook.Api.Data.Migrations
 
             modelBuilder.Entity("Nook.Api.Data.Work", b =>
                 {
+                    b.HasOne("Nook.Api.Data.NookUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_works_asp_net_users_owner_id");
+
                     b.HasOne("Nook.Api.Data.LibrarySection", null)
                         .WithMany()
                         .HasForeignKey("SectionId")

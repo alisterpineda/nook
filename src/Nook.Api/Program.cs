@@ -77,6 +77,7 @@ builder.Services.AddSingleton<PublicationCache>();
 builder.Services.AddScoped<InstanceSettings>();
 builder.Services.AddScoped<SectionAccess>();
 builder.Services.AddScoped<AuditLog>();
+builder.Services.AddScoped<WorkEditor>();
 builder.Services.AddScoped<UploadActivity>();
 builder.Services.AddScoped<JobActions>();
 

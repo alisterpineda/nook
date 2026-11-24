@@ -64,15 +64,16 @@ internal static class JobTestExtensions
 
     /// <summary>
     /// Uploads a file into the section, or into the Default area when the section id is null, checks it was accepted,
-    /// and returns its job once that has succeeded or failed.
+    /// and returns its job once that has succeeded or failed. The job is read through <paramref name="waitThrough"/>
+    /// when the uploading client may not read jobs, as only an admin may.
     /// </summary>
     public static async Task<JobDetailResponse> IngestAsync(
-        this HttpClient client, byte[] bytes, string fileName, Guid? sectionId)
+        this HttpClient client, byte[] bytes, string fileName, Guid? sectionId, HttpClient? waitThrough = null)
     {
         var response = await client.UploadAsync(bytes, fileName, sectionId);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var upload = await response.ReadAsync<UploadResponse>();
-        return await client.WaitForJobAsync(upload.JobId);
+        return await (waitThrough ?? client).WaitForJobAsync(upload.JobId);
     }
 
     /// <summary>How many jobs there are, as the jobs list reports it to an admin.</summary>

@@ -59,8 +59,10 @@ public class PublicAccessCatalogTests(NookApiFactory factory) : IClassFixture<No
     public async Task Work_detail_leaves_out_who_added_it_for_a_visitor()
     {
         var open = TestData.NewSection("Open");
+        var owner = await factory.CreateUserAsync(displayName: "Ada Adder");
         var work = TestData.NewWork("Added by someone", open.Id);
-        await factory.AddRowsAsync(open, work, CatalogApiTests.UploadAdded(work, "Ada Adder"));
+        work.OwnerId = owner.Id;
+        await factory.AddRowsAsync(open, work);
         await factory.SetPublicAccessAsync(true, ContentAccess.Read, ContentAccess.None, (open.Id, ContentAccess.Browse));
         using var visitor = factory.CreateClient();
 

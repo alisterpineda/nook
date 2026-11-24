@@ -82,9 +82,10 @@ public record WorkItemResponse(Guid Id, ItemFormat Format, IReadOnlyList<WorkPar
 
 /// <summary>
 /// Everything Nook knows about one work. Contributors and parts come in display order. <c>Access</c> is the caller's
-/// level for the work: whether they may only browse it, read it in the browser, or download its files. <c>AddedBy</c>
-/// is the name of whoever uploaded the work, as written when they did. It is left out for a visitor with no account
-/// and for a work with no record of an upload.
+/// level for the work: whether they may only browse it, read it in the browser, or download its files. <c>CanEdit</c>
+/// is whether the caller may change or delete the work: an admin may, and so may the work's owner while their role
+/// may upload. <c>AddedBy</c> is the shown name of the work's owner. It is left out for a visitor with no account
+/// and for a work with no owner.
 /// </summary>
 public record WorkDetailResponse(
     Guid Id,
@@ -104,4 +105,5 @@ public record WorkDetailResponse(
     DateTimeOffset AddedAt,
     DateTimeOffset UpdatedAt,
     ContentAccess Access,
+    bool CanEdit,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AddedBy);
