@@ -1,9 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  TestRequest,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -11,6 +7,11 @@ import { components } from '../../api/schema';
 import { Session } from '../../core/session';
 import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
+import {
+  answerSignInOptions,
+  openUsersPage,
+  usersRequest,
+} from '../../testing/users-page-requests';
 import { UsersPage } from './users-page';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
@@ -80,22 +81,13 @@ describe('UsersPage', () => {
 
   afterEach(() => httpTesting.verify());
 
-  function usersRequest(): Promise<TestRequest> {
-    return vi.waitFor(() => httpTesting.expectOne((request) => request.url === '/api/users'));
-  }
-
   /** Opens the page and answers its request with `users`. */
-  async function openUsers(
+  function openUsers(
     users: UserSummaryResponse[] = [ada, grace, linus],
     url = '/users',
     total = users.length,
   ): Promise<HTMLElement> {
-    const navigating = harness.navigateByUrl(url);
-    (await usersRequest()).flush({ items: users, total, offset: 0, limit: 50 });
-    await navigating;
-    const page = harness.routeNativeElement as HTMLElement;
-    await vi.waitFor(() => expect(page.querySelector('table, [role="alert"]')).not.toBeNull());
-    return page;
+    return openUsersPage(harness, httpTesting, { users, url, total });
   }
 
   function rowOf(page: HTMLElement, name: string): HTMLTableRowElement {
@@ -114,7 +106,7 @@ describe('UsersPage', () => {
 
   /** Answers the page's next request for users, and returns what it asked for. */
   async function answerNext(total = 3): Promise<Record<string, string | null>> {
-    const request = await usersRequest();
+    const request = await usersRequest(httpTesting);
     const asked = Object.fromEntries(
       request.request.params.keys().map((key) => [key, request.request.params.get(key)]),
     );
@@ -149,6 +141,7 @@ describe('UsersPage', () => {
       'Role',
       'Joined',
       'Sign-in',
+      '',
       '',
     ]);
     expect(page.querySelectorAll('tbody tr')).toHaveLength(3);
@@ -188,7 +181,8 @@ describe('UsersPage', () => {
 
   it('offers to try again when the list fails to load', async () => {
     const navigating = harness.navigateByUrl('/users');
-    (await usersRequest()).flush(null, { status: 500, statusText: 'Server Error' });
+    await answerSignInOptions(httpTesting);
+    (await usersRequest(httpTesting)).flush(null, { status: 500, statusText: 'Server Error' });
     await navigating;
     const page = harness.routeNativeElement as HTMLElement;
     await vi.waitFor(() => expect(page.querySelector('[role="alert"]')).not.toBeNull());
@@ -199,12 +193,13 @@ describe('UsersPage', () => {
     expect(retry).toBeDefined();
     retry?.click();
 
-    (await usersRequest()).flush({ items: [ada], total: 1, offset: 0, limit: 50 });
+    (await usersRequest(httpTesting)).flush({ items: [ada], total: 1, offset: 0, limit: 50 });
     await vi.waitFor(() => expect(page.querySelector('table')).not.toBeNull());
   });
 
   it('asks for the first page by name when the URL names nothing', async () => {
     const navigating = harness.navigateByUrl('/users');
+    await answerSignInOptions(httpTesting);
     const asked = await answerNext();
     await navigating;
     const page = harness.routeNativeElement as HTMLElement;
@@ -243,6 +238,7 @@ describe('UsersPage', () => {
 
   it('opens on the sort and page the URL names', async () => {
     const navigating = harness.navigateByUrl('/users?sort=role&dir=desc&page=2');
+    await answerSignInOptions(httpTesting);
     const asked = await answerNext();
     await navigating;
 
@@ -269,6 +265,7 @@ describe('UsersPage', () => {
 
   it('treats a sort, direction or page it does not know as the default', async () => {
     const navigating = harness.navigateByUrl('/users?sort=shoe&dir=sideways&page=0');
+    await answerSignInOptions(httpTesting);
     const asked = await answerNext();
     await navigating;
 

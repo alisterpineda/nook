@@ -21,6 +21,13 @@ internal static class ApiTestExtensions
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
+    /// <summary>The fields a validation problem names, as the keys of its <c>errors</c>.</summary>
+    public static async Task<List<string>> ErrorFieldsAsync(this HttpResponseMessage response)
+    {
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return [.. body.RootElement.GetProperty("errors").EnumerateObject().Select(p => p.Name)];
+    }
+
     /// <summary>The name of the session cookie.</summary>
     private const string SessionCookie = "nook";
 

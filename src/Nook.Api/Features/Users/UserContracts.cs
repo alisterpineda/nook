@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Nook.Api.Data;
 
 namespace Nook.Api.Features.Users;
 
@@ -36,3 +37,13 @@ public enum SortDirection
 /// <summary>One user in the list: the name and email as shown, the name of their role, when they joined, whether a password is stored and a single sign-on login is linked, and whether the audit log holds an entry they acted in.</summary>
 public record UserSummaryResponse(Guid Id, string Name, string Email, string Role, DateTimeOffset JoinedAt,
     bool HasPassword, bool HasSingleSignOn, bool HasAuditEntries);
+
+/// <summary>A user to add: their email, an optional name, the role they hold, and the password they first sign in with.</summary>
+public record AddUserRequest(
+    [Required, EmailAddress] string Email,
+    string? DisplayName,
+    [Required] BuiltInRole? Role,
+    [Required] string Password);
+
+/// <summary>The password to set for another user.</summary>
+public record SetUserPasswordRequest([Required] string Password);

@@ -1,9 +1,9 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideArrowDown, lucideArrowUp } from '@ng-icons/lucide';
+import { lucideArrowDown, lucideArrowUp, lucideEllipsis } from '@ng-icons/lucide';
 import {
   ColumnDef,
   FlexRender,
@@ -14,6 +14,8 @@ import {
   tableFeatures,
 } from '@tanstack/angular-table';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
+import { HlmDialogService } from '@spartan-ng/helm/dialog';
+import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmBadgeImports } from '@spartan-ng/helm/badge';
 import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
 import { HlmTableImports } from '@spartan-ng/helm/table';
@@ -22,6 +24,8 @@ import { UsersApi } from '../../api/users-api';
 import { components } from '../../api/schema';
 import { reloadable } from '../../core/reloadable';
 import { Session } from '../../core/session';
+import { AddUserContext, AddUserDialog } from './add-user-dialog';
+import { SetUserPasswordContext, SetUserPasswordDialog } from './set-user-password-dialog';
 import { LoadFailed } from '../../ui/load-failed';
 import { LoadingRegion } from '../../ui/loading';
 import { pageHeading } from '../../ui/page-heading';
@@ -72,12 +76,13 @@ const columns: ColumnDef<typeof features, UserSummaryResponse>[] = [
   { id: 'joined', header: 'Joined', accessorFn: (user) => user.joinedAt },
   { id: 'signIn', header: 'Sign-in', accessorFn: signInWords, enableSorting: false },
   { id: 'audit', header: '', enableSorting: false },
+  { id: 'actions', header: '', enableSorting: false },
 ];
 
 /** Nothing to list while the users load. A single array, so the table is not handed new data on every pass. */
 const noUsers: UserSummaryResponse[] = [];
 
-/** The people who have an account, for an admin. The page only reads. */
+/** The people who have an account, for an admin, who can add one while Nook signs in with passwords. */
 @Component({
   selector: 'app-users-page',
   imports: [
@@ -88,14 +93,18 @@ const noUsers: UserSummaryResponse[] = [];
     RouterLink,
     HlmBadgeImports,
     HlmButtonImports,
+    HlmDropdownMenuImports,
     HlmSkeletonImports,
     HlmTableImports,
     LoadFailed,
   ],
-  providers: [provideIcons({ lucideArrowDown, lucideArrowUp })],
+  providers: [provideIcons({ lucideArrowDown, lucideArrowUp, lucideEllipsis })],
   template: `
-    <div class="mb-6">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
       <h1 [class]="pageHeading">Users</h1>
+      @if (passwordSignIn()) {
+        <button hlmBtn type="button" (click)="addUser()">Add user</button>
+      }
     </div>
     @let current = listing();
     @if (current.status === 'loading') {
@@ -168,6 +177,33 @@ const noUsers: UserSummaryResponse[] = [];
                           >
                         }
                       }
+                      @case ('actions') {
+                        @if (hasActions(cell.row.original)) {
+                          <button
+                            hlmBtn
+                            variant="ghost"
+                            size="icon"
+                            type="button"
+                            [attr.aria-label]="'Actions for ' + cell.row.original.name"
+                            [hlmDropdownMenuTrigger]="userMenu"
+                          >
+                            <ng-icon name="lucideEllipsis" aria-hidden="true" />
+                          </button>
+                          <ng-template #userMenu>
+                            <hlm-dropdown-menu class="min-w-40">
+                              @if (passwordSignIn()) {
+                                <button
+                                  hlmDropdownMenuItem
+                                  type="button"
+                                  (triggered)="setPassword(cell.row.original)"
+                                >
+                                  Set password
+                                </button>
+                              }
+                            </hlm-dropdown-menu>
+                          </ng-template>
+                        }
+                      }
                       @default {
                         <ng-container *flexRenderCell="cell; let value">{{ value }}</ng-container>
                       }
@@ -217,6 +253,10 @@ export class UsersPage {
   private readonly usersApi = inject(UsersApi);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(HlmDialogService);
+
+  /** Whether Nook signs in with passwords, which is when an admin can add a user. False until known, and when unknown. */
+  protected readonly passwordSignIn = signal(false);
 
   /** How wide, in rem, each line standing in for a user is while the users load. */
   protected readonly skeletonWidths = [30, 28, 32, 26, 30];
@@ -230,6 +270,14 @@ export class UsersPage {
 
   /** What the URL asks the list to show. */
   protected readonly query = toSignal(this.query$, { requireSync: true });
+
+  constructor() {
+    // A failed read leaves the button out: the page is still useful without it.
+    this.session.signInOptions().then(
+      (options) => this.passwordSignIn.set(options.passwordSignIn),
+      () => undefined,
+    );
+  }
 
   private readonly loading = reloadable(this.query$, (query) => this.load(query));
 
@@ -266,6 +314,27 @@ export class UsersPage {
   protected ariaSort(header: Header<typeof features, UserSummaryResponse, unknown>): string | null {
     const sorted = header.column.getIsSorted();
     return sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : null;
+  }
+
+  /** Opens the dialog that adds a user, and shows the list again once one is added. */
+  protected addUser(): void {
+    const context: AddUserContext = { added: () => this.reload() };
+    this.dialogs.open(AddUserDialog, { context, contentClass: 'sm:max-w-md' });
+  }
+
+  /** Whether a user's row has a menu: another user's has one while it holds an item, and one's own never does. */
+  protected hasActions(user: UserSummaryResponse): boolean {
+    return user.id !== this.session.user()?.id && this.passwordSignIn();
+  }
+
+  /** Opens the dialog that sets a user's password, and shows the list again once it is set or the user turns out to be gone. */
+  protected setPassword(user: UserSummaryResponse): void {
+    const context: SetUserPasswordContext = {
+      id: user.id,
+      name: user.name,
+      changed: () => this.reload(),
+    };
+    this.dialogs.open(SetUserPasswordDialog, { context, contentClass: 'sm:max-w-md' });
   }
 
   protected goToPage(page: number): void {

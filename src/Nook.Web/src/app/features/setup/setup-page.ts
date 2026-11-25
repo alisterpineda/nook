@@ -6,12 +6,9 @@ import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmInputImports } from '@spartan-ng/helm/input';
 import { HlmLabelImports } from '@spartan-ng/helm/label';
-import { components } from '../../api/schema';
-import { passwordsDoNotMatch, somethingWentWrong } from '../../core/messages';
+import { fieldErrorsOf, passwordsDoNotMatch } from '../../core/messages';
 import { Session } from '../../core/session';
 import { SsoButton } from '../sign-in/sso-button';
-
-type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'];
 
 /** First-run setup: creates the first admin, whom the API signs in. */
 @Component({
@@ -128,7 +125,7 @@ export class SetupPage {
       destination = '/library';
     } catch (error) {
       if (!(error instanceof HttpErrorResponse) || error.status !== HttpStatusCode.Conflict) {
-        this.showFailure(error);
+        this.showErrors(fieldErrorsOf(error));
         return;
       }
       // Someone else finished setup first, so there is an account to sign in to.
@@ -137,18 +134,6 @@ export class SetupPage {
       this.submitting.set(false);
     }
     await this.router.navigateByUrl(destination);
-  }
-
-  private showFailure(error: unknown): void {
-    if (error instanceof HttpErrorResponse && error.status === HttpStatusCode.BadRequest) {
-      const problem = error.error as ValidationProblemDetails | null;
-      const errors = problem?.errors ?? {};
-      if (Object.values(errors).some((messages) => messages.length > 0)) {
-        this.showErrors(errors);
-        return;
-      }
-    }
-    this.showErrors({ '': [somethingWentWrong] });
   }
 
   /** Shows each message under the field the API keys it by, `Email` or `Password`, and any other above the button. */

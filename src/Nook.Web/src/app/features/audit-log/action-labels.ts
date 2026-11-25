@@ -9,6 +9,8 @@ const labels: Record<string, string> = {
   'public-access.changed': 'Changed public access',
   'work.edited': 'Edited a book',
   'work.deleted': 'Deleted a book',
+  'user.added': 'Added a user',
+  'user.password-set': "Set a user's password",
   'user.password-changed': 'Changed their password',
 };
 

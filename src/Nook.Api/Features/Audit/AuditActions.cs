@@ -14,6 +14,8 @@ public static class AuditActions
     public const string WorkEdited = "work.edited";
     public const string WorkDeleted = "work.deleted";
     public const string PublicAccessChanged = "public-access.changed";
+    public const string UserAdded = "user.added";
+    public const string UserPasswordSet = "user.password-set";
     public const string UserPasswordChanged = "user.password-changed";
 }
 

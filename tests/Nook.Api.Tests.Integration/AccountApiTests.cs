@@ -67,7 +67,7 @@ public class AccountApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
         var response = await PutPasswordAsync(client, "not the password", NewPassword);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("CurrentPassword", await ErrorFieldsAsync(response));
+        Assert.Contains("CurrentPassword", await response.ErrorFieldsAsync());
         using var other = factory.CreateClient();
         Assert.Equal(HttpStatusCode.OK, (await other.LoginAsync(user.Email!, ApiTestExtensions.Password)).StatusCode);
     }
@@ -81,7 +81,7 @@ public class AccountApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
         var response = await PutPasswordAsync(client, null, NewPassword);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("CurrentPassword", await ErrorFieldsAsync(response));
+        Assert.Contains("CurrentPassword", await response.ErrorFieldsAsync());
         using var other = factory.CreateClient();
         Assert.Equal(HttpStatusCode.OK, (await other.LoginAsync(user.Email!, ApiTestExtensions.Password)).StatusCode);
     }
@@ -95,7 +95,7 @@ public class AccountApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
         var response = await PutPasswordAsync(client, ApiTestExtensions.Password, "short-pass1");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("NewPassword", await ErrorFieldsAsync(response));
+        Assert.Contains("NewPassword", await response.ErrorFieldsAsync());
         using var other = factory.CreateClient();
         Assert.Equal(HttpStatusCode.OK, (await other.LoginAsync(user.Email!, ApiTestExtensions.Password)).StatusCode);
     }
@@ -196,12 +196,6 @@ public class AccountApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
 
     private static Task<HttpResponseMessage> PutPasswordAsync(HttpClient client, string? currentPassword, string newPassword) =>
         client.PutAsJsonAsync("/api/account/password", new { currentPassword, newPassword }, TestContext.Current.CancellationToken);
-
-    private static async Task<List<string>> ErrorFieldsAsync(HttpResponseMessage response)
-    {
-        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        return [.. body.RootElement.GetProperty("errors").EnumerateObject().Select(p => p.Name)];
-    }
 
     private async Task<List<AuditEntry>> EntriesAsync(Guid actorId)
     {

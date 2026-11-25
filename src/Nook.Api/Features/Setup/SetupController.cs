@@ -78,11 +78,7 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
 
         if (!result.Succeeded)
         {
-            foreach (var error in result.Errors)
-            {
-                var field = error.Code.StartsWith("Password", StringComparison.Ordinal) ? nameof(request.Password) : nameof(request.Email);
-                ModelState.AddModelError(field, error.Description);
-            }
+            ModelState.AddAccountErrors(result, nameof(request.Password), nameof(request.Email));
 
             return ValidationProblem(ModelState);
         }
