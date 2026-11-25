@@ -14,7 +14,7 @@ let nextId = 0;
   imports: [ReactiveFormsModule, HlmButtonImports, HlmInputImports],
   template: `
     <fieldset class="grid gap-2">
-      <legend class="text-sm leading-none font-medium">{{ legend() }}</legend>
+      <legend class="mb-2 text-sm leading-none font-medium">{{ legend() }}</legend>
       @for (name of names().controls; track name; let index = $index; let last = $last) {
         <div
           role="group"

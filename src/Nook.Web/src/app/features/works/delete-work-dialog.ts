@@ -5,6 +5,7 @@ import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmDialogImports } from '@spartan-ng/helm/dialog';
 import { WorksApi } from '../../api/works-api';
 import { somethingWentWrong } from '../../core/messages';
+import { failureOf } from '../../core/reloadable';
 
 /** What the dialog is opened with. */
 export interface DeleteWorkContext {
@@ -50,10 +51,14 @@ export class DeleteWorkDialog {
     this.failed.set(false);
     try {
       await this.worksApi.delete(this.context.id);
-    } catch {
-      this.failed.set(true);
-      this.deleting.set(false);
-      return;
+    } catch (error) {
+      // The work is gone, or the user can no longer see it. Either way it is no longer theirs to delete, and its
+      // page has nothing to show them.
+      if (failureOf(error) !== 'not-found') {
+        this.failed.set(true);
+        this.deleting.set(false);
+        return;
+      }
     }
     this.dialog.close();
     await this.router.navigateByUrl('/library');

@@ -160,6 +160,10 @@ type Showing =
           <label hlmLabel for="work-section">Section</label>
           <select hlmInput id="work-section" formControlName="sectionId">
             <option value="">Default</option>
+            @if (unlistedSection(current.work, current.sections); as sectionId) {
+              <!-- Its name is not known, and leaving it out would save the work into the Default area. -->
+              <option [value]="sectionId">Current section</option>
+            }
             @for (section of current.sections; track section.id) {
               <option [value]="section.id">{{ section.name }}</option>
             }
@@ -205,6 +209,13 @@ export class WorkEditPage {
   /** Whether to mark a field wrong: only once the user has tried to save. */
   protected showsInvalid(form: WorkForm, field: 'title' | 'sortTitle'): boolean {
     return this.attempted() && form.controls[field].invalid;
+  }
+
+  /** The id of the work's section when the sections loaded do not hold it, as when it was just hidden or added. */
+  protected unlistedSection(work: WorkDetailResponse, sections: SectionResponse[]): string | null {
+    return work.sectionId !== null && !sections.some(({ id }) => id === work.sectionId)
+      ? work.sectionId
+      : null;
   }
 
   protected async save(work: WorkDetailResponse, form: WorkForm): Promise<void> {

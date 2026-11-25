@@ -128,6 +128,26 @@ describe('WorkEditPage', () => {
     expect(section.value).toBe(novelsId);
   });
 
+  it('keeps the section of a work whose section is not among those listed', async () => {
+    const elsewhereId = '0198a1b2-0000-7000-8000-0000000000ee';
+    const page = await openEdit({ ...dune, sectionId: elsewhereId });
+
+    const section = fieldLabelled(page, 'Section', HTMLSelectElement);
+    expect(Array.from(section.options).map(text)).toEqual([
+      'Default',
+      'Current section',
+      'Novels',
+      'Classics',
+    ]);
+    expect(section.value).toBe(elsewhereId);
+    await submit(page);
+
+    const saving = await request(`/api/works/${dune.id}`);
+    expect(saving.request.body.sectionId).toBe(elsewhereId);
+    saving.flush(null, { status: 204, statusText: 'No Content' });
+    await vi.waitFor(() => expect(router.url).toBe(`/works/${dune.id}`));
+  });
+
   it('saves the edited values and returns to the work', async () => {
     const page = await openEdit(dune);
 

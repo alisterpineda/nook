@@ -120,6 +120,20 @@ describe('DeleteWorkDialog', () => {
     expect(TestBed.inject(Location).path()).toBe(`/works/${dune.id}`);
   });
 
+  it('goes to the library when the work is already gone', async () => {
+    const dialog = await openDialog();
+
+    buttonLabelled(dialog, 'Delete').click();
+    (await vi.waitFor(() => httpTesting.expectOne(`/api/works/${dune.id}`))).flush(null, {
+      status: 404,
+      statusText: 'Not Found',
+    });
+
+    await vi.waitFor(() => expect(TestBed.inject(Location).path()).toBe('/library'));
+    await settle();
+    expect(document.querySelector('app-delete-work-dialog')).toBeNull();
+  });
+
   it('says so and stays open when the delete fails', async () => {
     const dialog = await openDialog();
 
