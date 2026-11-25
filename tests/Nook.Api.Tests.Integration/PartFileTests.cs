@@ -27,6 +27,18 @@ public class PartFileTests(NookApiFactory factory) : IClassFixture<NookApiFactor
         Assert.Equal(part.Path.Split('/')[^1], disposition.FileNameStar);
     }
 
+    [Fact]
+    public async Task Part_file_tells_the_browser_not_to_guess_its_type()
+    {
+        var part = await factory.IngestOnePartAsync(new EpubBuilder().WithTitle("Kindred").WithCreator("Octavia E. Butler").Build());
+        using var client = await factory.CreateSignedInClientAsync();
+
+        var response = await client.GetAsync($"/api/parts/{part.Id}/file", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["nosniff"], response.Headers.GetValues("X-Content-Type-Options"));
+    }
+
     [Theory]
     [InlineData(BuiltInRole.Contributor)]
     [InlineData(BuiltInRole.Viewer)]

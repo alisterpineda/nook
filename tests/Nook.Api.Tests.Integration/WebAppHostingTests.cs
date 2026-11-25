@@ -165,6 +165,30 @@ public sealed class WebAppHostingTests : IClassFixture<NookApiFactory>, IDisposa
     }
 
     [Fact]
+    public async Task Every_response_tells_the_browser_not_to_guess_its_type()
+    {
+        using var client = _app.CreateClient();
+        using var signedIn = await _app.CreateSignedInClientAsync();
+
+        var responses = new[]
+        {
+            await client.GetAsync("/", TestContext.Current.CancellationToken),
+            await client.GetAsync("/library", TestContext.Current.CancellationToken),
+            await client.GetAsync("/main.js", TestContext.Current.CancellationToken),
+            await client.GetAsync("/api/access", TestContext.Current.CancellationToken),
+            await client.GetAsync("/api/works", TestContext.Current.CancellationToken),
+            await signedIn.GetAsync("/api/nope", TestContext.Current.CancellationToken),
+        };
+
+        Assert.Equal(
+            [HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK,
+                HttpStatusCode.Unauthorized, HttpStatusCode.NotFound],
+            responses.Select(response => response.StatusCode));
+        Assert.All(responses, response =>
+            Assert.Equal(["nosniff"], response.Headers.GetValues("X-Content-Type-Options")));
+    }
+
+    [Fact]
     public async Task Robots_txt_lets_in_three_search_engines_and_turns_every_other_crawler_away()
     {
         using var client = _app.CreateClient();

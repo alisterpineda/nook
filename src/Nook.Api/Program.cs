@@ -154,6 +154,8 @@ if (!buildingOpenApiDocument)
 app.UseWebAppContentSecurityPolicy();
 // And every response tells crawlers not to index it.
 app.UseCrawlerDirectives();
+// And every response tells the browser not to guess its type.
+app.UseNoSniff();
 
 // Errors and bare status codes, such as a 401 from the cookie, leave as problem details.
 app.UseExceptionHandler();

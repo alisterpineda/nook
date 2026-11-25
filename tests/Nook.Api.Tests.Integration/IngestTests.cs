@@ -1,11 +1,13 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 using Nook.Api.Features;
 using Nook.Api.Features.Jobs;
+using Nook.Api.Features.Uploads;
 using Nook.Api.Features.Works;
 using Nook.Api.Ingest;
 
@@ -13,6 +15,25 @@ namespace Nook.Api.Tests.Integration;
 
 public class IngestTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
 {
+    [Fact]
+    public async Task Upload_of_an_epub_that_begins_with_other_bytes_returns_a_job_that_fails_as_an_unsupported_format()
+    {
+        var section = await factory.AddSectionAsync();
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var book = new EpubBuilder().WithTitle("Book").Build(Encoding.ASCII.GetBytes("PK=1;//\n"));
+
+        var response = await client.UploadAsync(book, "book.epub", section.Id);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var upload = await response.ReadAsync<UploadResponse>();
+        var job = await client.WaitForJobAsync(upload.JobId);
+        Assert.Equal(JobStatus.Failed, job.Status);
+        Assert.Contains("unsupported format", job.Error);
+        var step = Assert.Single(job.Steps);
+        Assert.Equal("identify-format", step.Name);
+        Assert.Equal(JobStepStatus.Failed, step.Status);
+    }
+
     [Fact]
     public async Task Uploaded_epub_becomes_a_work_with_one_item_and_one_part()
     {

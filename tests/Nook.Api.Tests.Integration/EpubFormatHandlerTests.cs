@@ -55,6 +55,7 @@ public sealed class EpubFormatHandlerTests : IDisposable
             { "plain zip", Zip(("notes.txt", "Just some notes.")) },
             { "zip with another mimetype", Zip(("mimetype", "application/zip"), ("META-INF/container.xml", "<container/>")) },
             { "truncated epub", epub[..(epub.Length / 2)] },
+            { "epub after script text", new EpubBuilder().WithTitle("Book").Build(Encoding.ASCII.GetBytes("PK=1;//\n")) },
         };
     }
 

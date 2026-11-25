@@ -242,7 +242,8 @@ internal sealed class EpubBuilder
         return this;
     }
 
-    public byte[] Build()
+    /// <param name="prefix">Bytes written before the archive, which the archive's offsets count, so it still opens.</param>
+    public byte[] Build(byte[]? prefix = null)
     {
         var files = new List<(string Path, byte[] Content)>
         {
@@ -269,13 +270,19 @@ internal sealed class EpubBuilder
         files.AddRange(_files.Where(file => files.All(built => built.Path != file.Key)).Select(file => (file.Key, file.Value)));
         files.RemoveAll(file => _removed.Contains(file.Path));
 
-        return Zip(files);
+        return Zip(files, prefix);
     }
 
     /// <summary>Writes the files into a zip archive in the order given, with an entry named <c>mimetype</c> stored uncompressed, as the OCF rules ask.</summary>
-    public static byte[] Zip(IEnumerable<(string Path, byte[] Content)> files)
+    /// <param name="prefix">Bytes written before the archive, which the archive's offsets count, so it still opens.</param>
+    public static byte[] Zip(IEnumerable<(string Path, byte[] Content)> files, byte[]? prefix = null)
     {
         using var stream = new MemoryStream();
+        if (prefix is not null)
+        {
+            stream.Write(prefix);
+        }
+
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             foreach (var (path, content) in files)

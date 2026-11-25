@@ -59,6 +59,9 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         ["nrt"] = ContributorRole.Narrator,
     };
 
+    /// <summary>The first four bytes of a zip archive's first local file header.</summary>
+    private static readonly byte[] ZipSignature = [0x50, 0x4B, 0x03, 0x04];
+
     public ItemFormat Format => ItemFormat.Epub;
 
     public string MediaType => "application/epub+zip";
@@ -67,12 +70,18 @@ public sealed partial class EpubFormatHandler : IFormatHandler
 
     /// <summary>
     /// A zip archive whose <c>mimetype</c> entry reads <c>application/epub+zip</c> or, lacking that entry, one that
-    /// holds <c>META-INF/container.xml</c>. A file that is not a zip archive, or is a broken one, is not an EPUB.
+    /// holds <c>META-INF/container.xml</c>. A file that is not a zip archive, or is a broken one, is not an EPUB, and
+    /// neither is one whose first four bytes are not <c>PK\x03\x04</c>, even when the rest of it is a complete archive.
     /// </summary>
     public async Task<bool> MatchesAsync(string path, CancellationToken cancellationToken = default)
     {
         try
         {
+            if (!await StartsWithZipSignatureAsync(path, cancellationToken))
+            {
+                return false;
+            }
+
             await using var archive = await ZipFile.OpenReadAsync(path, cancellationToken);
             var mimetype = archive.GetEntry(MimetypeEntry);
             if (mimetype is null)
@@ -95,6 +104,14 @@ public sealed partial class EpubFormatHandler : IFormatHandler
         {
             return false;
         }
+    }
+
+    private static async Task<bool> StartsWithZipSignatureAsync(string path, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[ZipSignature.Length];
+        await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1, useAsync: true);
+        var read = await file.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
+        return read == buffer.Length && buffer.AsSpan().SequenceEqual(ZipSignature);
     }
 
     public async Task<BookMetadata> ReadMetadataAsync(string path, CancellationToken cancellationToken = default)
