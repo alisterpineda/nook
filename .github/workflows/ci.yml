@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -54,17 +55,39 @@ jobs:
         working-directory: src/Nook.Web
         run: npm run format:check
 
-  # Publishes the container image. A pull request publishes nothing, and neither does a manual run on a
-  # branch other than main, so only main can move the latest tag.
+  # Publishes the container image. A run on main publishes it under the commit's SHA, and under main when
+  # the commit is still the head of main. A run on a tag vX.Y.Z is a release: it builds the image with
+  # version X.Y.Z and publishes it under X.Y.Z, X.Y, X and latest. A pull request publishes nothing, and
+  # neither does a manual run on another branch. docs/releasing.md says how a release is made.
   image:
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
+      # The whole history and every tag are fetched: a release is checked against main and against the
+      # other version tags.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Run before anything is built, so a tag that cannot be a release stops the run here. On a tag run
+      # the version reaches both publishes below through the environment, where MSBuild reads
+      # NookReleaseVersion as a property. The tags are not kept from this call: they are chosen again just
+      # before the publish.
+      - name: Work out the version
+        id: version
+        run: |
+          facts="$(.github/scripts/image-tags.sh)"
+          version="$(printf '%s\n' "$facts" | sed -n 's/^version=//p')"
+          release="$(printf '%s\n' "$facts" | sed -n 's/^release=//p')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          if [ -n "$release" ]; then
+            echo "NookReleaseVersion=$release" >> "$GITHUB_ENV"
+          fi
 
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
 
@@ -99,8 +122,12 @@ jobs:
           -p:ContainerRepository=nook
           -p:ContainerImageTag=smoke
 
+      # The image logs its version when it starts, and the smoke test reads it there, so a release is only
+      # published once its image is seen to carry the tag's version.
       - name: Smoke test the image
-        run: .github/scripts/smoke-test.sh nook:smoke
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: .github/scripts/smoke-test.sh nook:smoke "$VERSION"
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -108,22 +135,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Every commit gets an image under its own SHA. Only the commit that is still the head of main also
-      # moves latest, so a run that finishes late, or an old run started again, never puts latest back on
-      # an older commit. Nook migrates the database when it starts, and older code must not meet a newer one.
+      # A version's image is never pushed twice, so a release whose version the registry already holds
+      # stops here.
+      - name: Check that the release is not published yet
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE: ${{ steps.version.outputs.release }}
+        run: .github/scripts/image-tags.sh --check-unpublished "ghcr.io/alisterpineda/nook:$RELEASE"
+
+      # The tags are chosen here, just before the publish, because main or the version tags may have moved
+      # while this run built. A run on main moves the main tag only while its commit is still the head of
+      # main, and a release is refused when a higher version was tagged in the meantime, so the tags are
+      # fetched again first. The image's tags must not reach the environment any earlier: the smoke build
+      # above passes ContainerImageTag, and the SDK refuses a build that is given both that and
+      # ContainerImageTags.
       - name: Choose the image's tags
         run: |
-          head="$(git ls-remote origin refs/heads/main | cut -f1)"
-          if [ -z "$head" ]; then
-            echo "Could not read the head of main." >&2
+          git fetch --quiet --tags origin
+          facts="$(.github/scripts/image-tags.sh)"
+          tags="$(printf '%s\n' "$facts" | sed -n 's/^tags=//p')"
+          if [ -z "$tags" ]; then
+            echo "The run has no tags to publish under." >&2
             exit 1
           fi
-          if [ "$head" = "$GITHUB_SHA" ]; then
-            echo "ContainerImageTags=latest;$GITHUB_SHA" >> "$GITHUB_ENV"
-          else
-            echo "main is now at $head, so this run leaves latest alone."
-            echo "ContainerImageTags=$GITHUB_SHA" >> "$GITHUB_ENV"
-          fi
+          echo "ContainerImageTags=$tags" >> "$GITHUB_ENV"
 
       - name: Publish the amd64 and arm64 image
         run: >

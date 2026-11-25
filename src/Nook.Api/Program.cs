@@ -11,6 +11,7 @@ using Nook.Api.Data;
 using Nook.Api.Features.Activity;
 using Nook.Api.Features.Audit;
 using Nook.Api.Features.Auth;
+using Nook.Api.Features.Build;
 using Nook.Api.Features.Jobs;
 using Nook.Api.Features.PublicAccess;
 using Nook.Api.Features.Publications;
@@ -132,6 +133,8 @@ var app = builder.Build();
 
 if (!buildingOpenApiDocument)
 {
+    app.Logger.LogInformation("Nook {Version} is starting.", BuildVersion.Current);
+
     // Checked before migrating, so a missing data root or a folder Nook cannot write to stops the API before it
     // touches the database.
     var storageLogger = app.Services.GetRequiredService<ILogger<NookStorage>>();
@@ -144,6 +147,7 @@ if (!buildingOpenApiDocument)
 
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<NookDbContext>();
+    await NewerDatabase.EnsureNoneAsync(db, CancellationToken.None);
     await db.Database.MigrateAsync();
 
     // A work with no search vector, such as one from before search was built, gets one before Nook answers requests.

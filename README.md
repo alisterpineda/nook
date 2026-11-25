@@ -46,7 +46,8 @@ The compose file serves Nook over http. To serve it over https, put it behind a 
 ## Guides
 
 - [Backup and restore](docs/backup-and-restore.md): what to keep, and how to get Nook back from it.
-- [Upgrading](docs/upgrading.md): moving to a newer build, staying on one, and going back.
+- [Upgrading](docs/upgrading.md): moving to a newer version, staying on one, and going back.
+- [Releasing](docs/releasing.md): how a new version is tagged and published.
 - [Settings](docs/settings.md): the two places a setting can be given.
 - [Storage](docs/storage.md): the folders Nook keeps, and moving the library or the cache out of `data`.
 - [Single sign-on](docs/single-sign-on.md): signing in through an OpenID Connect provider.

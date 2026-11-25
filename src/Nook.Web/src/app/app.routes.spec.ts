@@ -103,6 +103,7 @@ describe('routes', () => {
         sections: [],
       } satisfies PublicAccessResponse,
       '/api/activity/uploads': [],
+      '/api/version': { version: '0.0.0-dev+abc1234' },
       '/api/jobs': { items: [], total: 0, offset: 0, limit: 50 },
       '/api/audit-log': { items: [], total: 0, offset: 0, limit: 50 },
       '/api/audit-log/filters': { actors: [], actions: [] },

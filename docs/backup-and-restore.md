@@ -94,6 +94,6 @@ People who were signed in when the backup was made are still signed in, because 
 `data` folder.
 
 A backup can be restored into the version of Nook that made it or a newer one, which migrates the database
-when it starts. An older Nook cannot use a database from a newer one. The last command starts whichever build
-`.env` and `compose.yaml` name once the archive is extracted, so to go back to an older build after an
+when it starts. An older Nook cannot use a database from a newer one. The last command starts whichever version
+`.env` and `compose.yaml` name once the archive is extracted, so to go back to an older version after an
 upgrade, follow [Going back](upgrading.md#going-back).

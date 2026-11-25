@@ -10,6 +10,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../api/schema';
 import { routes } from '../app.routes';
 import { provideFakeActivityHub } from '../testing/fake-activity-hub';
+import { flushVersion } from '../testing/flush-version';
 import { flushUploadActivity } from '../testing/upload-fixtures';
 
 type CurrentUserResponse = components['schemas']['CurrentUserResponse'];
@@ -59,6 +60,8 @@ describe('route guards', () => {
   afterEach(() => {
     // A signed-in user who may upload has the shell list their uploads, which no spec here is about.
     flushUploadActivity(httpTesting);
+    // The same shell asks for the version, which no spec here is about.
+    flushVersion(httpTesting);
     httpTesting.verify();
   });
 

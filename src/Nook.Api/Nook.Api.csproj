@@ -26,6 +26,27 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- The project file carries 0.0.0-dev for good. A release build is given its number through the
+       NookReleaseVersion environment variable, which MSBuild reads as a property. The SDK's own
+       IncludeSourceRevisionInInformationalVersion stays off, since it appends all 40 characters of the commit. -->
+  <PropertyGroup>
+    <Version>0.0.0-dev</Version>
+    <Version Condition="'$(NookReleaseVersion)' != ''">$(NookReleaseVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <!-- The version the API reports is the informational version with the commit it was built from shortened to
+       7 characters, as SemVer build metadata: 0.1.0+d9d09f6. SourceRevisionId itself is left whole. A build
+       outside a git repository has no commit and reports the bare version. -->
+  <Target Name="AddShortCommitToInformationalVersion"
+          BeforeTargets="GetAssemblyAttributes"
+          DependsOnTargets="GetAssemblyVersion;InitializeSourceControlInformation"
+          Condition="'$(SourceControlInformationFeatureSupported)' == 'true'">
+    <PropertyGroup Condition="'$(SourceRevisionId)' != '' and !$(InformationalVersion.Contains('+'))">
+      <InformationalVersion>$(InformationalVersion)+$(SourceRevisionId.Substring(0, 7))</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
   <!-- A build that recompiles the API rewrites openapi.json beside this file, where the web app reads it to
        generate its types. An up-to-date build skips it, so a deleted openapi.json needs a rebuild. -->
   <PropertyGroup>

@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Starts a Nook image with compose.yaml, the way the README's "Installing" section says to, and checks
-# that it answers. Usage: smoke-test.sh <image>
+# that it answers and that it is the version expected, such as 0.1.0 or 0.0.0-dev.
+# Usage: smoke-test.sh <image> <version>
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <image>" >&2
+if [ "$#" -ne 2 ]; then
+  echo "Usage: $0 <image> <version>" >&2
   exit 2
 fi
 
 image="$1"
+version="$2"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 project="nook-smoke"
 url="http://localhost:8080"
@@ -65,4 +67,11 @@ if [[ "$index" != *"<app-root>"* ]]; then
   exit 1
 fi
 
-echo "Smoke test passed for $image."
+# Nook logs its version when it starts: the version, then the first 7 characters of the commit it was built from.
+logs="$(docker compose -p "$project" logs nook)"
+if ! [[ "$logs" =~ "Nook $version+"[0-9a-f]{7}" is starting." ]]; then
+  echo "The log of $image does not say that Nook $version is starting." >&2
+  exit 1
+fi
+
+echo "Smoke test passed for $image, version $version."

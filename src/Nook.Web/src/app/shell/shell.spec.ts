@@ -19,6 +19,7 @@ import { UploadQueue } from '../features/upload/upload-queue';
 import { FakeActivityHub, provideFakeActivityHub } from '../testing/fake-activity-hub';
 import { signInAs } from '../testing/sign-in-as';
 import { typeInto } from '../testing/type-into';
+import { flushVersion } from '../testing/flush-version';
 import { flushUploadActivity } from '../testing/upload-fixtures';
 import { Shell } from './shell';
 
@@ -136,6 +137,8 @@ describe('Shell', () => {
   afterEach(() => {
     // Whoever may upload has the shell list their uploads, which no spec here is about unless it says so.
     flushUploadActivity(httpTesting);
+    // Whoever is signed in has the shell ask for the version, which no spec here is about unless it says so.
+    flushVersion(httpTesting);
     httpTesting.verify({ ignoreCancelled });
     // The sidebar remembers whether it is open in a cookie, which would carry over to the next test.
     document.cookie = 'sidebar_state=; path=/; max-age=0';
@@ -254,6 +257,58 @@ describe('Shell', () => {
   function signOutFromTheFooterMenu(shell: HTMLElement): Promise<void> {
     return chooseFromTheFooterMenu(shell, 'Sign out');
   }
+
+  /** Opens the footer's user menu and returns the line that names the version, if the menu has one. */
+  async function versionLine(shell: HTMLElement): Promise<HTMLElement | null> {
+    shell
+      .querySelector<HTMLElement>('[data-slot="sidebar-footer"] button:has([data-user-email])')!
+      .click();
+    await harness.fixture.whenStable();
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+    return document.querySelector<HTMLElement>('[data-app-version]');
+  }
+
+  it('the footer menu shows the version the API reports', async () => {
+    const shell = await openShell('/library');
+    (await vi.waitFor(() => httpTesting.expectOne('/api/version'))).flush({
+      version: '0.1.0+abc1234',
+    });
+    await harness.fixture.whenStable();
+
+    const line = await versionLine(shell);
+
+    expect(line?.textContent?.trim()).toBe('Nook 0.1.0+abc1234');
+  });
+
+  it('the footer menu shows no version when the API cannot say', async () => {
+    const shell = await openShell('/library');
+    (await vi.waitFor(() => httpTesting.expectOne('/api/version'))).flush(null, {
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    await harness.fixture.whenStable();
+
+    expect(await versionLine(shell)).toBeNull();
+  });
+
+  it('asks for the version once however the session changes', async () => {
+    await openShell('/library');
+    await vi.waitFor(() => expect(httpTesting.match('/api/version')).toHaveLength(1));
+
+    const loading = TestBed.inject(Session).load();
+    httpTesting.expectOne('/api/auth/me').flush(grace);
+    await loading;
+    await harness.fixture.whenStable();
+
+    expect(httpTesting.match('/api/version')).toHaveLength(0);
+  });
+
+  it("a visitor's shell asks for no version", async () => {
+    await visitWith(publicAccessOff);
+    await openShell('/library');
+
+    expect(httpTesting.match('/api/version')).toEqual([]);
+  });
 
   it('lists Library, then Default, then the sections', async () => {
     const shell = await openShell('/library');

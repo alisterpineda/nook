@@ -34,6 +34,7 @@ import { HlmDropdownMenuImports } from '@spartan-ng/helm/dropdown-menu';
 import { HlmSidebarImports } from '@spartan-ng/helm/sidebar';
 import { HlmSkeletonImports } from '@spartan-ng/helm/skeleton';
 import { filter, map } from 'rxjs';
+import { VersionApi } from '../api/version-api';
 import { LibraryArea, areaParam, readArea, sameArea } from '../core/library-area';
 import { allows } from '../core/content-access';
 import { appName, tabTitle } from '../core/app-name';
@@ -363,6 +364,16 @@ interface Crumb {
           <ng-icon name="lucideLogOut" />
           Sign out
         </button>
+        @if (version()) {
+          <div hlmDropdownMenuSeparator></div>
+          <div
+            hlmDropdownMenuLabel
+            class="text-muted-foreground truncate text-xs font-normal"
+            data-app-version
+          >
+            {{ appName }} {{ version() }}
+          </div>
+        }
       </hlm-dropdown-menu>
     </ng-template>
   `,
@@ -384,6 +395,11 @@ export class Shell {
 
   protected readonly session = inject(Session);
   private readonly dialogs = inject(HlmDialogService);
+  private readonly versionApi = inject(VersionApi);
+  /** What the user's menu says Nook is on, or `null` until the API has said, and for good if it cannot. */
+  protected readonly version = signal<string | null>(null);
+  /** Set when the version is first asked for, so that this shell asks once, however the request goes. */
+  private versionAsked = false;
   protected readonly appName = appName;
   protected readonly sections = this.sectionStore.list;
   protected readonly signOutFailed = signal(false);
@@ -495,6 +511,13 @@ export class Shell {
           this.hub.start().catch(() => undefined);
         } else {
           void this.closeHub();
+        }
+        if (signedIn && !this.versionAsked) {
+          this.versionAsked = true;
+          this.versionApi.get().then(
+            ({ version }) => this.version.set(version),
+            () => undefined,
+          );
         }
         if (canUpload) {
           this.uploadActivity.start();

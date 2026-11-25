@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Nook.Api.Features.Build;
 using Npgsql;
 
 namespace Nook.Api.Tests.Integration;
@@ -18,6 +20,14 @@ public partial class StartupMigrationTests(NookApiFactory factory) : IClassFixtu
 
         Assert.Single(userTables);
         Assert.Contains(migrations, id => id.EndsWith("_InitialCreate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Starting_the_api_logs_its_version()
+    {
+        await StartApiAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(factory.ReadLogs(LogLevel.Information), $"Nook {BuildVersion.Current} is starting.");
     }
 
     [Fact]
