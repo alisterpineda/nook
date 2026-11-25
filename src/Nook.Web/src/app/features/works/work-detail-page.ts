@@ -1,7 +1,7 @@
-import { DatePipe } from '@angular/common';
+import { DOCUMENT, DatePipe } from '@angular/common';
 import { Component, ElementRef, inject, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideEllipsis } from '@ng-icons/lucide';
 import { HlmBadgeImports } from '@spartan-ng/helm/badge';
@@ -115,26 +115,7 @@ type Showing =
                 @if (toRead) {
                   <a hlmBtn [routerLink]="['/works', work.id, 'read', toRead.id]">Read</a>
                 }
-                @if (canDownload) {
-                  @if (oneFilePerFormat(work)) {
-                    @for (item of work.items; track item.id) {
-                      <a
-                        hlmBtn
-                        variant="outline"
-                        download
-                        [attr.href]="partFileUrl(item.parts[0].id)"
-                        >Download {{ formatLabel(item.format) }}</a
-                      >
-                    }
-                  } @else {
-                    <!-- Which file is meant is not clear, so this goes to the list of them. -->
-                    <button hlmBtn variant="outline" type="button" (click)="showFiles()">
-                      Download
-                    </button>
-                  }
-                }
-                @if (work.canEdit) {
-                  <a hlmBtn variant="outline" [routerLink]="['/works', work.id, 'edit']">Edit</a>
+                @if (canDownload || work.canEdit) {
                   <button
                     hlmBtn
                     variant="outline"
@@ -147,9 +128,38 @@ type Showing =
                   </button>
                   <ng-template #workMenu>
                     <hlm-dropdown-menu class="min-w-40">
-                      <button hlmDropdownMenuItem type="button" (triggered)="confirmDelete(work)">
-                        Delete
-                      </button>
+                      @if (canDownload) {
+                        @if (oneFilePerFormat(work)) {
+                          @for (item of work.items; track item.id) {
+                            <button
+                              hlmDropdownMenuItem
+                              type="button"
+                              (triggered)="download(item.parts[0].id)"
+                            >
+                              Download {{ formatLabel(item.format) }}
+                            </button>
+                          }
+                        } @else {
+                          <!-- Which file is meant is not clear, so this goes to the list of them. -->
+                          <button hlmDropdownMenuItem type="button" (triggered)="showFiles()">
+                            Download
+                          </button>
+                        }
+                      }
+                      @if (work.canEdit) {
+                        <button hlmDropdownMenuItem type="button" (triggered)="edit(work)">
+                          Edit
+                        </button>
+                        <div hlmDropdownMenuSeparator></div>
+                        <button
+                          hlmDropdownMenuItem
+                          type="button"
+                          variant="destructive"
+                          (triggered)="confirmDelete(work)"
+                        >
+                          Delete
+                        </button>
+                      }
                     </hlm-dropdown-menu>
                   </ng-template>
                 }
@@ -277,6 +287,8 @@ export class WorkDetailPage {
 
   private readonly pageName = inject(PageName);
   private readonly dialogs = inject(HlmDialogService);
+  private readonly router = inject(Router);
+  private readonly document = inject(DOCUMENT);
 
   protected readonly allows = allows;
   protected readonly formatBytes = formatBytes;
@@ -336,7 +348,7 @@ export class WorkDetailPage {
 
   /**
    * Whether naming a format names one file: every item has exactly one part and no two items share a format. Only then
-   * can the buttons beside the cover download directly.
+   * can the menu beside the cover download directly.
    */
   protected oneFilePerFormat(work: WorkDetailResponse): boolean {
     const formats = new Set(work.items.map((item) => item.format));
@@ -347,10 +359,27 @@ export class WorkDetailPage {
 
   /**
    * Whether the files are a row of the details rather than a section of their own. They are when each format is one
-   * file: whatever the access level allows is then already beside the cover, which leaves the section nothing to offer.
+   * file: whatever the access level allows is then already beside the cover or in its menu, which leaves the section
+   * nothing to offer.
    */
   protected filesAreDetails(work: WorkDetailResponse): boolean {
     return work.items.length > 0 && this.oneFilePerFormat(work);
+  }
+
+  /**
+   * Downloads a part's file. The menu's items are buttons, which a menu opens by click, Enter and the space bar alike,
+   * so the download goes through a link made for it.
+   */
+  protected download(partId: string): void {
+    const link = this.document.createElement('a');
+    link.href = partFileUrl(partId);
+    link.download = '';
+    link.click();
+  }
+
+  /** Opens the page that edits the work. */
+  protected edit(work: WorkDetailResponse): void {
+    void this.router.navigate(['/works', work.id, 'edit']);
   }
 
   /** Opens the dialog that asks whether to delete the work. */

@@ -13,7 +13,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from '../../api/schema';
 import { PageName } from '../../core/page-name';
 import { text } from '../../testing/element-text';
-import { menuItemLabelled } from '../../testing/menu-item-labelled';
+import { menuItemLabelled, menuItems } from '../../testing/menu-item-labelled';
 import { WorkDetailPage } from './work-detail-page';
 
 type ContributorRole = components['schemas']['ContributorRole'];
@@ -110,6 +110,7 @@ describe('WorkDetailPage', () => {
         provideRouter([
           { path: 'library', component: WorksListStub },
           { path: 'works/:id', component: WorkDetailPage },
+          { path: 'works/:id/edit', component: WorksListStub },
         ]),
         provideLocationMocks(),
         provideHttpClient(),
@@ -309,6 +310,16 @@ describe('WorkDetailPage', () => {
     ]);
   }
 
+  /** Opens the More actions menu and returns its items in order. */
+  async function openMenu(page: HTMLElement): Promise<HTMLElement[]> {
+    page.querySelector<HTMLElement>('button[aria-label="More actions"]')!.click();
+    return vi.waitFor(() => {
+      const items = menuItems();
+      expect(items).not.toEqual([]);
+      return items;
+    });
+  }
+
   /** The buttons beside the cover as label and address pairs. One that is not a link has no address. */
   function actions(page: HTMLElement): [string, string | null][] {
     return Array.from(page.querySelectorAll('[aria-label="Actions"] :is(a, button)')).map(
@@ -331,33 +342,42 @@ describe('WorkDetailPage', () => {
     ]);
   });
 
-  it('offers beside the cover to download each format when each is one file', async () => {
+  it('offers in the More actions menu to download each format when each is one file', async () => {
     const page = await openWork({ ...dune, items: [epub, audiobook] });
 
     expect(actions(page)).toEqual([
       ['Read', `/works/${duneId}/read/${epub.id}`],
-      ['Download EPUB', '/api/parts/0198a1b2-0000-7000-8000-0000000000f5/file'],
-      ['Download m4b', '/api/parts/0198a1b2-0000-7000-8000-0000000000f7/file'],
+      ['', null],
     ]);
-    for (const link of page.querySelectorAll('[aria-label="Actions"] a[href^="/api/"]')) {
-      expect(link.hasAttribute('download')).toBe(true);
+    expect((await openMenu(page)).map(text)).toEqual(['Download EPUB', 'Download m4b']);
+    // A download is a click on a link made for it, which is kept from leaving the test page.
+    const downloaded: [string | null, boolean][] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloaded.push([this.getAttribute('href'), this.hasAttribute('download')]);
+    });
+    try {
+      menuItemLabelled('Download m4b').click();
+    } finally {
+      click.mockRestore();
     }
+
+    expect(downloaded).toEqual([['/api/parts/0198a1b2-0000-7000-8000-0000000000f7/file', true]]);
   });
 
   it.each([
     ['an item has several parts', [dune.items[0]]],
     ['two items share a format', [epub, { ...audiobook, format: 'epub' as ItemFormat }]],
-  ])('goes to the Files section from the Download beside the cover when %s', async (_, items) => {
+  ])('goes to the Files section from the Download in the menu when %s', async (_, items) => {
     // jsdom has no scrollIntoView.
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     try {
       const page = await openWork({ ...dune, items });
-      const download = Array.from(
-        page.querySelectorAll<HTMLButtonElement>('[aria-label="Actions"] button'),
-      ).find((button) => text(button) === 'Download');
+      await openMenu(page);
 
-      download!.click();
+      menuItemLabelled('Download').click();
 
       expect(scrollIntoView.mock.contexts).toEqual([filesSection(page)]);
     } finally {
@@ -365,7 +385,7 @@ describe('WorkDetailPage', () => {
     }
   });
 
-  it('lists the files among the details when the buttons beside the cover reach each one', async () => {
+  it('lists the files among the details when the menu reaches each one', async () => {
     const page = await openWork({ ...dune, items: [epub, audiobook] });
 
     expect(filesSection(page)).toBeNull();
@@ -609,25 +629,40 @@ describe('WorkDetailPage', () => {
     ).map((action) => text(action) || (action.getAttribute('aria-label') ?? ''));
   }
 
-  it('offers Edit and Delete for a work that can be edited', async () => {
-    const page = await openWork({ ...dune, canEdit: true });
+  it('offers Edit and Delete in the menu, after the downloads, for a work that can be edited', async () => {
+    const page = await openWork({ ...dune, items: [epub], canEdit: true });
 
-    const edit = Array.from(page.querySelectorAll('a')).find((link) => text(link) === 'Edit');
-    expect(edit?.getAttribute('href')).toBe(`/works/${dune.id}/edit`);
-    page.querySelector<HTMLElement>('button[aria-label="More actions"]')!.click();
-    await vi.waitFor(() => menuItemLabelled('Delete'));
+    expect(actionLabels(page)).toEqual(['Read', 'More actions']);
+    const items = await openMenu(page);
+    expect(items.map(text)).toEqual(['Download EPUB', 'Edit', 'Delete']);
+  });
+
+  it('opens the edit page from Edit in the menu', async () => {
+    const page = await openWork({ ...dune, items: [epub], canEdit: true });
+    await openMenu(page);
+
+    menuItemLabelled('Edit').click();
+
+    await vi.waitFor(() => expect(router.url).toBe(`/works/${dune.id}/edit`));
   });
 
   it('offers neither for a work that cannot be edited', async () => {
-    const page = await openWork({ ...dune, canEdit: false });
+    const page = await openWork({ ...dune, items: [epub], canEdit: false });
 
-    expect(actionLabels(page)).not.toContain('Edit');
-    expect(actionLabels(page)).not.toContain('More actions');
+    const items = await openMenu(page);
+    expect(items.map(text)).toEqual(['Download EPUB']);
+  });
+
+  it('shows no menu for a work that can be neither downloaded nor edited', async () => {
+    const page = await openWork({ ...dune, access: 'read', canEdit: false });
+
+    expect(actionLabels(page)).toEqual(['Read']);
   });
 
   it('offers Edit for a work that can be edited and not read', async () => {
     const page = await openWork({ ...bare, access: 'browse', canEdit: true });
 
-    expect(actionLabels(page)).toEqual(['Edit', 'More actions']);
+    expect(actionLabels(page)).toEqual(['More actions']);
+    expect((await openMenu(page)).map(text)).toEqual(['Edit', 'Delete']);
   });
 });
