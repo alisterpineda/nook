@@ -53,12 +53,18 @@ describe('SetupPage', () => {
 
   afterEach(() => httpTesting.verify());
 
-  async function submit(email: string, password: string, name?: string): Promise<void> {
+  async function submit(
+    email: string,
+    password: string,
+    name?: string,
+    confirmation: string = password,
+  ): Promise<void> {
     if (name !== undefined) {
       typeInto(fieldLabelled(page, 'Your name'), name);
     }
     typeInto(fieldLabelled(page, 'Email'), email);
     typeInto(fieldLabelled(page, 'Password'), password);
+    typeInto(fieldLabelled(page, 'Confirm password'), confirmation);
     const button = Array.from(page.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.trim() === 'Create admin',
     );
@@ -99,6 +105,32 @@ describe('SetupPage', () => {
 
       await vi.waitFor(() => expect(router.url).toBe('/library'));
       expect(TestBed.inject(Session).user()).toEqual(ada);
+    });
+
+    it('sends nothing when the two passwords differ', async () => {
+      await submit('ada@example.com', 'correct horse battery', undefined, 'correct horse batery');
+
+      await vi.waitFor(() =>
+        expect(fieldLabelled(page, 'Confirm password').parentElement?.textContent).toContain(
+          'The two passwords do not match.',
+        ),
+      );
+      httpTesting.expectNone('/api/setup');
+      expect(router.url).toBe('/');
+    });
+
+    it('creates the admin when the two passwords match', async () => {
+      await submit('ada@example.com', 'correct horse battery');
+
+      const request = await vi.waitFor(() => httpTesting.expectOne('/api/setup'));
+      expect(request.request.body).toEqual({
+        email: 'ada@example.com',
+        password: 'correct horse battery',
+      });
+      expect(page.textContent).not.toContain('The two passwords do not match.');
+      request.flush(ada);
+
+      await vi.waitFor(() => expect(router.url).toBe('/library'));
     });
 
     it('sends the name with the email and password', async () => {

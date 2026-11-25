@@ -7,7 +7,7 @@ import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmInputImports } from '@spartan-ng/helm/input';
 import { HlmLabelImports } from '@spartan-ng/helm/label';
 import { components } from '../../api/schema';
-import { somethingWentWrong } from '../../core/messages';
+import { passwordsDoNotMatch, somethingWentWrong } from '../../core/messages';
 import { Session } from '../../core/session';
 import { SsoButton } from '../sign-in/sso-button';
 
@@ -70,6 +70,20 @@ type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'
               <p class="text-destructive text-sm" role="alert">{{ message }}</p>
             }
           </div>
+          <div class="grid gap-2">
+            <label hlmLabel for="setup-confirm-password">Confirm password</label>
+            <input
+              hlmInput
+              id="setup-confirm-password"
+              type="password"
+              autocomplete="new-password"
+              formControlName="confirmPassword"
+              [forceInvalid]="confirmErrors().length > 0"
+            />
+            @for (message of confirmErrors(); track $index) {
+              <p class="text-destructive text-sm" role="alert">{{ message }}</p>
+            }
+          </div>
           @for (message of otherErrors(); track $index) {
             <p class="text-destructive text-sm" role="alert">{{ message }}</p>
           }
@@ -88,10 +102,12 @@ export class SetupPage {
     displayName: '',
     email: '',
     password: '',
+    confirmPassword: '',
   });
   protected readonly submitting = signal(false);
   protected readonly emailErrors = signal<string[]>([]);
   protected readonly passwordErrors = signal<string[]>([]);
+  protected readonly confirmErrors = signal<string[]>([]);
   /** Messages that belong to no one field: a validation error keyed by something else, or any other failure. */
   protected readonly otherErrors = signal<string[]>([]);
 
@@ -99,10 +115,13 @@ export class SetupPage {
     if (this.submitting()) {
       return;
     }
-    this.submitting.set(true);
     this.showErrors({});
-
-    const { displayName, email, password } = this.form.getRawValue();
+    const { displayName, email, password, confirmPassword } = this.form.getRawValue();
+    if (password !== confirmPassword) {
+      this.confirmErrors.set([passwordsDoNotMatch]);
+      return;
+    }
+    this.submitting.set(true);
     let destination: string;
     try {
       await this.session.createFirstAdmin(email, password, displayName);
@@ -137,6 +156,7 @@ export class SetupPage {
     const { Email = [], Password = [], ...rest } = errors;
     this.emailErrors.set(Email);
     this.passwordErrors.set(Password);
+    this.confirmErrors.set([]);
     this.otherErrors.set(Object.values(rest).flat());
   }
 }

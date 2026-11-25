@@ -17,6 +17,7 @@ import { UploadActivity } from '../features/activity/upload-activity';
 import { AddBooks } from '../features/upload/add-books';
 import { UploadQueue } from '../features/upload/upload-queue';
 import { FakeActivityHub, provideFakeActivityHub } from '../testing/fake-activity-hub';
+import { menuItems } from '../testing/menu-item-labelled';
 import { signInAs } from '../testing/sign-in-as';
 import { typeInto } from '../testing/type-into';
 import { flushVersion } from '../testing/flush-version';
@@ -45,6 +46,9 @@ class AuditLogStub {}
 
 @Component({ template: '<h1>Users</h1>' })
 class UsersStub {}
+
+@Component({ template: '<h1>Account</h1>' })
+class AccountStub {}
 
 @Component({ template: '<h1>Authors</h1>' })
 class AuthorsStub {}
@@ -115,6 +119,7 @@ describe('Shell', () => {
               { path: 'admin/jobs', component: JobsStub },
               { path: 'admin/audit-log', component: AuditLogStub },
               { path: 'admin/users', component: UsersStub },
+              { path: 'account', component: AccountStub },
               { path: 'authors', component: AuthorsStub },
               { path: 'people/:id', component: PersonStub },
             ],
@@ -522,6 +527,38 @@ describe('Shell', () => {
     expect(shell.querySelector('[data-slot="sidebar-footer"]')?.textContent).toContain(
       'ada@example.com',
     );
+  });
+
+  it('opens the Account page from the user menu', async () => {
+    const shell = await openShell('/library');
+
+    await chooseFromTheFooterMenu(shell, 'Account');
+
+    await vi.waitFor(() => expect(router.url).toBe('/account'));
+  });
+
+  it('keeps Theme and Sign out in the user menu', async () => {
+    const shell = await openShell('/library');
+
+    shell
+      .querySelector<HTMLElement>('[data-slot="sidebar-footer"] button:has([data-user-email])')!
+      .click();
+    await harness.fixture.whenStable();
+
+    await vi.waitFor(() =>
+      expect(menuItems().map((item) => item.textContent?.trim())).toEqual([
+        'Account',
+        'Theme',
+        'Sign out',
+      ]),
+    );
+  });
+
+  it('names the Account page in the breadcrumb', async () => {
+    const shell = await openShell('/account');
+
+    expect(trail(shell)).toEqual([['Account', null]]);
+    expect(document.title).toBe('Account · Nook');
   });
 
   it('the footer menu opens a dialog that chooses the theme, and stays open', async () => {

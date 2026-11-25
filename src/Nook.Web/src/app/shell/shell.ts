@@ -23,6 +23,7 @@ import {
   lucideSearch,
   lucideSunMoon,
   lucideUpload,
+  lucideUser,
   lucideUserCog,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -100,6 +101,7 @@ interface Crumb {
       lucideSearch,
       lucideSunMoon,
       lucideUpload,
+      lucideUser,
       lucideUserCog,
       lucideUsers,
     }),
@@ -355,6 +357,10 @@ interface Crumb {
           {{ session.user()?.email }}
         </div>
         <div hlmDropdownMenuSeparator></div>
+        <a hlmDropdownMenuItem routerLink="/account">
+          <ng-icon name="lucideUser" />
+          Account
+        </a>
         <button hlmDropdownMenuItem type="button" (triggered)="openTheme()">
           <ng-icon name="lucideSunMoon" />
           Theme
@@ -481,6 +487,9 @@ export class Shell {
     }
     if (path === '/authors') {
       return [{ label: 'Authors' }];
+    }
+    if (path === '/account') {
+      return [{ label: 'Account' }];
     }
     const adminPage = adminPages.find((page) => page.path === path);
     if (adminPage) {

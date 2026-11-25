@@ -317,4 +317,32 @@ describe('route guards', () => {
 
     expect(router.url).toBe('/library');
   });
+
+  it('signedInGuard lets a signed-in user through', async () => {
+    const navigating = harness.navigateByUrl('/account');
+    await answerSignedIn(gus);
+    await answerSections();
+    await answerSignInOptions();
+    (await nextRequest('/api/account')).flush({
+      email: gus.email,
+      name: gus.displayName,
+      role: 'Viewer',
+      hasPassword: true,
+      hasSingleSignOn: false,
+    });
+    await navigating;
+
+    expect(router.url).toBe('/account');
+  });
+
+  it('signedInGuard sends a visitor to sign-in while public access is on', async () => {
+    const navigating = harness.navigateByUrl('/account');
+    await answerSignedOut(true);
+    await answerSetupRequired(false);
+    await answerSignInOptions();
+    await navigating;
+
+    expect(router.url).toBe('/sign-in');
+    expect(heading()).toBe('Sign in');
+  });
 });

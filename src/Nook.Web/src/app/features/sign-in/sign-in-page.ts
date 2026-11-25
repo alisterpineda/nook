@@ -7,14 +7,12 @@ import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmInputImports } from '@spartan-ng/helm/input';
 import { HlmLabelImports } from '@spartan-ng/helm/label';
 import { components } from '../../api/schema';
-import { somethingWentWrong } from '../../core/messages';
+import { somethingWentWrong, tooManyAttempts } from '../../core/messages';
 import { Session } from '../../core/session';
 import { SsoButton } from './sso-button';
 
 type ProblemDetails = components['schemas']['ProblemDetails'];
 type SignInOptions = components['schemas']['SignInOptionsResponse'];
-
-const tooManyAttempts = 'Too many attempts. Try again in a minute.';
 
 /** What the API's single sign-on means by each `error` it sends back to this page. */
 const singleSignOnFailures: Readonly<Record<string, string>> = {

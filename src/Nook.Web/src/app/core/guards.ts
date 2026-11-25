@@ -1,6 +1,11 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, Router, UrlTree } from '@angular/router';
 import { Session } from './session';
+
+/** Where a visitor who may not enter goes: setup when Nook has no users, or sign-in. */
+async function setupOrSignIn(session: Session, router: Router): Promise<UrlTree> {
+  return router.parseUrl((await session.setupRequired()) ? '/setup' : '/sign-in');
+}
 
 /**
  * Lets a signed-in user through, and a visitor nobody has signed in as when public access is on. Any other visitor
@@ -14,7 +19,7 @@ export const libraryGuard: CanActivateFn = async () => {
   if (session.user() || session.publicAccess()) {
     return true;
   }
-  return router.parseUrl((await session.setupRequired()) ? '/setup' : '/sign-in');
+  return setupOrSignIn(session, router);
 };
 
 /** Lets a signed-out visitor through, and sends a signed-in user to the works list. */
@@ -51,4 +56,19 @@ export const adminGuard: CanActivateFn = async () => {
 
   await session.ensureLoaded();
   return session.isAdmin() ? true : router.parseUrl('/library');
+};
+
+/**
+ * Lets a signed-in user through, and sends anyone else to setup when Nook has no users, or to sign-in. Unlike
+ * `libraryGuard` it turns a visitor away while public access is on, for pages that are about the signed-in user.
+ */
+export const signedInGuard: CanActivateFn = async () => {
+  const session = inject(Session);
+  const router = inject(Router);
+
+  await session.ensureLoaded();
+  if (session.user()) {
+    return true;
+  }
+  return setupOrSignIn(session, router);
 };

@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { tabTitle } from './core/app-name';
-import { adminGuard, libraryGuard, setupGuard, signedOutGuard } from './core/guards';
+import { adminGuard, libraryGuard, setupGuard, signedInGuard, signedOutGuard } from './core/guards';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'library' },
@@ -52,6 +52,11 @@ export const routes: Routes = [
       {
         path: 'people/:id',
         loadComponent: () => import('./features/people/person-page').then((m) => m.PersonPage),
+      },
+      {
+        path: 'account',
+        canActivate: [signedInGuard],
+        loadComponent: () => import('./features/account/account-page').then((m) => m.AccountPage),
       },
       {
         // One guard keeps every page under it to admins.

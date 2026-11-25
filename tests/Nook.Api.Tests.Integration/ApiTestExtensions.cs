@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nook.Api.Data;
+using Nook.Api.Features.Auth;
 
 namespace Nook.Api.Tests.Integration;
 
@@ -71,6 +72,33 @@ internal static class ApiTestExtensions
         (await client.LoginAsync(user.Email!, Password)).EnsureSuccessStatusCode();
         return (user, client);
     }
+
+    /// <summary>
+    /// A new user who joined through single sign-on and has no password, with a client that holds their session cookie.
+    /// The cookie keeps working because sessions are checked only every few minutes, so this is not for a factory from
+    /// <see cref="WithSessionsCheckedOnEveryRequest"/>.
+    /// </summary>
+    public static async Task<(NookUser User, HttpClient Client)> CreateSignedInUserWithoutPasswordAsync(
+        this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor, string? displayName = null)
+    {
+        var (user, client) = await factory.CreateSignedInUserAsync(role, displayName);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
+        var stored = await users.FindByIdAsync(user.Id.ToString());
+        Assert.NotNull(stored);
+        var added = await users.AddLoginAsync(stored, new UserLoginInfo(OidcSignIn.Scheme, Guid.NewGuid().ToString("N"), OidcSignIn.Scheme));
+        Assert.True(added.Succeeded, string.Join("; ", added.Errors.Select(e => e.Description)));
+        var removed = await users.RemovePasswordAsync(stored);
+        Assert.True(removed.Succeeded, string.Join("; ", removed.Errors.Select(e => e.Description)));
+
+        return (user, client);
+    }
+
+    /// <summary>The API with every request's session checked against the user's row, so a change to the user reaches their cookie at once.</summary>
+    public static WebApplicationFactory<Program> WithSessionsCheckedOnEveryRequest(this WebApplicationFactory<Program> factory) =>
+        factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero)));
 
     public static Task<HttpResponseMessage> LoginAsync(this HttpClient client, string email, string password) =>
         client.PostAsJsonAsync("/api/auth/login", new { email, password }, TestContext.Current.CancellationToken);

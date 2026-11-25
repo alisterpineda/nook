@@ -8,6 +8,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { components } from './api/schema';
 import { routes } from './app.routes';
 import { provideFakeActivityHub } from './testing/fake-activity-hub';
+import { AccountPage } from './features/account/account-page';
 import { AuditLogPage } from './features/audit-log/audit-log-page';
 import { JobsPage } from './features/jobs/jobs-page';
 import { AuthorsListPage } from './features/people/authors-list-page';
@@ -107,6 +108,13 @@ describe('routes', () => {
       '/api/jobs': { items: [], total: 0, offset: 0, limit: 50 },
       '/api/audit-log': { items: [], total: 0, offset: 0, limit: 50 },
       '/api/audit-log/filters': { actors: [], actions: [] },
+      '/api/account': {
+        email: 'ada@example.com',
+        name: 'Admin User',
+        role: 'Viewer',
+        hasPassword: true,
+        hasSingleSignOn: false,
+      },
       '/api/users': { items: [], total: 0, offset: 0, limit: 50 },
       ...(visitor.signedIn ? { '/api/auth/me': { ...ada, role: visitor.role ?? ada.role } } : {}),
     };
@@ -370,5 +378,23 @@ describe('routes', () => {
         WorksListPage,
       ),
     ).toEqual({ landedOn: '/library', shown: true });
+  });
+
+  it('sends a visitor who opens /account to sign-in while public access is on', async () => {
+    expect(
+      await open(
+        '/account',
+        { signedIn: false, setupRequired: false, publicAccess: true },
+        SignInPage,
+        [],
+        AccountPage,
+      ),
+    ).toEqual({ landedOn: '/sign-in', shown: false });
+  });
+
+  it('shows /account to a signed-in viewer', async () => {
+    expect(
+      await open('/account', { signedIn: true, setupRequired: false, role: 'viewer' }, AccountPage),
+    ).toEqual({ landedOn: '/account', shown: true });
   });
 });

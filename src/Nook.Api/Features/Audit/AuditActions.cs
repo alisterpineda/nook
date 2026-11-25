@@ -14,6 +14,7 @@ public static class AuditActions
     public const string WorkEdited = "work.edited";
     public const string WorkDeleted = "work.deleted";
     public const string PublicAccessChanged = "public-access.changed";
+    public const string UserPasswordChanged = "user.password-changed";
 }
 
 /// <summary>Reads of the audit log that more than one feature makes.</summary>
@@ -36,4 +37,5 @@ public static class AuditSubjectTypes
     public const string Job = "job";
     public const string Work = "work";
     public const string PublicAccess = "public-access";
+    public const string User = "user";
 }

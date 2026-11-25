@@ -9,6 +9,7 @@ const labels: Record<string, string> = {
   'public-access.changed': 'Changed public access',
   'work.edited': 'Edited a book',
   'work.deleted': 'Deleted a book',
+  'user.password-changed': 'Changed their password',
 };
 
 /** The words for an audit action, or its own name when nothing words it. */
