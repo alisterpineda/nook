@@ -174,6 +174,10 @@ internal static class ApiTestExtensions
     public static string SessionCookiePair(this HttpResponseMessage response) =>
         response.CookiePairs().Single(IsSessionCookie);
 
+    /// <summary>The whole <c>Set-Cookie</c> value of the session cookie a response sets, with its attributes.</summary>
+    public static string SessionSetCookie(this HttpResponseMessage response) =>
+        response.SetCookies().Single(IsSessionCookie);
+
     private static bool IsSessionCookie(string pair) =>
         pair.StartsWith($"{SessionCookie}=", StringComparison.Ordinal);
 

@@ -88,6 +88,7 @@ builder.Services.AddOptions<UploadOptions>()
     .ValidateOnStart();
 
 builder.Services.AddNookAuth(builder.Configuration);
+builder.Services.AddTrustedProxies();
 if (!buildingOpenApiDocument)
 {
     // Before AddNookJobs, whose no-op default yields to it.
@@ -153,6 +154,10 @@ if (!buildingOpenApiDocument)
     // A work with no search vector, such as one from before search was built, gets one before Nook answers requests.
     await new WorkSearchIndex(db).RebuildMissingAsync(CancellationToken.None);
 }
+
+// First, so everything after sees the client's own scheme and address from a proxy Nook trusts: the sign-in cookie,
+// the rate limits and the links Nook builds all read them.
+app.UseTrustedProxies();
 
 // Every response carries the web app's policy, an error and the built web app included, unless it sets its own.
 app.UseWebAppContentSecurityPolicy();

@@ -21,6 +21,9 @@ Nook refuses to start when `Authority` is set and `ClientId` or `ClientSecret` i
 Single sign-on needs https: the browser must reach Nook over https, because the cookies that carry a sign-in to
 the provider and back are marked `Secure`.
 
+To run Nook behind a reverse proxy, see [Behind a reverse proxy](reverse-proxy.md), which says how Nook learns
+that a request came over https.
+
 At the provider, register Nook as a confidential client that uses the authorization code flow, with this
 callback (redirect) URL:
 

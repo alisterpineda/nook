@@ -29,8 +29,8 @@ it, and it refuses to start when the file is not valid JSON.
 When one of those settings is in both places, the environment variable wins. The data root, `Nook:DataPath`,
 cannot be set in the file, because it says where the file is.
 
-The file is only for the settings in the tables. Anything else, such as `ASPNETCORE_FORWARDEDHEADERS_ENABLED`
-from [Behind a reverse proxy](reverse-proxy.md), stays an environment variable.
+The file is only for the settings in the tables. Anything else, such as `ASPNETCORE_URLS`, stays an
+environment variable.
 
-The tables are in [Storage](storage.md), [Single sign-on](single-sign-on.md) and
-[Public access](public-access.md).
+The tables are in [Storage](storage.md), [Single sign-on](single-sign-on.md),
+[Public access](public-access.md) and [Behind a reverse proxy](reverse-proxy.md).
