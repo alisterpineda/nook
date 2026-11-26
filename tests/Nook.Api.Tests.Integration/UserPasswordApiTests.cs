@@ -59,6 +59,44 @@ public class UserPasswordApiTests(NookApiFactory factory) : IClassFixture<NookAp
     }
 
     [Fact]
+    public async Task Setting_a_password_makes_that_users_browsers_unknown()
+    {
+        await using var app = factory.WithSessionsCheckedOnEveryRequest();
+        var admin = await app.CreateUserAsync(BuiltInRole.Admin);
+        var user = await app.CreateUserAsync();
+        using var adminClient = app.CreateClient();
+        using var userClient = app.CreateClient();
+        (await adminClient.LoginAsync(admin.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await userClient.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await PutAsync(adminClient, user.Id, NewPassword)).EnsureSuccessStatusCode();
+        await app.LockAccountAsync(user.Email!);
+
+        var response = await userClient.LoginAsync(user.Email!, NewPassword);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Browser_forgotten_by_a_set_password_signs_in_with_the_new_one()
+    {
+        await using var app = factory.WithSessionsCheckedOnEveryRequest();
+        var admin = await app.CreateUserAsync(BuiltInRole.Admin);
+        var user = await app.CreateUserAsync();
+        using var adminClient = app.CreateClient();
+        using var userClient = app.CreateClient();
+        (await adminClient.LoginAsync(admin.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await userClient.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await PutAsync(adminClient, user.Id, NewPassword)).EnsureSuccessStatusCode();
+
+        var response = await userClient.LoginAsync(user.Email!, NewPassword);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var me = await userClient.GetAsync("/api/auth/me", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        Assert.Contains(user.Email!, await me.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Password_the_rules_refuse_is_not_set()
     {
         using var admin = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);

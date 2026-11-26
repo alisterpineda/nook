@@ -93,7 +93,10 @@ public class AccountController(
         }
 
         // The password change rotated the security stamp, which ends the other sessions; this one gets a new cookie.
+        // The new stamp also forgets every browser that was known for this account. This one is marked as known,
+        // whether or not it was before, with Identity's "two-factor remembered" cookie, which Nook uses as that mark.
         await signIn.RefreshSignInAsync(user);
+        await signIn.RememberTwoFactorClientAsync(user);
         return NoContent();
     }
 }

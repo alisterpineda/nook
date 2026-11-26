@@ -91,3 +91,22 @@ public class SetupNameTests(NookApiFactory factory) : IClassFixture<NookApiFacto
         Assert.Equal("Nora Admin", (await db.Users.SingleAsync(cancellationToken)).DisplayName);
     }
 }
+
+public class SetupKnownBrowserTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
+{
+    [Fact]
+    public async Task Browser_that_ran_setup_signs_in_while_the_admin_is_locked()
+    {
+        const string email = "admin@example.test";
+        using var client = factory.CreateClient();
+        (await client.PostAsJsonAsync(
+            "/api/setup", new { email, password = ApiTestExtensions.Password }, TestContext.Current.CancellationToken))
+            .EnsureSuccessStatusCode();
+
+        await factory.LockAccountAsync(email);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.LoginAsync(email, ApiTestExtensions.Password)).StatusCode);
+        using var stranger = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await stranger.LoginAsync(email, ApiTestExtensions.Password)).StatusCode);
+    }
+}

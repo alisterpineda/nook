@@ -33,8 +33,22 @@ password on their Account page.
 
 ## Passwords
 
-A password is at least 12 characters, with no other rule. Five wrong passwords in a row lock the account for 5
-minutes. The lock ends by itself, and setting a new password does not end it.
+A password is at least 12 characters, with no other rule. Five wrong passwords lock the account for 5 minutes.
+The count starts again after a lock, and after a sign-in with the right password from a browser Nook does not
+know. The lock ends by itself, and setting a new password does not end it.
+
+The lock does not apply to a browser Nook knows: one that has already signed in to that account with its password,
+ran first-run setup, or changed or added the account's password. So someone guessing at an email cannot keep its
+owner out. A wrong password from a known browser is still refused, and still counts toward the limit of 10 sign-in
+attempts a minute from one address.
+
+A browser is known for one account at a time: the last one that signed in on it with a password, ran setup on it,
+or changed or added its password on it. On a shared browser, only the most recent person skips the lock. Signing in
+through single sign-on does not make a browser known.
+
+A browser stays known for a year from the last time it signed in with a password, ran setup, or changed or added
+the account's password, and it stays known through signing out. Changing or setting the account's password makes
+Nook forget the account's browsers within 5 minutes, except the browser that changed it.
 
 ### Changing your own
 

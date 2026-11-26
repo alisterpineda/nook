@@ -1,10 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Nook.Api.Data;
 using Nook.Api.Features.Auth;
 
@@ -180,6 +182,130 @@ public class AuthTests(NookApiFactory factory) : IClassFixture<NookApiFactory>
         var response = await client.LoginAsync(user.Email!, ApiTestExtensions.Password);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Browser_that_signed_in_before_signs_in_while_the_account_is_locked()
+    {
+        var user = await factory.CreateUserAsync();
+        using var client = factory.CreateClient();
+        (await client.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        await factory.LockAccountAsync(user.Email!);
+
+        var response = await client.LoginAsync(user.Email!, ApiTestExtensions.Password);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Browser_that_never_signed_in_is_refused_while_the_account_is_locked()
+    {
+        var user = await factory.CreateUserAsync();
+        using var other = await factory.CreateSignedInClientAsync();
+        await factory.LockAccountAsync(user.Email!);
+        using var fresh = factory.CreateClient();
+
+        var fromFresh = await fresh.LoginAsync(user.Email!, ApiTestExtensions.Password);
+        var fromOther = await other.LoginAsync(user.Email!, ApiTestExtensions.Password);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, fromFresh.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, fromOther.StatusCode);
+    }
+
+    [Fact]
+    public async Task Browser_is_known_only_for_the_last_account_that_signed_in_on_it()
+    {
+        var first = await factory.CreateUserAsync();
+        var second = await factory.CreateUserAsync();
+        using var client = factory.CreateClient();
+        (await client.LoginAsync(first.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await client.LoginAsync(second.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        await factory.LockAccountAsync(first.Email!);
+
+        var response = await client.LoginAsync(first.Email!, ApiTestExtensions.Password);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Browser_stays_known_after_signing_out()
+    {
+        var user = await factory.CreateUserAsync();
+        using var client = factory.CreateClient();
+        (await client.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await client.PostAsync("/api/auth/logout", null, TestContext.Current.CancellationToken)).EnsureSuccessStatusCode();
+        await factory.LockAccountAsync(user.Email!);
+
+        var response = await client.LoginAsync(user.Email!, ApiTestExtensions.Password);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Wrong_passwords_from_a_known_browser_do_not_lock_the_account()
+    {
+        var user = await factory.CreateUserAsync();
+        using var known = factory.CreateClient();
+        (await known.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var refused = await known.LoginAsync(user.Email!, "not the password");
+            Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+        }
+
+        using var fresh = factory.CreateClient();
+        var response = await fresh.LoginAsync(user.Email!, ApiTestExtensions.Password);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Known_browser_signing_in_does_not_end_the_lock()
+    {
+        var user = await factory.CreateUserAsync();
+        using var known = factory.CreateClient();
+        (await known.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        await factory.LockAccountAsync(user.Email!);
+        (await known.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+
+        using var fresh = factory.CreateClient();
+        var response = await fresh.LoginAsync(user.Email!, ApiTestExtensions.Password);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Password_sign_in_marks_the_browser_as_known_for_a_year()
+    {
+        var user = await factory.CreateUserAsync();
+        using var cookieless = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var first = await LoginWithCookiesAsync(null, user.Email!, ApiTestExtensions.Password);
+        AssertAboutAYearFromNow(first.KnownBrowserSetCookie());
+
+        var second = await LoginWithCookiesAsync(first.KnownBrowserCookiePair(), user.Email!, ApiTestExtensions.Password);
+        AssertAboutAYearFromNow(second.KnownBrowserSetCookie());
+
+        var refused = await LoginWithCookiesAsync(first.KnownBrowserCookiePair(), user.Email!, "not the password");
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+        Assert.False(refused.SetsKnownBrowserCookie());
+
+        var cookie = factory.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(IdentityConstants.TwoFactorRememberMeScheme);
+        Assert.False(cookie.SlidingExpiration);
+
+        static void AssertAboutAYearFromNow(string setCookie)
+        {
+            var expires = setCookie.Split(';', StringSplitOptions.TrimEntries)
+                .Single(part => part.StartsWith("expires=", StringComparison.OrdinalIgnoreCase))["expires=".Length..];
+            var remaining = DateTimeOffset.Parse(expires, System.Globalization.CultureInfo.InvariantCulture) - DateTimeOffset.UtcNow;
+            Assert.InRange(remaining.TotalDays, 364, 366);
+        }
+
+        Task<HttpResponseMessage> LoginWithCookiesAsync(string? cookiePair, string email, string password) =>
+            cookieless.SendWithCookiesAsync(
+                HttpMethod.Post, "/api/auth/login", new { email, password }, cookiePair is null ? [] : [cookiePair]);
     }
 
     [Fact]

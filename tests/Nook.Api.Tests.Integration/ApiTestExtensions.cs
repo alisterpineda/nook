@@ -31,6 +31,9 @@ internal static class ApiTestExtensions
     /// <summary>The name of the session cookie.</summary>
     private const string SessionCookie = "nook";
 
+    /// <summary>The name of the cookie that marks a browser as known.</summary>
+    private const string KnownBrowserCookie = "nook-browser";
+
     /// <summary>Creates a user with <see cref="Password"/>, and a new email unless one is given, and no display name unless one is given.</summary>
     public static Task<NookUser> CreateUserAsync(
         this WebApplicationFactory<Program> factory, BuiltInRole role = BuiltInRole.Contributor, string? email = null, string? displayName = null) =>
@@ -141,8 +144,34 @@ internal static class ApiTestExtensions
         factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
             services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero)));
 
+    /// <summary>Locks a user's account by sending five wrong passwords for their email from a client of its own.</summary>
+    public static async Task LockAccountAsync(this WebApplicationFactory<Program> factory, string email)
+    {
+        using var client = factory.CreateClient();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            await client.LoginAsync(email, "not the password");
+        }
+    }
+
     public static Task<HttpResponseMessage> LoginAsync(this HttpClient client, string email, string password) =>
         client.PostAsJsonAsync("/api/auth/login", new { email, password }, TestContext.Current.CancellationToken);
+
+    /// <summary>
+    /// Sends a JSON request with exactly the given cookies, as their <c>name=value</c> pairs. The client must be one made
+    /// with <c>HandleCookies = false</c>, or it adds its own.
+    /// </summary>
+    public static async Task<HttpResponseMessage> SendWithCookiesAsync(
+        this HttpClient client, HttpMethod method, string url, object body, params string[] cookiePairs)
+    {
+        using var request = new HttpRequestMessage(method, url) { Content = JsonContent.Create(body) };
+        if (cookiePairs.Length > 0)
+        {
+            request.Headers.Add("Cookie", string.Join("; ", cookiePairs));
+        }
+
+        return await client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
 
     public static async Task<T> ReadAsync<T>(this HttpResponseMessage response)
     {
@@ -178,8 +207,24 @@ internal static class ApiTestExtensions
     public static string SessionSetCookie(this HttpResponseMessage response) =>
         response.SetCookies().Single(IsSessionCookie);
 
+    /// <summary>Whether a response sets the cookie that marks a browser as known.</summary>
+    public static bool SetsKnownBrowserCookie(this HttpResponseMessage response) =>
+        response.CookiePairs().Any(IsKnownBrowserCookie);
+
+    /// <summary>The known-browser cookie a response sets, as its <c>name=value</c> pair.</summary>
+    public static string KnownBrowserCookiePair(this HttpResponseMessage response) =>
+        response.CookiePairs().Single(IsKnownBrowserCookie);
+
+    /// <summary>The whole <c>Set-Cookie</c> value of the known-browser cookie a response sets, with its attributes.</summary>
+    public static string KnownBrowserSetCookie(this HttpResponseMessage response) =>
+        response.SetCookies().Single(IsKnownBrowserCookie);
+
+    // "nook" is a prefix of "nook-browser", so each check matches its cookie's name up to the equals sign.
     private static bool IsSessionCookie(string pair) =>
         pair.StartsWith($"{SessionCookie}=", StringComparison.Ordinal);
+
+    private static bool IsKnownBrowserCookie(string pair) =>
+        pair.StartsWith($"{KnownBrowserCookie}=", StringComparison.Ordinal);
 
     /// <summary>An exception with every exception inside it, for finding the message of a failed start.</summary>
     public static IEnumerable<Exception> Flatten(this Exception exception)

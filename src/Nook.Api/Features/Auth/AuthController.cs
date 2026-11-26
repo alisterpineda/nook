@@ -75,17 +75,34 @@ public class AuthController(
         {
             // Hashing anyway makes an unknown email take as long as a wrong password, so timing does not tell them apart.
             users.PasswordHasher.HashPassword(new NookUser(), request.Password);
+            return Refused();
         }
+
+        // Identity calls this cookie the "two-factor remembered" client; Nook has no two-factor sign-in and uses it as
+        // the mark of a browser that has signed in with a password. A known browser skips the account lock, so a
+        // stranger guessing at an email cannot keep its owner out. Its wrong passwords are not counted toward the lock,
+        // and its right one does not reset the failed count or end the lock: that would give a guessing stranger five
+        // more tries each time the user signed in.
+        var known = await signIn.IsTwoFactorClientRememberedAsync(user);
+        var right = known
+            ? await users.CheckPasswordAsync(user, request.Password)
+            : (await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true)).Succeeded;
 
         // A wrong password, an unknown email and a locked account all get the same answer.
-        if (user is null
-            || !(await signIn.PasswordSignInAsync(user, request.Password, isPersistent: true, lockoutOnFailure: true)).Succeeded)
+        if (!right)
         {
-            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "The email or password is incorrect.");
+            return Refused();
         }
 
+        await signIn.SignInAsync(user, isPersistent: true);
+
+        // Written on every successful password sign-in, which renews it and makes this browser known for this user only.
+        await signIn.RememberTwoFactorClientAsync(user);
         return await CurrentAsync(user);
     }
+
+    private ObjectResult Refused() =>
+        Problem(statusCode: StatusCodes.Status401Unauthorized, title: "The email or password is incorrect.");
 
     /// <summary>Signs out and clears the session cookie.</summary>
     [HttpPost("logout")]

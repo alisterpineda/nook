@@ -131,6 +131,54 @@ public class AccountApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     }
 
     [Fact]
+    public async Task Changing_a_password_keeps_this_browser_known_and_forgets_the_others()
+    {
+        // Checked on every request, or the other browser's old cookie would still pass for a few minutes.
+        await using var app = factory.WithSessionsCheckedOnEveryRequest();
+        var user = await app.CreateUserAsync();
+        using var changing = app.CreateClient();
+        using var other = app.CreateClient();
+        (await changing.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+        (await other.LoginAsync(user.Email!, ApiTestExtensions.Password)).EnsureSuccessStatusCode();
+
+        (await PutPasswordAsync(changing, ApiTestExtensions.Password, NewPassword)).EnsureSuccessStatusCode();
+        await app.LockAccountAsync(user.Email!);
+
+        Assert.Equal(HttpStatusCode.OK, (await changing.LoginAsync(user.Email!, NewPassword)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await other.LoginAsync(user.Email!, NewPassword)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Changing_a_password_makes_a_browser_known_that_was_not()
+    {
+        var user = await factory.CreateUserAsync();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var sessionCookie = (await client.LoginAsync(user.Email!, ApiTestExtensions.Password)).SessionCookiePair();
+
+        // Only the session cookie is sent, as a browser would that Nook does not know.
+        var response = await client.SendWithCookiesAsync(
+            HttpMethod.Put,
+            "/api/account/password",
+            new { currentPassword = ApiTestExtensions.Password, newPassword = NewPassword },
+            sessionCookie);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.True(response.SetsKnownBrowserCookie());
+    }
+
+    [Fact]
+    public async Task Adding_a_password_makes_this_browser_known()
+    {
+        var (_, client) = await factory.CreateSignedInUserWithoutPasswordAsync();
+        using var __ = client;
+
+        var response = await client.PutAsJsonAsync("/api/account/password", new { newPassword = NewPassword }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.StartsWith("nook-browser=", response.KnownBrowserSetCookie());
+    }
+
+    [Fact]
     public async Task Password_cannot_be_changed_while_password_sign_in_is_off()
     {
         var user = await factory.CreateUserAsync();

@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -153,6 +154,19 @@ public static class AuthServiceExtensions
             };
         });
 
+        // Identity's "two-factor remembered" cookie, which Nook uses as the mark of a browser that has signed in with a
+        // password. It outlives the 30-day session so that a user locked out by a stranger's guesses can still sign in
+        // from a browser they have used within the year. Sliding is off: a sign-in with a wrong password must not renew
+        // the cookie it carries, so only a successful sign-in or password change writes it again. Only properties are
+        // set, since the options' events hold the security stamp validator.
+        services.Configure<CookieAuthenticationOptions>(IdentityConstants.TwoFactorRememberMeScheme, options =>
+        {
+            options.Cookie.Name = KnownBrowserCookieName;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.ExpireTimeSpan = KnownBrowserLifetime;
+            options.SlidingExpiration = false;
+        });
+
         // The cookie carries the user's role. Rebuilding it this often bounds how long a changed role
         // or a removed user stays signed in with the old one.
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.FromMinutes(5));
@@ -188,6 +202,10 @@ public static class AuthServiceExtensions
 
         return services;
     }
+
+    private const string KnownBrowserCookieName = "nook-browser";
+
+    private static readonly TimeSpan KnownBrowserLifetime = TimeSpan.FromDays(365);
 
     private static string ClientAddress(HttpContext context) =>
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown";

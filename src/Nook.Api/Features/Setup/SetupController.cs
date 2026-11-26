@@ -84,6 +84,10 @@ public class SetupController(NookDbContext db, UserManager<NookUser> users, Sign
         }
 
         await signIn.SignInAsync(user, isPersistent: true);
+
+        // Identity's "two-factor remembered" cookie, which Nook uses as the mark of a known browser: the browser that
+        // chose the password is known from the start, so the account lock does not keep it out.
+        await signIn.RememberTwoFactorClientAsync(user);
         return await CurrentUserResponse.FromAsync(db, user, cancellationToken);
     }
 }
