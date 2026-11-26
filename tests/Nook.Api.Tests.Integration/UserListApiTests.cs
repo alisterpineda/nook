@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Nook.Api.Data;
 using Nook.Api.Features;
+using Nook.Api.Features.Auth;
 using Nook.Api.Features.Users;
 
 namespace Nook.Api.Tests.Integration;
@@ -174,6 +175,47 @@ public class UserListApiTests(NookApiFactory factory) : IClassFixture<NookApiFac
 
         Assert.True(page.Items.Single(u => u.Id == named.Id).HasAuditEntries);
         Assert.False(page.Items.Single(u => u.Id == unnamed.Id).HasAuditEntries);
+    }
+
+    [Fact]
+    public async Task List_says_whose_role_single_sign_on_sets()
+    {
+        var withLogin = await factory.CreateUserAsync();
+        var passwordOnly = await factory.CreateUserAsync();
+        await factory.AddSingleSignOnLoginAsync(withLogin.Id);
+
+        await using var setting = factory.WithSingleSignOn().WithWebHostBuilder(b => b.UseSetting("Nook:Oidc:AdminGroup", "nook-admins"));
+        using var settingClient = await setting.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var whenSet = await settingClient.GetAsync<Page<UserSummaryResponse>>("/api/users?limit=200");
+
+        await using var notSetting = factory.WithSingleSignOn();
+        using var notSettingClient = await notSetting.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var whenNoGroups = await notSettingClient.GetAsync<Page<UserSummaryResponse>>("/api/users?limit=200");
+
+        using var plain = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var whenOff = await plain.GetAsync<Page<UserSummaryResponse>>("/api/users?limit=200");
+
+        Assert.True(whenSet.Items.Single(u => u.Id == withLogin.Id).RoleFromSingleSignOn);
+        Assert.False(whenSet.Items.Single(u => u.Id == passwordOnly.Id).RoleFromSingleSignOn);
+        Assert.False(whenNoGroups.Items.Single(u => u.Id == withLogin.Id).RoleFromSingleSignOn);
+        Assert.False(whenOff.Items.Single(u => u.Id == withLogin.Id).RoleFromSingleSignOn);
+    }
+
+    [Fact]
+    public async Task List_gives_the_built_in_role_or_none()
+    {
+        using var client = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var librarian = new Role { Name = "Librarian", ContentAccess = ContentAccess.Browse };
+        await factory.AddRowsAsync(librarian);
+        var contributor = await factory.CreateUserAsync(BuiltInRole.Contributor);
+        var librarianUser = await factory.CreateUserAsync(librarian.Id);
+
+        var page = await client.GetAsync<Page<UserSummaryResponse>>("/api/users?limit=200");
+
+        Assert.Equal(BuiltInRole.Contributor, page.Items.Single(u => u.Id == contributor.Id).BuiltInRole);
+        var other = page.Items.Single(u => u.Id == librarianUser.Id);
+        Assert.Null(other.BuiltInRole);
+        Assert.Equal("Librarian", other.Role);
     }
 
     private static (bool HasPassword, bool HasSingleSignOn) SignIn(Page<UserSummaryResponse> page, Guid id)

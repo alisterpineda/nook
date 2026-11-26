@@ -90,16 +90,50 @@ internal static class ApiTestExtensions
     {
         var (user, client) = await factory.CreateSignedInUserAsync(role, displayName);
 
+        await factory.AddSingleSignOnLoginAsync(user.Id);
+
         await using var scope = factory.Services.CreateAsyncScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
         var stored = await users.FindByIdAsync(user.Id.ToString());
         Assert.NotNull(stored);
-        var added = await users.AddLoginAsync(stored, new UserLoginInfo(OidcSignIn.Scheme, Guid.NewGuid().ToString("N"), OidcSignIn.Scheme));
-        Assert.True(added.Succeeded, string.Join("; ", added.Errors.Select(e => e.Description)));
         var removed = await users.RemovePasswordAsync(stored);
         Assert.True(removed.Succeeded, string.Join("; ", removed.Errors.Select(e => e.Description)));
 
         return (user, client);
+    }
+
+    /// <summary>Gives a user a login made through single sign-on, as signing in at the provider would.</summary>
+    public static async Task AddSingleSignOnLoginAsync(this WebApplicationFactory<Program> factory, Guid userId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<NookUser>>();
+        var stored = await users.FindByIdAsync(userId.ToString());
+        Assert.NotNull(stored);
+        var added = await users.AddLoginAsync(stored, new UserLoginInfo(OidcSignIn.Scheme, Guid.NewGuid().ToString("N"), OidcSignIn.Scheme));
+        Assert.True(added.Succeeded, string.Join("; ", added.Errors.Select(e => e.Description)));
+    }
+
+    /// <summary>
+    /// Eight new signed-in admins each send a request about the next one, and the last about the first, all at once.
+    /// Gives the answers in the admins' order.
+    /// </summary>
+    public static async Task<HttpResponseMessage[]> AdminsActOnEachOtherAtOnceAsync(
+        this WebApplicationFactory<Program> factory, Func<HttpClient, Guid, Task<HttpResponseMessage>> request)
+    {
+        var admins = new List<(NookUser User, HttpClient Client)>();
+        for (var i = 0; i < 8; i++)
+        {
+            admins.Add(await factory.CreateSignedInUserAsync(BuiltInRole.Admin));
+        }
+
+        try
+        {
+            return await Task.WhenAll(admins.Select((admin, i) => request(admin.Client, admins[(i + 1) % admins.Count].User.Id)));
+        }
+        finally
+        {
+            admins.ForEach(a => a.Client.Dispose());
+        }
     }
 
     /// <summary>The API with every request's session checked against the user's row, so a change to the user reaches their cookie at once.</summary>

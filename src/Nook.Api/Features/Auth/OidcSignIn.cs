@@ -151,7 +151,7 @@ public sealed class OidcSignIn(
     private BuiltInRole RoleFromGroups(ClaimsPrincipal principal, BuiltInRole current)
     {
         var settings = options.Value;
-        if (string.IsNullOrEmpty(settings.AdminGroup) && string.IsNullOrEmpty(settings.ContributorGroup))
+        if (!settings.SetsRoles)
         {
             return current;
         }

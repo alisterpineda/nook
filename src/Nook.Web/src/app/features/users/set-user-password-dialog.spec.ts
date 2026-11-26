@@ -13,7 +13,7 @@ import { Session } from '../../core/session';
 import { buttonLabelled } from '../../testing/button-labelled';
 import { text } from '../../testing/element-text';
 import { fieldLabelled } from '../../testing/field-labelled';
-import { menuItemLabelled } from '../../testing/menu-item-labelled';
+import { menuItemLabelled, menuItems } from '../../testing/menu-item-labelled';
 import { typeInto } from '../../testing/type-into';
 import { openUsersPage, usersRequest } from '../../testing/users-page-requests';
 import { UsersPage } from './users-page';
@@ -38,6 +38,8 @@ describe('SetUserPasswordDialog', () => {
     name: 'Ada',
     email: 'ada@example.com',
     role: 'Admin',
+    builtInRole: 'admin',
+    roleFromSingleSignOn: false,
     joinedAt: '2026-01-05T12:00:00Z',
     hasPassword: true,
     hasSingleSignOn: false,
@@ -48,6 +50,8 @@ describe('SetUserPasswordDialog', () => {
     name: 'Grace',
     email: 'grace@example.com',
     role: 'Contributor',
+    builtInRole: 'contributor',
+    roleFromSingleSignOn: false,
     joinedAt: '2026-02-10T12:00:00Z',
     hasPassword: false,
     hasSingleSignOn: true,
@@ -194,7 +198,9 @@ describe('SetUserPasswordDialog', () => {
   it('offers no Set password while password sign-in is off', async () => {
     const page = await openPage(false);
 
-    expect(actionsFor(page, 'Grace')).toBeNull();
+    actionsFor(page, 'Grace')!.click();
+    await vi.waitFor(() => expect(menuItems().length).toBeGreaterThan(0));
+    expect(menuItems().map((item) => text(item))).toEqual(['Change role', 'Delete']);
     expect(actionsFor(page, 'Ada')).toBeNull();
   });
 });

@@ -34,9 +34,9 @@ public enum SortDirection
     Desc,
 }
 
-/// <summary>One user in the list: the name and email as shown, the name of their role, when they joined, whether a password is stored and a single sign-on login is linked, and whether the audit log holds an entry they acted in.</summary>
+/// <summary>One user in the list: the name and email as shown, the name of their role, when they joined, whether a password is stored and a single sign-on login is linked, whether the audit log holds an entry they acted in, the built-in role they hold (none for another role), and whether single sign-on sets their role.</summary>
 public record UserSummaryResponse(Guid Id, string Name, string Email, string Role, DateTimeOffset JoinedAt,
-    bool HasPassword, bool HasSingleSignOn, bool HasAuditEntries);
+    bool HasPassword, bool HasSingleSignOn, bool HasAuditEntries, BuiltInRole? BuiltInRole, bool RoleFromSingleSignOn);
 
 /// <summary>A user to add: their email, an optional name, the role they hold, and the password they first sign in with.</summary>
 public record AddUserRequest(
@@ -47,3 +47,6 @@ public record AddUserRequest(
 
 /// <summary>The password to set for another user.</summary>
 public record SetUserPasswordRequest([Required] string Password);
+
+/// <summary>The built-in role to give another user: admin, contributor or viewer.</summary>
+public record SetUserRoleRequest([Required] BuiltInRole? Role);

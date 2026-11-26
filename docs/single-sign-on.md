@@ -83,7 +83,8 @@ way: set it before turning password sign-in off on an instance with no accounts.
 If the provider is down, nobody can sign in through it, and this is the way back in, only for an account that
 has a password. Set `Nook:PasswordSignIn` back to `true` (or remove it) and restart Nook. The setting changes
 no stored password, so the passwords people had work again. An account created through the provider has no
-password and still needs the provider. Turn the setting off again when the provider is back.
+password until its owner adds one on the Account page, or an admin sets one, as [Accounts](accounts.md)
+describes, and until then it needs the provider. Turn the setting off again when the provider is back.
 
 What happens to people already signed in:
 

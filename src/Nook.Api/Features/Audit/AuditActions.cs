@@ -17,6 +17,8 @@ public static class AuditActions
     public const string UserAdded = "user.added";
     public const string UserPasswordSet = "user.password-set";
     public const string UserPasswordChanged = "user.password-changed";
+    public const string UserRoleChanged = "user.role-changed";
+    public const string UserDeleted = "user.deleted";
 }
 
 /// <summary>Reads of the audit log that more than one feature makes.</summary>

@@ -35,6 +35,9 @@ public sealed class OidcOptions
     /// <summary>Whether single sign-on is on.</summary>
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
 
+    /// <summary>Whether single sign-on sets roles from groups: it is on and the admin or contributor group is named.</summary>
+    public bool SetsRoles => Enabled && (!string.IsNullOrEmpty(AdminGroup) || !string.IsNullOrEmpty(ContributorGroup));
+
     /// <summary>Whether the settings can be used: when single sign-on is on, the client id and secret are set.</summary>
     public bool IsValid() => !Enabled || (!string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret));
 }

@@ -25,6 +25,12 @@ import { components } from '../../api/schema';
 import { reloadable } from '../../core/reloadable';
 import { Session } from '../../core/session';
 import { AddUserContext, AddUserDialog } from './add-user-dialog';
+import {
+  ChangeUserRoleContext,
+  ChangeUserRoleDialog,
+  isAssignableRole,
+} from './change-user-role-dialog';
+import { DeleteUserContext, DeleteUserDialog } from './delete-user-dialog';
 import { SetUserPasswordContext, SetUserPasswordDialog } from './set-user-password-dialog';
 import { LoadFailed } from '../../ui/load-failed';
 import { LoadingRegion } from '../../ui/loading';
@@ -161,6 +167,14 @@ const noUsers: UserSummaryResponse[] = [];
                           <span hlmBadge variant="secondary" class="ml-2">You</span>
                         }
                       }
+                      @case ('role') {
+                        {{ cell.row.original.role }}
+                        @if (cell.row.original.roleFromSingleSignOn) {
+                          <span class="text-muted-foreground block text-xs"
+                            >Set by single sign-on</span
+                          >
+                        }
+                      }
                       @case ('joined') {
                         <span class="whitespace-nowrap">{{
                           cell.row.original.joinedAt | date: 'mediumDate'
@@ -200,6 +214,24 @@ const noUsers: UserSummaryResponse[] = [];
                                   Set password
                                 </button>
                               }
+                              @if (!cell.row.original.roleFromSingleSignOn) {
+                                <button
+                                  hlmDropdownMenuItem
+                                  type="button"
+                                  (triggered)="changeRole(cell.row.original)"
+                                >
+                                  Change role
+                                </button>
+                              }
+                              <div hlmDropdownMenuSeparator></div>
+                              <button
+                                hlmDropdownMenuItem
+                                variant="destructive"
+                                type="button"
+                                (triggered)="deleteUser(cell.row.original)"
+                              >
+                                Delete
+                              </button>
                             </hlm-dropdown-menu>
                           </ng-template>
                         }
@@ -322,9 +354,32 @@ export class UsersPage {
     this.dialogs.open(AddUserDialog, { context, contentClass: 'sm:max-w-md' });
   }
 
-  /** Whether a user's row has a menu: another user's has one while it holds an item, and one's own never does. */
+  /** Whether a user's row has a menu: another user's always holds Delete, and one's own never has a menu. */
   protected hasActions(user: UserSummaryResponse): boolean {
-    return user.id !== this.session.user()?.id && this.passwordSignIn();
+    return user.id !== this.session.user()?.id;
+  }
+
+  /** Opens the dialog that changes a user's role, and shows the list again once it is changed or the user turns out to be gone. */
+  protected changeRole(user: UserSummaryResponse): void {
+    const role = user.builtInRole;
+    const context: ChangeUserRoleContext = {
+      id: user.id,
+      name: user.name,
+      role: isAssignableRole(role) ? role : null,
+      changed: () => this.reload(),
+    };
+    this.dialogs.open(ChangeUserRoleDialog, { context, contentClass: 'sm:max-w-md' });
+  }
+
+  /** Opens the dialog that confirms deleting a user, and shows the list again once they are deleted or turn out to be gone. */
+  protected deleteUser(user: UserSummaryResponse): void {
+    const context: DeleteUserContext = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      deleted: () => this.reload(),
+    };
+    this.dialogs.open(DeleteUserDialog, { context, contentClass: 'sm:max-w-md' });
   }
 
   /** Opens the dialog that sets a user's password, and shows the list again once it is set or the user turns out to be gone. */

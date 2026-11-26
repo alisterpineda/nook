@@ -9,6 +9,7 @@ type PageOfUserSummaryResponse = components['schemas']['PageOfUserSummaryRespons
 type UserSummaryResponse = components['schemas']['UserSummaryResponse'];
 type AddUserRequest = components['schemas']['AddUserRequest'];
 type SetUserPasswordRequest = components['schemas']['SetUserPasswordRequest'];
+type SetUserRoleRequest = components['schemas']['SetUserRoleRequest'];
 
 @Injectable({ providedIn: 'root' })
 export class UsersApi {
@@ -29,5 +30,15 @@ export class UsersApi {
   /** Gives another user a password the admin chose, ending that user's sessions. */
   async setPassword(id: string, request: SetUserPasswordRequest): Promise<void> {
     await firstValueFrom(this.http.put<void>(`/api/users/${id}/password`, request));
+  }
+
+  /** Moves another user to one of the built-in roles. */
+  async setRole(id: string, request: SetUserRoleRequest): Promise<void> {
+    await firstValueFrom(this.http.put<void>(`/api/users/${id}/role`, request));
+  }
+
+  /** Deletes another user's account. The books they added stay, with no owner. */
+  async delete(id: string): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`/api/users/${id}`));
   }
 }

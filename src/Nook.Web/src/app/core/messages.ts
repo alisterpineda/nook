@@ -2,6 +2,7 @@ import { HttpErrorResponse, HttpStatusCode } from '@angular/common/http';
 import { components } from '../api/schema';
 
 type ValidationProblemDetails = components['schemas']['ValidationProblemDetails'];
+type ProblemDetails = components['schemas']['ProblemDetails'];
 
 /** What a page says when a request fails for a reason it has no better words for. */
 export const somethingWentWrong = 'Something went wrong. Try again.';
@@ -24,4 +25,18 @@ export function fieldErrorsOf(error: unknown): Record<string, string[]> {
     }
   }
   return { '': [somethingWentWrong] };
+}
+
+/**
+ * What a dialog says for a request the API refused with a 409 conflict: the problem's own title, which says why, or
+ * `somethingWentWrong` for any other failure.
+ */
+export function conflictReasonOf(error: unknown): string {
+  if (error instanceof HttpErrorResponse && error.status === HttpStatusCode.Conflict) {
+    const title = (error.error as ProblemDetails | null)?.title;
+    if (title) {
+      return title;
+    }
+  }
+  return somethingWentWrong;
 }

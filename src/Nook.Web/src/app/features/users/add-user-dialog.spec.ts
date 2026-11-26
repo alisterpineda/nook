@@ -36,6 +36,8 @@ describe('AddUserDialog', () => {
     name: 'Ada',
     email: 'ada@example.com',
     role: 'Admin',
+    builtInRole: 'admin',
+    roleFromSingleSignOn: false,
     joinedAt: '2026-01-05T12:00:00Z',
     hasPassword: true,
     hasSingleSignOn: false,

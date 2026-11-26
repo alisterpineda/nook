@@ -86,6 +86,19 @@ public class UserAddApiTests(NookApiFactory factory) : IClassFixture<NookApiFact
     }
 
     [Fact]
+    public async Task Number_that_names_no_role_adds_nobody()
+    {
+        using var admin = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);
+        var email = NewEmail();
+
+        var response = await PostAsync(admin, new { email, role = 7, password = NewPassword });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Role", await response.ErrorFieldsAsync());
+        Assert.Equal(0, await CountUsersAsync(email));
+    }
+
+    [Fact]
     public async Task Request_with_no_role_adds_nobody()
     {
         using var admin = await factory.CreateSignedInClientAsync(BuiltInRole.Admin);

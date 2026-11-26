@@ -12,6 +12,8 @@ const labels: Record<string, string> = {
   'user.added': 'Added a user',
   'user.password-set': "Set a user's password",
   'user.password-changed': 'Changed their password',
+  'user.role-changed': "Changed a user's role",
+  'user.deleted': 'Deleted a user',
 };
 
 /** The words for an audit action, or its own name when nothing words it. */
