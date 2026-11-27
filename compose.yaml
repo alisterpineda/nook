@@ -4,6 +4,8 @@ services:
   nook:
     image: ${NOOK_IMAGE:-ghcr.io/alisterpineda/nook:latest}
     restart: unless-stopped
+    # This opens Nook to every device that can reach the host. Behind a reverse proxy, open it to the proxy only.
+    # docs/reverse-proxy.md says how.
     ports:
       - "8080:8080"
     volumes:
