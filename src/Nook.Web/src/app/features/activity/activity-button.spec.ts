@@ -107,6 +107,16 @@ describe('ActivityButton', () => {
     expect(badge()?.getAttribute('data-variant')).toBe('destructive');
   });
 
+  it('counts every failed upload on its badge, past twenty', async () => {
+    await listUploads([
+      ...Array.from({ length: 25 }, (_, i) => upload(26 - i, 'failed', { failure: 'internal' })),
+      upload(1, 'queued'),
+    ]);
+
+    expect(badge()?.textContent?.trim()).toBe('25');
+    expect(badge()?.getAttribute('data-variant')).toBe('destructive');
+  });
+
   it('shows no badge with nothing in flight and nothing failed', async () => {
     await listUploads([upload(1, 'added', { workId })]);
 

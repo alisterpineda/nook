@@ -7,11 +7,18 @@ import { somethingWentWrong } from '../../core/messages';
 
 type UploadActivityResponse = components['schemas']['UploadActivityResponse'];
 
-/** How many uploads the list holds, as many as the server lists. */
+/** How many uploads that are not failed the list holds, as many as the server lists. */
 const maxRows = 20;
 
+/** The rows the list keeps: every failed one, and the first `maxRows` of the others. */
+function kept(rows: readonly UploadActivityResponse[]): readonly UploadActivityResponse[] {
+  let others = 0;
+  return rows.filter((row) => row.status === 'failed' || ++others <= maxRows);
+}
+
 /**
- * The signed-in user's recent uploads as the server holds them, newest first, kept current from the activity hub.
+ * The signed-in user's uploads as the server holds them, kept current from the activity hub: every failed upload and
+ * the 20 newest others, each in the order the server gave, with an upload the hub names for the first time put first.
  * It is provided in the root so the list is there whichever page is open. `start()` loads the list and follows the
  * hub, and `stop()` lets go of the hub and empties the list, so nothing carries over to the next user. The hub's
  * connection is the shell's to open and close.
@@ -35,7 +42,7 @@ export class UploadActivity {
   private said: ((rows: readonly UploadActivityResponse[]) => readonly UploadActivityResponse[])[] =
     [];
 
-  /** The uploads, newest first. */
+  /** The uploads, in the order they arrived. */
   readonly rows = this.allRows.asReadonly();
 
   private readonly allProblems = signal<Readonly<Record<string, string>>>({});
@@ -114,10 +121,7 @@ export class UploadActivity {
       this.allRows.set(
         this.said
           .slice(saidBefore)
-          .reduce<readonly UploadActivityResponse[]>(
-            (rows, apply) => apply(rows),
-            uploads.slice(0, maxRows),
-          ),
+          .reduce<readonly UploadActivityResponse[]>((rows, apply) => apply(rows), kept(uploads)),
       );
     }
     if (--this.loading === 0) {
@@ -127,9 +131,11 @@ export class UploadActivity {
 
   private changed(upload: UploadActivityResponse): void {
     this.apply((rows) =>
-      rows.some((row) => row.jobId === upload.jobId)
-        ? rows.map((row) => (row.jobId === upload.jobId ? upload : row))
-        : [upload, ...rows].slice(0, maxRows),
+      kept(
+        rows.some((row) => row.jobId === upload.jobId)
+          ? rows.map((row) => (row.jobId === upload.jobId ? upload : row))
+          : [upload, ...rows],
+      ),
     );
   }
 

@@ -43,7 +43,8 @@ interface Entry {
 
 /**
  * The Uploads section of the Notifications popover. It lists the files in this tab that are waiting, being sent or
- * refused, above the uploads the server holds. The popover leaves it out while there is nothing to list.
+ * refused, above the uploads the server holds, and of those the failed ones before the others. The popover leaves it
+ * out while there is nothing to list.
  */
 @Component({
   selector: 'app-uploads-section',
@@ -95,7 +96,7 @@ export class UploadsSection {
   private readonly queue = inject(UploadQueue);
   private readonly activity = inject(UploadActivity);
 
-  /** The files of this tab, then the server's uploads. */
+  /** The files of this tab, then the server's failed uploads, then its others. */
   protected readonly entries = computed<Entry[]>(() => [
     ...this.queue.rows().map((row): Entry => {
       const failed = row.status === 'failed';
@@ -111,18 +112,22 @@ export class UploadsSection {
         remove: () => this.queue.remove(row.id),
       };
     }),
-    ...this.activity.rows().map((row): Entry => {
-      return {
-        key: `server-${row.jobId}`,
-        name: row.fileName,
-        label: statusLabels[row.status],
-        workId: row.status === 'added' || row.status === 'duplicate' ? row.workId : null,
-        failed: row.status === 'failed',
-        reason: failureSentences[row.failure ?? 'internal'],
-        problem: this.activity.problems()[row.jobId],
-        retry: () => void this.activity.retry(row.jobId),
-        remove: () => void this.activity.remove(row.jobId),
-      };
-    }),
+    ...this.serverEntries().filter((entry) => entry.failed),
+    ...this.serverEntries().filter((entry) => !entry.failed),
   ]);
+
+  /** The server's uploads, in the list's order. */
+  private readonly serverEntries = computed<Entry[]>(() =>
+    this.activity.rows().map((row) => ({
+      key: `server-${row.jobId}`,
+      name: row.fileName,
+      label: statusLabels[row.status],
+      workId: row.status === 'added' || row.status === 'duplicate' ? row.workId : null,
+      failed: row.status === 'failed',
+      reason: failureSentences[row.failure ?? 'internal'],
+      problem: this.activity.problems()[row.jobId],
+      retry: () => void this.activity.retry(row.jobId),
+      remove: () => void this.activity.remove(row.jobId),
+    })),
+  );
 }

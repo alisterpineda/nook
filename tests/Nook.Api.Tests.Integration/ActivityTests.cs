@@ -149,6 +149,52 @@ public class ActivityTests(NookApiFactory factory) : IClassFixture<NookApiFactor
     }
 
     [Fact]
+    public async Task A_failed_upload_stays_listed_behind_more_than_twenty_newer_uploads()
+    {
+        var (user, client) = await factory.CreateSignedInUserAsync(BuiltInRole.Contributor);
+        using var clientSession = client;
+        var failed = await SubmitAsync(user, "failed.epub", null, JobStatus.Failed, error: "boom");
+        await SubmittedAgoAsync(TimeSpan.FromHours(25), failed);
+        var pending = new List<Submitted>();
+        for (var i = 0; i < 21; i++)
+        {
+            pending.Add(await SubmitAsync(user, $"file-{i}.epub", null, JobStatus.Pending));
+        }
+
+        var list = await client.GetAsync<List<UploadActivityResponse>>(Url);
+
+        Assert.Equal(21, list.Count);
+        Assert.Equal(failed.Id, list[0].JobId);
+        Assert.Equal(
+            pending.Skip(1).Select(p => p.Id).Reverse(),
+            list.Skip(1).Select(r => r.JobId));
+        Assert.DoesNotContain(list, r => r.JobId == pending[0].Id);
+    }
+
+    [Fact]
+    public async Task Every_failed_upload_is_listed_first_and_the_others_keep_their_twenty()
+    {
+        var (user, client) = await factory.CreateSignedInUserAsync(BuiltInRole.Contributor);
+        using var clientSession = client;
+        var failed = new List<Submitted>();
+        for (var i = 0; i < 21; i++)
+        {
+            failed.Add(await SubmitAsync(user, $"failed-{i}.epub", null, JobStatus.Failed, error: "boom"));
+        }
+
+        var pending = await SubmitAsync(user, "pending.epub", null, JobStatus.Pending);
+        failed.Add(await SubmitAsync(user, "failed-last.epub", null, JobStatus.Failed, error: "boom"));
+
+        var list = await client.GetAsync<List<UploadActivityResponse>>(Url);
+
+        Assert.Equal(23, list.Count);
+        Assert.Equal(list.Count, list.Select(r => r.JobId).Distinct().Count());
+        Assert.All(list.Take(22), r => Assert.Equal(UploadActivityStatus.Failed, r.Status));
+        Assert.Equal(failed.Select(f => f.Id).Reverse(), list.Take(22).Select(r => r.JobId));
+        Assert.Equal(pending.Id, list[22].JobId);
+    }
+
+    [Fact]
     public async Task Another_user_s_uploads_are_not_listed()
     {
         var (other, otherClient) = await factory.CreateSignedInUserAsync(BuiltInRole.Contributor);

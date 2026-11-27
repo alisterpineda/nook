@@ -76,6 +76,27 @@ describe('UploadsSection', () => {
     ]);
   });
 
+  it("shows failed uploads above the server's others and below this tab's files", async () => {
+    await listUploads([
+      upload(4),
+      upload(3, 'failed', { failure: 'internal' }),
+      upload(2, 'added', { workId }),
+      upload(1, 'failed', { failure: 'unreadable' }),
+    ]);
+    sendTwoFiles(40);
+
+    const uploads = await section();
+
+    expect(rowsOf(uploads)).toEqual([
+      expect.stringMatching(/^dune\.epub/),
+      expect.stringMatching(/^emma\.epub/),
+      expect.stringMatching(/^book-3\.epub/),
+      expect.stringMatching(/^book-1\.epub/),
+      expect.stringMatching(/^book-4\.epub/),
+      expect.stringMatching(/^book-2\.epub/),
+    ]);
+  });
+
   it('shows the percentage of the file being sent', async () => {
     sendTwoFiles(40);
 

@@ -15,8 +15,9 @@ public class ActivityController(UploadActivity uploads, UserManager<NookUser> us
     private const int UploadLimit = 20;
 
     /// <summary>
-    /// The caller's 20 most recent uploads, newest first. One that went through is listed for a day after it was
-    /// submitted, and one still waiting, running or failed for as long as it is.
+    /// Every upload of the caller that has failed, newest first, then the caller's 20 most recent others, newest
+    /// first. One that went through is listed for a day after it was submitted, and one still waiting or running for
+    /// as long as it is.
     /// </summary>
     [HttpGet("uploads")]
     [ProducesResponseType<IReadOnlyList<UploadActivityResponse>>(StatusCodes.Status200OK)]

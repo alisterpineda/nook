@@ -26,26 +26,46 @@ public sealed class UploadActivity(NookDbContext db, TimeProvider timeProvider)
         [AuditActions.UploadAdded, AuditActions.UploadDuplicate, AuditActions.UploadFailed];
 
     /// <summary>
-    /// The user's most recent uploads, newest first. An upload that went through is listed for
-    /// <see cref="FinishedListedFor"/> after it was submitted, and one still waiting, running or failed for as long
-    /// as it is. A submission with no job and no outcome is left out, and the limit counts the rows that remain, so
-    /// the query reads on until it has that many or runs out.
+    /// Every upload of the user whose job has failed, however old, newest first, then the user's most recent others,
+    /// newest first. An upload that went through is listed for <see cref="FinishedListedFor"/> after it was
+    /// submitted, and one still waiting or running for as long as it is. A submission with no job and no outcome is
+    /// left out. The limit counts only the uploads that have not failed, and the query reads on until it has that
+    /// many or runs out.
     /// </summary>
     public async Task<IReadOnlyList<UploadActivityResponse>> ForUserAsync(
         Guid userId, int limit, CancellationToken cancellationToken = default)
     {
+        // Both reads are cut from these two, so an upload is in the failed read or in the others, never in neither.
+        var mine = db.AuditEntries
+            .AsNoTracking()
+            .Where(e => e.Action == AuditActions.UploadSubmitted && e.ActorId == userId);
+        var failedJobs = db.Jobs.Where(j => j.Status == JobStatus.Failed);
+
         var rows = new List<UploadActivityResponse>();
+        var failedSubmissions = await mine
+            .Where(e => failedJobs.Any(j => j.Id == e.SubjectId))
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var row in await BuildRowsAsync(failedSubmissions, cancellationToken))
+        {
+            if (row is not null)
+            {
+                rows.Add(row);
+            }
+        }
+
         var listedSince = timeProvider.GetUtcNow() - FinishedListedFor;
+        var others = 0;
         AuditEntry? last = null;
-        while (rows.Count < limit)
+        while (others < limit)
         {
             // An older upload is read only while its job has yet to succeed: one that went through, whether its job
             // is there or deleted, has been listed long enough.
-            var submissions = db.AuditEntries
-                .AsNoTracking()
-                .Where(e => e.Action == AuditActions.UploadSubmitted && e.ActorId == userId)
+            var submissions = mine
                 .Where(e => e.CreatedAt >= listedSince
-                    || db.Jobs.Any(j => j.Id == e.SubjectId && j.Status != JobStatus.Succeeded));
+                    || db.Jobs.Any(j => j.Id == e.SubjectId && j.Status != JobStatus.Succeeded))
+                .Where(e => !failedJobs.Any(j => j.Id == e.SubjectId));
             if (last is not null)
             {
                 // Each batch starts after the last entry read, not at a count of entries, so an upload sent in
@@ -67,9 +87,12 @@ public sealed class UploadActivity(NookDbContext db, TimeProvider timeProvider)
             last = batch[^1];
             foreach (var row in await BuildRowsAsync(batch, cancellationToken))
             {
-                if (row is not null && rows.Count < limit)
+                // An upload that was failed at the first read and was retried before this one is already listed,
+                // as the failed read gave it.
+                if (row is not null && others < limit && rows.All(r => r.JobId != row.JobId))
                 {
                     rows.Add(row);
+                    others++;
                 }
             }
         }

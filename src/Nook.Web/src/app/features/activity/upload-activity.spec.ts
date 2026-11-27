@@ -68,6 +68,41 @@ describe('UploadActivity', () => {
     expect(store.rows().at(-1)?.fileName).toBe('book-2.epub');
   });
 
+  it('keeps a failed row when newer uploads pass twenty', async () => {
+    await startWith([...Array.from({ length: 19 }, (_, i) => upload(20 - i)), upload(1, 'failed')]);
+
+    hub.uploadChanged.next(upload(21));
+    hub.uploadChanged.next(upload(22));
+
+    expect(store.rows()).toHaveLength(21);
+    expect(store.rows()[0].fileName).toBe('book-22.epub');
+    expect(store.rows().at(-1)?.fileName).toBe('book-1.epub');
+    expect(names()).not.toContain('book-2.epub');
+  });
+
+  it('keeps every failed row of a list longer than twenty', async () => {
+    const uploads = [
+      ...Array.from({ length: 25 }, (_, i) => upload(45 - i, 'failed')),
+      ...Array.from({ length: 20 }, (_, i) => upload(20 - i)),
+    ];
+    store.start();
+    const request = await vi.waitFor(() => httpTesting.expectOne('/api/activity/uploads'));
+    request.flush(uploads);
+
+    await vi.waitFor(() => expect(store.rows()).toHaveLength(45));
+    expect(store.rows()).toEqual(uploads);
+  });
+
+  it('counts a row that is no longer failed among the twenty', async () => {
+    await startWith([upload(1, 'failed'), ...Array.from({ length: 20 }, (_, i) => upload(21 - i))]);
+
+    hub.uploadChanged.next(upload(1, 'queued'));
+
+    expect(store.rows()).toHaveLength(20);
+    expect(store.rows()[0].fileName).toBe('book-1.epub');
+    expect(names()).not.toContain('book-2.epub');
+  });
+
   it('drops a row the hub says was removed', async () => {
     await startWith([upload(2), upload(1)]);
 
